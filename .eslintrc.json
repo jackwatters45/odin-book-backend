@@ -1,0 +1,31 @@
+{
+	"env": {
+		"browser": true,
+		"commonjs": false,
+		"es2022": true
+	},
+	"extends": [
+		"eslint:recommended",
+		"plugin:@typescript-eslint/recommended",
+		"plugin:import/recommended",
+		"plugin:jsx-a11y/recommended",
+		"eslint-config-prettier"
+	],
+	"overrides": [],
+	"parser": "@typescript-eslint/parser",
+	"parserOptions": {
+		"ecmaVersion": "latest"
+	},
+	"plugins": ["@typescript-eslint", "import", "jsx-a11y", "prettier"],
+	"rules": {
+		"quotes": ["error", "double"],
+		"semi": ["error", "always"]
+	},
+	"settings": {
+		"import/resolver": {
+			"node": {
+				"extensions": [".js", ".jsx", ".ts", ".tsx"]
+			}
+		}
+	}
+}

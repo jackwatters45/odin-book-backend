@@ -1,0 +1,68 @@
+{
+	"name": "odin-book-backend",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"engines": {
+		"node": ">=18.16.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/jackwatters45/odin-book-backend.git"
+	},
+	"author": "Jack Watters",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/jackwatters45/odin-book-backend/issues"
+	},
+	"homepage": "https://github.com/jackwatters45/odin-book-backend#readme",
+	"scripts": {
+		"build": "rimraf dist && tsc",
+		"start": "node dist/index.js",
+		"dev": "nodemon src/index.ts",
+		"serverstart": "DEBUG=express-members-only:* & npm run dev",
+		"lint": "eslint .",
+		"lint:fix": "eslint . --fix",
+		"format": "prettier --write .",
+		"fix": "npm run format & npm run lint:fix",
+		"prepare": "husky install"
+	},
+	"lint-staged": {
+		"*.ts": "npm run fix"
+	},
+	"dependencies": {
+		"compression": "^1.7.4",
+		"cookie-parser": "^1.4.6",
+		"cors": "^2.8.5",
+		"debug": "^4.3.4",
+		"dotenv": "^16.3.1",
+		"express": "^4.18.2",
+		"express-rate-limit": "^6.7.0",
+		"helmet": "^7.0.0",
+		"luxon": "^3.3.0",
+		"morgan": "^1.10.0"
+	},
+	"devDependencies": {
+		"@types/node": "^20.3.2",
+		"@typescript-eslint/eslint-plugin": "^5.60.1",
+		"@typescript-eslint/parser": "^5.60.1",
+		"eslint": "^8.43.0",
+		"eslint-config-prettier": "^8.8.0",
+		"eslint-plugin-import": "^2.27.5",
+		"eslint-plugin-jsx-a11y": "^6.7.1",
+		"eslint-plugin-prettier": "^4.2.1",
+		"prettier": "^2.8.8",
+		"@types/compression": "^1.7.2",
+		"@types/cookie-parser": "^1.4.3",
+		"@types/cors": "^2.8.13",
+		"@types/express": "^4.17.17",
+		"@types/express-session": "^1.17.7",
+		"@types/http-errors": "^2.0.1",
+		"@types/morgan": "^1.9.4",
+		"@types/multer": "^1.4.7",
+		"husky": "^8.0.0",
+		"lint-staged": "^13.2.2",
+		"ts-node": "^10.9.1",
+		"typescript": "^5.0.4"
+	}
+}
