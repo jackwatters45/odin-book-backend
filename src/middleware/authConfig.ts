@@ -4,7 +4,7 @@ import { Application } from "express";
 import bcrypt from "bcryptjs";
 import session from "express-session";
 import dotenv from "dotenv";
-import User from "../models/user.model";
+import User from "../models/user-model/user.model";
 // import passportJwt from "passport-jwt";
 
 dotenv.config();

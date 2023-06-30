@@ -3,30 +3,30 @@ import dotenv from "dotenv";
 import express from "express";
 
 // Internal dependencies
-// import configAuthMiddleware from "./middleware/authConfig";
+import configAuthMiddleware from "./middleware/authConfig";
 import configOtherMiddleware from "./middleware/otherConfig";
 import configProdMiddleware from "./middleware/prodConfig";
-// import configDb from "./config/database";
-// import configRoutes from "./routes";
-// import configErrorMiddleware from "./middleware/errorConfig";
-// import configCloudinary from "./config/cloudinary";
+import configDb from "./config/database";
+import configRoutes from "./routes";
+import configErrorMiddleware from "./middleware/errorConfig";
+import configCloudinary from "./config/cloudinary";
 
 dotenv.config();
 
 const app = express();
 
 // config middleware + mongoDB
-// configAuthMiddleware(app);
+configAuthMiddleware(app);
 configOtherMiddleware(app);
 configProdMiddleware(app);
-// configDb();
-// configCloudinary();
+configDb();
+configCloudinary();
 
 // Config Routes
-// configRoutes(app);
+configRoutes(app);
 
 // config error middleware
-// configErrorMiddleware(app);
+configErrorMiddleware(app);
 
 // TODO fix this more gooder
 const port = process.env.PORT ?? 5172;

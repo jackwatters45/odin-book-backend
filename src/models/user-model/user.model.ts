@@ -1,7 +1,6 @@
 import { Schema, model, ObjectId, Document } from "mongoose";
 import bcrypt from "bcryptjs";
-
-// TODO user profile stuff + max length for description
+import { UserAboutData, UserAboutDataSchema } from "./user-about.model";
 
 // Basic User Info
 export interface BasicUserInfo {
@@ -19,6 +18,8 @@ export interface BasicUserInfo {
 export interface UserActivityData {
 	friends: ObjectId[];
 	savedPosts: ObjectId[];
+	friendRequestsSent: ObjectId[];
+	friendRequestsReceived: ObjectId[];
 }
 
 // User Deleted Data
@@ -32,9 +33,9 @@ interface DeletedData {
 
 // User System Data
 export interface UserSystemData {
-	createdAt: Date;
-	updatedAt: Date;
-	userType: string;
+	createdAt?: Date;
+	updatedAt?: Date;
+	userType: "user" | "admin" | "guest";
 	isDeleted: boolean;
 	deletedData?: DeletedData;
 }
@@ -43,7 +44,10 @@ export interface IUser
 	extends Document,
 		BasicUserInfo,
 		UserActivityData,
-		UserSystemData {}
+		UserSystemData,
+		UserAboutData {
+	// UserAboutData is from user-about.model.ts
+}
 
 const UserSchema = new Schema<IUser>(
 	{
@@ -56,6 +60,8 @@ const UserSchema = new Schema<IUser>(
 		description: { type: String, trim: true, default: "" },
 		avatarUrl: { type: String, trim: true, default: "" },
 		savedPosts: [{ type: Schema.Types.ObjectId, ref: "Post" }],
+		friendRequestsSent: [{ type: Schema.Types.ObjectId, ref: "User" }],
+		friendRequestsReceived: [{ type: Schema.Types.ObjectId, ref: "User" }],
 		userType: {
 			type: String,
 			required: true,
@@ -71,6 +77,7 @@ const UserSchema = new Schema<IUser>(
 			username: { type: String, trim: true },
 			followerCount: { type: Number },
 		},
+		...UserAboutDataSchema.obj,
 	},
 	{
 		timestamps: true,
@@ -81,12 +88,15 @@ const UserSchema = new Schema<IUser>(
 
 UserSchema.path("friends").default([]);
 UserSchema.path("savedPosts").default([]);
+UserSchema.path("friendRequestsSent").default([]);
+UserSchema.path("friendRequestsReceived").default([]);
 
 UserSchema.virtual("fullName").get(function (this: IUser) {
+	if (!this.firstName || !this.lastName) return "";
 	return `${this.firstName} ${this.lastName}`;
 });
 
-UserSchema.pre("save", async function (next) {
+UserSchema.pre("save", async function (this: IUser, next) {
 	const SALT_LENGTH = 10;
 	if (this.isModified("password") || this.isNew) {
 		this.password = await bcrypt.hashSync(this.password, SALT_LENGTH);

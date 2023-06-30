@@ -1,5 +1,16 @@
 # Odin Book Backend
 
+## Next
+
+- populate db files
+  - finish user (make sure good)
+  - rest
+  
+- controllers
+- jest
+
+- set up auth
+
 ## Requirements
 
 1. Users must sign in to see anything except the sign in page.
