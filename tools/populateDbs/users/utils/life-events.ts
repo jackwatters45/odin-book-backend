@@ -1,5 +1,7 @@
 import { faker } from "@faker-js/faker";
-import { LifeEventData } from "../../../../models/user-model/user-about.model";
+import {
+	LifeEventData,
+} from "../../../../src/models/user-model/user-about.model";
 import {
 	formatPlacesLived,
 	formatYears,
@@ -15,15 +17,16 @@ export const getLifeEvents = () => {
 	let currentCity = faker.location.city();
 
 	let currentJob;
-	const yearsStartJob = [];
+	const yearsStartJob: number[] = [];
 	let jobCounter = 0;
 
 	let goingToCollege = false;
 	let graduatedHighSchool = false;
-	const yearsGraduateSchool = [];
+	const yearsGraduateSchool: number[] = [];
 	let educationCounter = 0;
 
-	const placesLived = [];
+	const placesLived: { city: string; country: string; dateMovedIn: Date }[] =
+		[];
 
 	let currentRelationship;
 

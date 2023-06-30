@@ -12,6 +12,7 @@ export interface BasicUserInfo {
 	password: string;
 	avatarUrl: string;
 	description: string;
+	phoneNumber?: string;
 }
 
 // User Activity Data

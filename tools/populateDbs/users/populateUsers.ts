@@ -1,15 +1,14 @@
 import { faker } from "@faker-js/faker";
-import configDb from "../../../config/database";
 import User, {
 	UserActivityData,
 	UserSystemData,
-} from "../../../models/user-model/user.model";
+} from "../../../src/models/user-model/user.model";
 import {
 	EducationData,
 	SocialLinksData,
 	UserAboutData,
 	WorkData,
-} from "../../../models/user-model/user-about.model";
+} from "../../../src/models/user-model/user-about.model";
 import {
 	universityDegreeTypes,
 	fieldsOfStudy,
@@ -29,9 +28,6 @@ import {
 
 const log = debug("log");
 
-// Config Db
-configDb();
-
 const createRandomBasicInfo = () => {
 	const firstName = faker.person.firstName();
 	const lastName = faker.person.lastName();
@@ -46,6 +42,7 @@ const createRandomBasicInfo = () => {
 	const password = faker.internet.password(10);
 	const avatarUrl = faker.internet.avatar();
 	const description = faker.person.bio();
+	const phoneNumber = faker.phone.number();
 
 	return {
 		firstName,
@@ -55,6 +52,7 @@ const createRandomBasicInfo = () => {
 		password,
 		avatarUrl,
 		description,
+		phoneNumber,
 	};
 };
 
@@ -227,7 +225,6 @@ const createRandomUser = async ({
 
 	const users = await User.find({ _id: { $ne: newUser._id } }).select("_id");
 
-	// TODO once more users are created probably add a limit to the number of friends added
 	const friendsToAdd = getRandValuesFromArrayObjs(
 		users,
 		getRandomInt(users.length),
@@ -247,10 +244,8 @@ const createRandomUser = async ({
 	log(updatedUser);
 };
 
-const createUsers = (quantity = 1) => {
+export const createUsers = async (quantity = 1) => {
 	for (let i = 0; i < quantity; i++) {
-		createRandomUser();
+		await createRandomUser();
 	}
 };
-
-createUsers();

@@ -45,8 +45,8 @@ const postSchema = new Schema<IPost>(
 		lifeEvent: {
 			type: new Schema(
 				{
-					title: { type: String, required: true, trim: true, maxlength: 50 },
-					description: { type: String, trim: true, maxlength: 250 },
+					title: { type: String, required: true, trim: true, maxlength: 100 },
+					description: { type: String, trim: true, maxlength: 500 },
 					date: { type: Date, required: true },
 				},
 				{ _id: false },

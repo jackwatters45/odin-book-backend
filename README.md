@@ -2,9 +2,7 @@
 
 ## Next
 
-- populate db files
-  - finish user (make sure good)
-  - rest
+- attempt to jest populate db stuffs
   
 - controllers
 - jest

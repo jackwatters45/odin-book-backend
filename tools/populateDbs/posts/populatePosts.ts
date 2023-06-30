@@ -1,10 +1,9 @@
 import debug from "debug";
 import { faker } from "@faker-js/faker";
 
-import configDb from "../../../config/database";
-import Post from "../../../models/post.model";
-import User, { IUser } from "../../../models/user-model/user.model";
-import Comment from "../../../models/comment.model";
+import Post from "../../../src/models/post.model";
+import User, { IUser } from "../../../src/models/user-model/user.model";
+import Comment from "../../../src/models/comment.model";
 
 import {
 	getComments,
@@ -15,9 +14,6 @@ import {
 import { feelings } from "./utils/postOptions";
 
 const log = debug("log");
-
-// Config Db
-configDb();
 
 const getPostData = (users: IUser[]) => {
 	const author = getRandValueFromArrayObjs(users);
@@ -55,6 +51,7 @@ const getPostData = (users: IUser[]) => {
 const createPost = async () => {
 	const users = await User.find().select("_id");
 
+	log(users);
 	const postData = getPostData(users);
 	const post = new Post(postData);
 
@@ -69,7 +66,6 @@ const createPost = async () => {
 	savedPost.comments = savedComments.map((comment) => comment._id);
 
 	const posts = await Post.find().select("_id");
-	log(posts);
 
 	if (posts.length && faker.datatype.boolean(0.1)) {
 		const sharedFrom = getRandValueFromArray(posts);
@@ -80,15 +76,8 @@ const createPost = async () => {
 	log(savedPost);
 };
 
-const createPosts = (quantity = 1) => {
+export const createPosts = async (quantity = 1) => {
 	for (let i = 0; i < quantity; i++) {
-		createPost();
+		await createPost();
 	}
 };
-
-createPosts();
-
-// TODO comments -> replies an parent comment
-
-// commits
-// clear data -> readd data

@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { faker } from "@faker-js/faker";
+import debug from "debug";
+
+const log = debug("log");
 
 export const getRandomInt = (max = 5) => {
 	return Math.floor(Math.random() * max);
@@ -14,6 +17,7 @@ export const getRandValueFromArrayObjs = (
 	selectedValue = "_id",
 ) => {
 	const randElement = arr[getRandomInt(arr.length)];
+	if (!randElement) log(arr);
 	return selectedValue && selectedValue in randElement
 		? randElement[selectedValue]
 		: randElement;

@@ -20,12 +20,13 @@
 		"build": "rimraf dist && tsc",
 		"start": "node dist/index.js",
 		"dev": "nodemon src/index.ts",
-		"serverstart": "DEBUG=express-members-only:* & npm run dev",
+		"serverstart": "npm run dev",
 		"lint": "eslint .",
 		"lint:fix": "eslint . --fix",
 		"format": "prettier --write .",
 		"fix": "npm run format & npm run lint:fix",
-		"prepare": "husky install"
+		"prepare": "husky install",
+		"populate": "DEBUG=log ts-node src/tools/populateDbs/populateDbs.ts"
 	},
 	"lint-staged": {
 		"*.ts": "npm run fix"
