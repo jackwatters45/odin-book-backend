@@ -1,28 +1,36 @@
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 import debug from "debug";
+import { mongoDbUri } from "./envVariables";
 
 const log = debug("log");
-dotenv.config();
 
-const configDb = async () => {
+export const configDb = async () => {
 	try {
 		mongoose.set("strictQuery", false);
-		const mongoDB = process.env.MONGODB_URI;
-		if (!mongoDB) throw new Error("MONGODB_URI is not defined");
 
 		mongoose.connection.on("connected", () => {
 			log("Mongoose connected");
 		});
 
 		mongoose.connection.on("error", (err) => {
+			log("Mongoose connection error:", err);
 			console.error("Mongoose connection error:", err);
 		});
 
-		await mongoose.connect(mongoDB);
+		log("Connecting to MongoDB...");
+		await mongoose.connect(mongoDbUri);
+		log("Connected to MongoDB");
 	} catch (err) {
+		log("Error connecting to MongoDB");
 		console.error(err);
 	}
 };
 
-export default configDb;
+export const disconnectFromDatabase = async () => {
+	try {
+		log("Disconnecting from MongoDB...");
+		await mongoose.disconnect();
+	} catch (err) {
+		console.error(err);
+	}
+};

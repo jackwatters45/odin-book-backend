@@ -35,10 +35,7 @@ const createRandomBasicInfo = () => {
 		firstName,
 		lastName,
 	]);
-	const username = faker.helpers.unique(faker.internet.userName, [
-		firstName,
-		lastName,
-	]);
+
 	const password = faker.internet.password(10);
 	const avatarUrl = faker.internet.avatar();
 	const description = faker.person.bio();
@@ -48,7 +45,6 @@ const createRandomBasicInfo = () => {
 		firstName,
 		lastName,
 		email,
-		username,
 		password,
 		avatarUrl,
 		description,
@@ -201,6 +197,7 @@ const createRandomUser = async ({
 	userType = "user",
 	isDeleted = false,
 	deletedData,
+	validUntil,
 	friends = [],
 	savedPosts = [],
 	friendRequestsReceived = [],
@@ -211,7 +208,7 @@ const createRandomUser = async ({
 	const userData = {
 		...basicInfo,
 		...createRandomUserAboutData(firstName, lastName),
-		...createRandomSystemData({ userType, isDeleted, deletedData }),
+		...createRandomSystemData({ userType, isDeleted, deletedData, validUntil }),
 		...createRandomActivityData({
 			friends,
 			savedPosts,
@@ -236,7 +233,7 @@ const createRandomUser = async ({
 
 	for (const friend of friends) {
 		const friendDoc = await User.findById(friend);
-		if (!friendDoc) throw new Error("Friend not found");
+		if (!friendDoc) return;
 		friendDoc.friends.push(updatedUser._id);
 		await friendDoc.save();
 	}

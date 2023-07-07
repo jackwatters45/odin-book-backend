@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import debug from "debug";
-import configDb from "../../src/config/database";
+import { configDb } from "../../src/config/database";
 
 import { createUsers } from "./users/populateUsers";
 import { createPosts } from "./posts/populatePosts";

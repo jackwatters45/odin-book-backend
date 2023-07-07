@@ -1,8 +1,6 @@
 # Odin Book Backend
 
 ## Next
-
-- attempt to jest populate db stuffs
   
 - controllers
 - jest
@@ -38,3 +36,6 @@
 2. Start your app however you like, using the express-generator or from scratch.
 3. Work your way down the list above! Each step will involve a new challenge, but you’ve got the tools.
 4. You can populate data like users and posts with fake data using the Faker module from npm. To accomplish this create a new JavaScript file named seeds.js which imports your mongoose models and uses the faker module to generate and save a bunch of new users.
+
+<!-- Notes -->
+figure out periods vs not for error messages
