@@ -2,9 +2,10 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const checkEnvVariableString = (variable: string | undefined) => {
+const checkEnvVariableString = (name: string) => {
+	const variable = process.env[name];
 	if (!variable) {
-		console.error(`${variable} not defined`);
+		console.error(`${name} not defined`);
 		process.exit(1);
 	}
 	return variable;
@@ -12,70 +13,63 @@ const checkEnvVariableString = (variable: string | undefined) => {
 
 export const port = process.env.PORT ?? 5172;
 
-export const mongoDbUri = checkEnvVariableString(process.env.MONGODB_URI);
-
-export const jwtSecret = checkEnvVariableString(process.env.JWT_SECRET);
+export const jwtSecret = checkEnvVariableString("JWT_SECRET");
 
 export const refreshTokenSecret = checkEnvVariableString(
-	process.env.REFRESH_TOKEN_SECRET,
+	"REFRESH_TOKEN_SECRET",
 );
 
-export const corsOrigin = checkEnvVariableString(process.env.CORS_ORIGIN);
+export const corsOrigin = checkEnvVariableString("CORS_ORIGIN");
 
-export const cloudinaryApiKey = checkEnvVariableString(
-	process.env.CLOUDINARY_API_KEY,
-);
+export const cloudinaryApiKey = checkEnvVariableString("CLOUDINARY_API_KEY");
 
 export const cloudinarySecretKey = checkEnvVariableString(
-	process.env.CLOUDINARY_SECRET_KEY,
+	"CLOUDINARY_SECRET_KEY",
 );
 
 export const cloudinaryCloudName = checkEnvVariableString(
-	process.env.CLOUDINARY_CLOUD_NAME,
+	"CLOUDINARY_CLOUD_NAME",
 );
 
-export const facebookAppId = checkEnvVariableString(
-	process.env.FACEBOOK_APP_ID,
-);
+export const facebookAppId = checkEnvVariableString("FACEBOOK_APP_ID");
 
-export const facebookAppSecret = checkEnvVariableString(
-	process.env.FACEBOOK_APP_SECRET,
-);
+export const facebookAppSecret = checkEnvVariableString("FACEBOOK_APP_SECRET");
 
-export const googleClientId = checkEnvVariableString(
-	process.env.GOOGLE_CLIENT_ID,
-);
+export const googleClientId = checkEnvVariableString("GOOGLE_CLIENT_ID");
 
 export const googleClientSecret = checkEnvVariableString(
-	process.env.GOOGLE_CLIENT_SECRET,
+	"GOOGLE_CLIENT_SECRET",
 );
 
-export const githubClientId = checkEnvVariableString(
-	process.env.GITHUB_CLIENT_ID,
-);
+export const githubClientId = checkEnvVariableString("GITHUB_CLIENT_ID");
 
 export const githubClientSecret = checkEnvVariableString(
-	process.env.GITHUB_CLIENT_SECRET,
+	"GITHUB_CLIENT_SECRET",
 );
 
-export const emailHost = checkEnvVariableString(process.env.EMAIL_HOST);
+export const emailHost = checkEnvVariableString("EMAIL_HOST");
 
-export const emailPassword = checkEnvVariableString(process.env.EMAIL_PASSWORD);
+export const emailPassword = checkEnvVariableString("EMAIL_PASSWORD");
 
-export const twilioAccountSid = checkEnvVariableString(
-	process.env.TWILIO_ACCOUNT_SID,
-);
+export const twilioAccountSid = checkEnvVariableString("TWILIO_ACCOUNT_SID");
 
-export const twilioAuthToken = checkEnvVariableString(
-	process.env.TWILIO_AUTH_TOKEN,
-);
+export const twilioAuthToken = checkEnvVariableString("TWILIO_AUTH_TOKEN");
 
-export const twilioPhoneNumber = checkEnvVariableString(
-	process.env.TWILIO_PHONE_NUMBER,
-);
+export const twilioPhoneNumber = checkEnvVariableString("TWILIO_PHONE_NUMBER");
 
-export const nodeEnv = checkEnvVariableString(process.env.NODE_ENV);
+export const nodeEnv = checkEnvVariableString("NODE_ENV");
+
 export const appUrl =
 	nodeEnv === "production"
-		? checkEnvVariableString(process.env.PROD_APP_URL)
-		: checkEnvVariableString(process.env.DEV_APP_URL);
+		? checkEnvVariableString("PROD_APP_URL")
+		: checkEnvVariableString("DEV_APP_URL");
+
+export const apiPath = checkEnvVariableString("API_PATH");
+
+// TODO: formatting
+export const mongoDbUri =
+	nodeEnv === "production"
+		? checkEnvVariableString("PROD_DB_URI")
+		: nodeEnv === "development"
+		? checkEnvVariableString("DEV_DB_URI")
+		: checkEnvVariableString("TEST_DB_URI");

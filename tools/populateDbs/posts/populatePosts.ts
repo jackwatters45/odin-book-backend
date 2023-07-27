@@ -1,17 +1,19 @@
 import debug from "debug";
 import { faker } from "@faker-js/faker";
 
-import Post from "../../../src/models/post.model";
+import Post, { IPost } from "../../../src/models/post.model";
 import User, { IUser } from "../../../src/models/user-model/user.model";
-import Comment from "../../../src/models/comment.model";
+import Comment, { reactionTypes } from "../../../src/models/comment.model";
 
 import {
 	getComments,
 	getRandValueFromArray,
 	getRandValueFromArrayObjs,
 	getRandValuesFromArrayObjs,
+	getRandomInt,
 } from "../utils/populateHelperFunctions";
 import { feelings } from "./utils/postOptions";
+import { ObjectId } from "mongoose";
 
 const log = debug("log");
 
@@ -48,22 +50,46 @@ const getPostData = (users: IUser[]) => {
 	return postData;
 };
 
-const createPost = async () => {
+interface ICreatePostOptions {
+	author?: ObjectId;
+	includeComments?: boolean;
+	includeReactions?: boolean;
+}
+
+export const createPost = async (options?: ICreatePostOptions) => {
 	const users = await User.find().select("_id");
 
-	log(users);
 	const postData = getPostData(users);
 	const post = new Post(postData);
 
+	if (options?.author) post.author = options.author;
+
 	const savedPost = await post.save();
 
-	const commentData = getComments(users, 10, savedPost._id);
-	const commentDocs = commentData.map((data) => new Comment(data));
-	const savedComments = await Promise.all(
-		commentDocs.map((comment) => comment.save()),
-	);
+	const includeComments = options?.includeComments !== false;
+	if (includeComments) {
+		const commentData = getComments(users, 10, savedPost._id);
+		const commentDocs = commentData.map((data) => {
+			const comment = new Comment(data);
 
-	savedPost.comments = savedComments.map((comment) => comment._id);
+			const numReactions = getRandomInt(5) || 1;
+			const usersReacting = getRandValuesFromArrayObjs(users, numReactions);
+
+			const reactions = usersReacting.map((user) => ({
+				user: user._id,
+				type: getRandValueFromArray(reactionTypes),
+			}));
+
+			comment.reactions = reactions;
+
+			return comment;
+		});
+		const savedComments = await Promise.all(
+			commentDocs.map((comment) => comment.save()),
+		);
+
+		savedPost.comments = savedComments.map((comment) => comment._id);
+	}
 
 	const posts = await Post.find().select("_id");
 
@@ -73,11 +99,18 @@ const createPost = async () => {
 	}
 	await savedPost.save();
 
-	log(savedPost);
+	log(`Post ${savedPost._id} created!`);
+	return savedPost;
 };
 
-export const createPosts = async (quantity = 1) => {
+export const createPosts = async (
+	quantity = 1,
+	options?: ICreatePostOptions,
+) => {
+	const posts: IPost[] = [];
 	for (let i = 0; i < quantity; i++) {
-		await createPost();
+		const post = (await createPost(options)) as IPost;
+		posts.push(post);
 	}
+	return posts;
 };

@@ -55,7 +55,6 @@ const closeConnection = async () => {
 
 const run = async () => {
 	await configDb();
-	log("Moving on...");
 	await dropCollections();
 	await createData();
 	await printData();

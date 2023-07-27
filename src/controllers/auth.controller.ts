@@ -9,7 +9,7 @@ import User, { IUser } from "../models/user-model/user.model";
 import { jwtSecret, nodeEnv, refreshTokenSecret } from "../config/envVariables";
 import generateAndSendToken from "../utils/generateAndSendToken";
 
-const log = debug("log");
+const log = debug("log:auth:controller");
 
 // TODO cookie options
 export const handleUserLogin = async (res: Response, user: IUser) => {

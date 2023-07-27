@@ -18,6 +18,8 @@ export const configDb = async () => {
 		});
 
 		log("Connecting to MongoDB...");
+
+		log("mongoDbUri: ", mongoDbUri);
 		await mongoose.connect(mongoDbUri);
 		log("Connected to MongoDB");
 	} catch (err) {

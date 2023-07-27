@@ -12,7 +12,6 @@ import {
 	postVerifyCode,
 } from "../src/controllers/auth.controller";
 import { faker } from "@faker-js/faker";
-import { usernameType } from "./utils/generateUsername";
 import generateUser, { TestUser } from "./utils/generateUser";
 import { configDb, disconnectFromDatabase } from "../src/config/database";
 import configOtherMiddleware from "../src/middleware/otherConfig";
@@ -26,6 +25,7 @@ import {
 import generateAndSendToken from "../src/utils/generateAndSendToken";
 import generateRandomTokenEmailOrSms from "./utils/generateRandomTokenEmailOrSms";
 import passport from "passport";
+import { userSignupFunctionGenerator } from "./utils/userSignupFunctionGenerator";
 
 const log = debug("log");
 
@@ -38,30 +38,7 @@ beforeAll(async () => {
 	configRoutes(app);
 });
 
-const idsToDelete: string[] = [];
-
-const signUpUser = async (
-	otherAttributes?: Partial<IUser>,
-	usernameType?: usernameType,
-) => {
-	const { username, ...userData } = generateUser(usernameType);
-	const idType = username.includes("@") ? "email" : "phoneNumber";
-
-	try {
-		const user = await User.create({
-			...userData,
-			[idType]: username,
-			...otherAttributes,
-		});
-
-		idsToDelete.push(user._id);
-
-		return { user, password: userData.password };
-	} catch (err) {
-		console.error(err);
-		throw new Error(`User not created: ${err.message}`);
-	}
-};
+const signUpUser = userSignupFunctionGenerator();
 
 describe("POST /signup", () => {
 	let existingUser: TestUser;
@@ -81,8 +58,6 @@ describe("POST /signup", () => {
 		expect(res.headers).toHaveProperty("set-cookie");
 		expect(res.headers["set-cookie"][0]).toMatch(/jwt=.+/);
 		expect(res.headers["set-cookie"][1]).toMatch(/refreshToken=.+/);
-
-		idsToDelete.push(res.body.user._id);
 	});
 
 	it("should fail when the user already exists", async () => {
@@ -135,8 +110,6 @@ describe("POST /signup", () => {
 
 		expect(res.headers).toHaveProperty("set-cookie");
 		expect(res.headers["set-cookie"][0]).toMatch(/jwt=.+/);
-
-		idsToDelete.push(res.body.user._id);
 	});
 });
 
@@ -219,8 +192,6 @@ describe("POST /login-guest", () => {
 
 		expect(res.body).toHaveProperty("user");
 		expect(res.body.user).toHaveProperty("_id");
-
-		idsToDelete.push(res.body.user._id);
 	});
 });
 
@@ -606,8 +577,6 @@ describe("POST /verify/link/:verificationToken", () => {
 
 		expect(res.status).toBe(302);
 		expect(res.header.location).toBe("/login");
-
-		idsToDelete.push(user._id);
 	});
 
 	it("returns 400 if verification link is expired", async () => {
@@ -622,8 +591,6 @@ describe("POST /verify/link/:verificationToken", () => {
 		expect(res.body.message).toBe(
 			"Verification link has expired. Please request a new one.",
 		);
-
-		idsToDelete.push(user._id);
 	});
 
 	it("returns 401 if verification link is invalid", async () => {
@@ -635,8 +602,6 @@ describe("POST /verify/link/:verificationToken", () => {
 
 		expect(res.status).toBe(401);
 		expect(res.body.message).toBe("Invalid verification link.");
-
-		idsToDelete.push(user._id);
 	});
 
 	it("returns 400 if user is already verified", async () => {
@@ -649,8 +614,6 @@ describe("POST /verify/link/:verificationToken", () => {
 
 		expect(res.status).toBe(400);
 		expect(res.body.message).toBe("User is already verified.");
-
-		idsToDelete.push(user._id);
 	});
 
 	it("returns 401 if user does not exist", async () => {
@@ -703,8 +666,6 @@ describe("POST /verify/resend", () => {
 			userIdType,
 		);
 		expect(generateAndSendToken).toHaveBeenCalledTimes(1);
-
-		idsToDelete.push(user._id);
 	});
 
 	it("returns 400 if user is already verified", async () => {
@@ -721,8 +682,6 @@ describe("POST /verify/resend", () => {
 			message: "User is already verified.",
 		});
 		expect(generateAndSendToken).toHaveBeenCalledTimes(0);
-
-		idsToDelete.push(user._id);
 	});
 
 	it("returns 401 if user is not logged in", async () => {
@@ -738,8 +697,6 @@ describe("POST /verify/resend", () => {
 			message: "User is not logged in.",
 		});
 		expect(generateAndSendToken).toHaveBeenCalledTimes(0);
-
-		idsToDelete.push(user._id);
 	});
 
 	it("returns 500 if an error occurs while generating and sending the token", async () => {
@@ -765,8 +722,6 @@ describe("POST /verify/resend", () => {
 			userIdType,
 		);
 		expect(generateAndSendToken).toHaveBeenCalledTimes(1);
-
-		idsToDelete.push(user._id);
 	});
 });
 
@@ -1280,10 +1235,7 @@ describe("GET /login/github", () => {
 });
 
 afterEach(() => jest.restoreAllMocks());
-
 afterAll(async () => {
-	if (idsToDelete.length) {
-		await User.deleteMany({ _id: { $in: idsToDelete } });
-	}
+	await User.deleteMany({});
 	await disconnectFromDatabase();
 });

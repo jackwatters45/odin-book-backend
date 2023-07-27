@@ -1,5 +1,6 @@
 import { faker } from "@faker-js/faker";
 import User, {
+	IUser,
 	UserActivityData,
 	UserSystemData,
 } from "../../../src/models/user-model/user.model";
@@ -18,7 +19,6 @@ import {
 	universityActivities,
 } from "./utils/userOptions";
 import { getLifeEvents } from "./utils/life-events";
-import debug from "debug";
 import {
 	convertToSlug,
 	getRandValueFromArray,
@@ -26,20 +26,19 @@ import {
 	getRandomInt,
 } from "../utils/populateHelperFunctions";
 
-const log = debug("log");
-
 const createRandomBasicInfo = () => {
 	const firstName = faker.person.firstName();
 	const lastName = faker.person.lastName();
-	const email = faker.helpers.unique(faker.internet.email, [
+	const email = faker.internet.email({
 		firstName,
 		lastName,
-	]);
+	});
 
-	const password = faker.internet.password(10);
+	const password = faker.internet.password({ length: 10 });
 	const avatarUrl = faker.internet.avatar();
 	const description = faker.person.bio();
 	const phoneNumber = faker.phone.number();
+	const birthday = faker.date.past({ years: 50 });
 
 	return {
 		firstName,
@@ -49,6 +48,7 @@ const createRandomBasicInfo = () => {
 		avatarUrl,
 		description,
 		phoneNumber,
+		birthday,
 	};
 };
 
@@ -193,11 +193,12 @@ interface Options
 		Partial<UserActivityData>,
 		Partial<UserAboutData> {}
 
-const createRandomUser = async ({
+export const createRandomUser = async ({
 	userType = "user",
 	isDeleted = false,
 	deletedData,
 	validUntil,
+	refreshTokens = [],
 	friends = [],
 	savedPosts = [],
 	friendRequestsReceived = [],
@@ -208,7 +209,13 @@ const createRandomUser = async ({
 	const userData = {
 		...basicInfo,
 		...createRandomUserAboutData(firstName, lastName),
-		...createRandomSystemData({ userType, isDeleted, deletedData, validUntil }),
+		...createRandomSystemData({
+			userType,
+			isDeleted,
+			deletedData,
+			validUntil,
+			refreshTokens,
+		}),
 		...createRandomActivityData({
 			friends,
 			savedPosts,
@@ -220,29 +227,45 @@ const createRandomUser = async ({
 	const user = new User(userData);
 	const newUser = await user.save();
 
-	const users = await User.find({ _id: { $ne: newUser._id } }).select("_id");
+	return newUser;
+};
 
-	const friendsToAdd = getRandValuesFromArrayObjs(
-		users,
-		getRandomInt(users.length),
-	);
+export const addFriends = async (users: IUser[]) => {
+	for (const user of users) {
+		if (!user) continue;
 
-	newUser.friends = friendsToAdd;
+		const friendsToAdd = getRandValuesFromArrayObjs(
+			users.filter((u) => u._id.toString() !== user._id.toString()),
+			getRandomInt(users.length),
+		);
 
-	const updatedUser = await newUser.save();
+		await User.findByIdAndUpdate(user._id, {
+			$push: { friends: { $each: friendsToAdd.map((friend) => friend._id) } },
+		});
 
-	for (const friend of friends) {
-		const friendDoc = await User.findById(friend);
-		if (!friendDoc) return;
-		friendDoc.friends.push(updatedUser._id);
-		await friendDoc.save();
+		for (const friend of friendsToAdd) {
+			await User.findByIdAndUpdate(friend._id, {
+				$push: { friends: user._id },
+			});
+		}
 	}
 
-	log(updatedUser);
+	const updatedUsers = await User.find({
+		_id: { $in: users.map((user) => user._id) },
+	});
+
+	return updatedUsers;
 };
 
 export const createUsers = async (quantity = 1) => {
+	const users: IUser[] = [];
 	for (let i = 0; i < quantity; i++) {
-		await createRandomUser();
+		const user = await createRandomUser();
+		if (!user) return;
+		users.push(user);
 	}
+
+	const usersWithFriends = await addFriends(users);
+
+	return usersWithFriends;
 };

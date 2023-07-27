@@ -1,45 +1,60 @@
 import express from "express";
+import {
+	acceptFriendRequest,
+	createUser,
+	getDeletedUserById,
+	getUserById,
+	getUserFriends,
+	getUserPosts,
+	getUserSavedPosts,
+	getUsers,
+	rejectFriendRequest,
+	sendFriendRequest,
+	unfriendUser,
+	updateUserBasicInfo,
+	updateUserPassword,
+} from "../controllers/user.controller";
 
 const router = express.Router();
 
-// /users/preview
-// router.get("/preview", getUsersPreviewData);
+// /users/
+router.get("/", getUsers);
 
-// /users/:id/saved-posts
-// router.get("/:id/saved-posts", getSavedPosts);
+// /users/:id
+router.get("/:id", getUserById);
 
-// /users/:id/friend-request
-// router.put("/:id/friend-request", sendFriendRequest);
+// /users/:id/deleted
+router.get("/:id/deleted", getDeletedUserById);
 
-// /users/:id/unfriend
-// router.put("/:id/unfriend", removeFriend);
+// /users
+router.post("/", createUser);
+
+// /updateUserPassword/:id
+router.put("/updateUserPassword/:id", updateUserPassword);
+
+// /updateUser/:id/basic
+router.put("/updateUser/:id/basic", updateUserBasicInfo);
 
 // TODO -> getUserActivity?
 // /users/:id/posts
-// router.get("/:id/posts", getUserPosts);
-
-// /users/:id/deleted
-// router.get("/:id/deleted", getDeletedUserById);
+router.get("/:id/posts", getUserPosts);
 
 // /users/:id/friends
-// router.get("/:id/friends", getUserFriends);
+router.get("/:id/friends", getUserFriends);
 
-// /users/:id/password
-// router.put("/:id/password", updateUserPassword);
+// @route   GET /users/:id/saved-posts
+router.get("/:id/saved-posts", getUserSavedPosts);
 
-// /users
-// router.get("/", getUsers);
+// @route   POST /users/:id/friend-requests
+router.post("/:id/friend-requests", sendFriendRequest);
 
-// /users/:id
-// router.get("/:id", getUserById);
+// @route   DELETE /users/:id/friends/:friendId
+router.delete("/:id/friends/:friendId", unfriendUser);
 
-// /users
-// router.post("/", createUser);
+// @route   POST /users/:id/friend-requests/:requestId/accept
+router.post("/:id/friend-requests/:requestId/accept", acceptFriendRequest);
 
-// /users/:id/delete
-// router.patch("/:id/delete", deleteUser);
-
-// /users/:id
-// router.patch("/:id", updateUser);
+// @route   POST /users/:id/friend-requests/:requestId/reject
+router.post("/:id/friend-requests/:requestId/reject", rejectFriendRequest);
 
 export default router;

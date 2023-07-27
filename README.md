@@ -1,7 +1,7 @@
 # Odin Book Backend
 
 ## Next
-  
+
 - controllers
 - jest
 
@@ -38,4 +38,5 @@
 4. You can populate data like users and posts with fake data using the Faker module from npm. To accomplish this create a new JavaScript file named seeds.js which imports your mongoose models and uses the faker module to generate and save a bunch of new users.
 
 <!-- Notes -->
+
 figure out periods vs not for error messages

@@ -18,7 +18,8 @@
 	"homepage": "https://github.com/jackwatters45/odin-book-backend#readme",
 	"scripts": {
 		"test": "NODE_ENV=test jest --coverage",
-		"test:dev": "DEBUG=log NODE_ENV=test jest --detectOpenHandles",
+		"test:dev": "DEBUG=log* NODE_ENV=test jest --detectOpenHandles",
+		"test:file": "DEBUG=log* NODE_ENV=test jest --detectOpenHandles -- /tests/user.test.ts",
 		"build": "rimraf dist && tsc",
 		"start": "node dist/index.js",
 		"dev": "nodemon src/index.ts",
@@ -28,7 +29,7 @@
 		"format": "prettier --write .",
 		"fix": "npm run format & npm run lint:fix",
 		"prepare": "husky install",
-		"populate": "DEBUG=log ts-node src/tools/populateDbs/populateDbs.ts"
+		"populate": "DEBUG=log ts-node tools/populateDbs/populateDbs.ts"
 	},
 	"lint-staged": {
 		"*.ts": "npm run fix"
@@ -51,6 +52,7 @@
 		"luxon": "^3.3.0",
 		"mongoose": "^7.3.1",
 		"morgan": "^1.10.0",
+		"multer": "^1.4.5-lts.1",
 		"nodemailer": "^6.9.3",
 		"passport": "^0.6.0",
 		"passport-facebook": "^3.0.0",
@@ -59,6 +61,7 @@
 		"passport-jwt": "^4.0.1",
 		"passport-local": "^1.0.0",
 		"passport-oauth2": "^1.7.0",
+		"sharp": "^0.32.1",
 		"supports-color": "^9.4.0",
 		"twilio": "^4.13.0",
 		"uuid": "^9.0.0"

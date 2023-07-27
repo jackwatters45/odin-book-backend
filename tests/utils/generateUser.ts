@@ -9,6 +9,7 @@ export interface TestUser {
 	password: string;
 	birthday: string;
 	pronouns: string;
+	userType: "user" | "admin";
 }
 
 const generateUser = (usernameType?: usernameType): TestUser => ({
@@ -18,6 +19,7 @@ const generateUser = (usernameType?: usernameType): TestUser => ({
 	password: generatePassword(),
 	birthday: faker.date.past().toISOString(),
 	pronouns: "she/her",
+	userType: "user",
 });
 
 export default generateUser;

@@ -12,6 +12,7 @@ export interface BasicUserInfo {
 	avatarUrl?: string;
 	description?: string;
 	phoneNumber?: string;
+	birthday: Date;
 }
 
 export interface UserLoginData {
@@ -85,11 +86,12 @@ const UserSchema = new Schema<IUser>(
 			unique: true,
 			sparse: true,
 		},
+		birthday: { type: Date },
 		password: { type: String, trim: true, minlength: 8 },
 		facebookId: { type: String, trim: true, unique: true, sparse: true },
 		googleId: { type: String, trim: true, unique: true, sparse: true },
 		githubId: { type: String, trim: true, unique: true, sparse: true },
-		pronouns: { type: String, trim: true, default: "" },
+		pronouns: { type: String, trim: true },
 		friends: [{ type: Schema.Types.ObjectId, ref: "User" }],
 		description: { type: String, trim: true, default: "" },
 		avatarUrl: { type: String, trim: true, default: "" },
