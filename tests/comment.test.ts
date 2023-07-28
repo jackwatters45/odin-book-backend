@@ -2,11 +2,12 @@ import express, { Request, Response } from "express";
 import request from "supertest";
 import { ObjectId } from "mongodb";
 import { Schema } from "mongoose";
-// import debug from "debug";
+import debug from "debug";
 
 import { configDb, disconnectFromDatabase } from "../src/config/database";
 import User, { IUser } from "../src/models/user-model/user.model";
 import Post, { IPost } from "../src/models/post.model";
+import Reaction, { IReaction } from "../src/models/reaction.model";
 import Comment, { IComment } from "../src/models/comment.model";
 import configRoutes from "../src/routes";
 import configOtherMiddleware from "../src/middleware/otherConfig";
@@ -25,7 +26,7 @@ import {
 	updateComment,
 } from "../src/controllers/comment.controller";
 
-// const log = debug("log:comment:test");
+const log = debug("log:comment:test");
 
 const app = express();
 
@@ -778,12 +779,7 @@ describe("POST /posts/:post/comments/:id/react", () => {
 				message: "Reaction added",
 				comment: expect.objectContaining({
 					post: post._id,
-					reactions: expect.arrayContaining([
-						expect.objectContaining({
-							user: user._id,
-							type: req.body.type,
-						}),
-					]),
+					reactions: expect.any(Array),
 				}),
 			}),
 		);
@@ -871,53 +867,6 @@ describe("POST /posts/:post/comments/:id/react", () => {
 	});
 });
 
-// // @desc    Unreact to comment
-// // @route   POST posts/:post/comments/:id/unreact
-// // @access  Private
-// export const unreactToComment = [
-// 	passport.authenticate("jwt", { session: false }),
-// 	expressAsyncHandler(async (req: Request, res: Response) => {
-// 		const user = req.user as IUser;
-// 		if (!user) {
-// 			res.status(401).json({ message: "No user logged in" });
-// 			return;
-// 		}
-
-// 		try {
-// 			const [post, comment] = await Promise.all([
-// 				Post.findById(req.params.post),
-// 				Comment.findById(req.params.id),
-// 			]);
-
-// 			if (!post) {
-// 				res.status(404).json({ message: "Post not found" });
-// 				return;
-// 			}
-
-// 			if (!comment) {
-// 				res.status(404).json({ message: "Comment not found" });
-// 				return;
-// 			}
-
-// 			const reactionIndex = comment.reactions.findIndex(
-// 				(reaction) => reaction.user === user._id.toString(),
-// 			);
-
-// 			if (reactionIndex === -1) {
-// 				res.status(404).json({ message: "Reaction not found" });
-// 				return;
-// 			}
-
-// 			comment.reactions.splice(reactionIndex, 1);
-// 			await comment.save();
-
-// 			res.status(201).json({ message: "Reaction removed", comment });
-// 		} catch (error) {
-// 			res.status(500).json({ message: error.message });
-// 		}
-// 	}),
-// ];
-
 describe("POST /posts/:post/comments/:id/unreact", () => {
 	let num = 0;
 	let post: IPost;
@@ -938,7 +887,11 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 
 		const comment = post.comments[0] as unknown as IComment;
 
-		user = (await User.findById(comment.reactions[0].user)) as IUser;
+		const reaction = (await Reaction.findOne({
+			parent: comment._id,
+		})) as IReaction;
+		user = (await User.findById(reaction.user)) as IUser;
+		log(reaction, user._id);
 
 		req = {
 			user,
@@ -1019,7 +972,7 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
-				message: "Reaction not found",
+				message: "User has not reacted to this comment",
 			}),
 		);
 	});
@@ -1042,6 +995,3 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 
 afterEach(() => jest.restoreAllMocks());
 afterAll(async () => await disconnectFromDatabase());
-
-// TODO friend requests
-// TODO notifications

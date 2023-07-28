@@ -2,10 +2,13 @@ import expressAsyncHandler from "express-async-handler";
 import passport from "passport";
 import { Request, Response } from "express";
 import { body, validationResult } from "express-validator";
+import debug from "debug";
 
 import User, { IUser } from "../models/user-model/user.model";
 import Post from "../models/post.model";
 import Comment from "../models/comment.model";
+
+const log = debug("server:user:controller");
 
 // @desc    Get all users
 // @route   GET /users
@@ -24,7 +27,7 @@ export const getUsers = expressAsyncHandler(
 
 			res.status(200).json(users);
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -52,7 +55,7 @@ export const getUserById = expressAsyncHandler(
 
 			res.status(200).json({ user, posts, comments });
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -96,7 +99,7 @@ export const getDeletedUserById = [
 
 			res.status(200).json({ user, posts, comments });
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -199,7 +202,7 @@ export const createUser = [
 
 			res.status(201).json({ message: "User created successfully", user });
 		} catch (err) {
-			console.error(err);
+			log(err);
 			res.status(500).json({ message: err.message });
 		}
 	}),
@@ -344,7 +347,7 @@ export const updateUserBasicInfo = [
 				.status(201)
 				.json({ updatedUser, message: "User updated successfully" });
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -416,6 +419,7 @@ export const getUserFriends = expressAsyncHandler(
 				message: "Friends retrieved successfully",
 			});
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -465,6 +469,7 @@ export const getUserSavedPosts = [
 				meta: { total: savedPostsCount },
 			});
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -523,7 +528,7 @@ export const sendFriendRequest = [
 
 			res.status(200).json({ message: "Friend request sent successfully" });
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -581,7 +586,7 @@ export const unfriendUser = [
 
 			res.status(200).json({ message: "Friend removed successfully" });
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -640,7 +645,7 @@ export const acceptFriendRequest = [
 
 			res.status(200).json({ message: "Friend request accepted successfully" });
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -696,7 +701,7 @@ export const rejectFriendRequest = [
 
 			res.status(200).json({ message: "Friend request rejected successfully" });
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),

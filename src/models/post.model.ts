@@ -7,7 +7,7 @@ export interface IPost extends Document {
 	published: boolean;
 	createdAt: Date;
 	updatedAt: Date;
-	likes: ObjectId[];
+	reactions: ObjectId[];
 	comments: ObjectId[];
 	sharedFrom?: ObjectId; // shared from another post
 	media?: string;
@@ -17,7 +17,6 @@ export interface IPost extends Document {
 	checkIn?: { longitude: number; latitude: number };
 }
 
-// TODO at some point make sure that if media is present, content is optional
 const postSchema = new Schema<IPost>(
 	{
 		content: {
@@ -27,20 +26,17 @@ const postSchema = new Schema<IPost>(
 		},
 		author: { type: Schema.Types.ObjectId, ref: "User", required: true },
 		published: { type: Boolean, required: true, default: false },
-		likes: {
-			type: [{ type: Schema.Types.ObjectId, ref: "Like" }],
-			default: [],
-		},
+		reactions: [{ type: Schema.Types.ObjectId, ref: "Reaction" }],
 		comments: {
 			type: [{ type: Schema.Types.ObjectId, ref: "Comment" }],
 			default: [],
 		},
-		sharedFrom: { type: Schema.Types.ObjectId, ref: "Post" },
-		media: { type: String },
 		taggedUsers: {
 			type: [{ type: Schema.Types.ObjectId, ref: "User" }],
 			default: [],
 		},
+		sharedFrom: { type: Schema.Types.ObjectId, ref: "Post" },
+		media: { type: String },
 		feeling: { type: String },
 		lifeEvent: {
 			type: new Schema(
@@ -65,6 +61,7 @@ const postSchema = new Schema<IPost>(
 	{ timestamps: true },
 );
 
+// TODO this looks wrong
 postSchema.path("content").validate(function (value: string) {
 	return (
 		this.sharedFrom ||

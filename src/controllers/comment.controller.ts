@@ -1,15 +1,16 @@
 import { body, validationResult } from "express-validator";
 import { Request, Response } from "express";
-// import debug from "debug";
+import debug from "debug";
 import expressAsyncHandler from "express-async-handler";
 import passport from "passport";
-import { startSession } from "mongoose";
+import { ObjectId, startSession } from "mongoose";
 
-import Comment, { reactionTypes } from "../models/comment.model";
+import Comment from "../models/comment.model";
+import Reaction, { reactionTypes } from "../models/reaction.model";
 import { IUser } from "../models/user-model/user.model";
 import Post from "../models/post.model";
 
-// const log = debug("log:commentController");
+const log = debug("log:commentController");
 
 // @desc    Get all comments from post
 // @route   GET /posts/:post/comments
@@ -67,7 +68,7 @@ export const getComments = expressAsyncHandler(
 				meta: { total: commentsCount, totalParent: parentCommentsCount },
 			});
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -105,7 +106,7 @@ export const getReplies = expressAsyncHandler(
 
 			res.status(200).json({ replies });
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -137,7 +138,7 @@ export const getCommentById = expressAsyncHandler(
 
 			res.status(200).json({ comment, message: "Comment found" });
 		} catch (error) {
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -216,7 +217,7 @@ export const createComment = [
 		} catch (error) {
 			await session.abortTransaction();
 
-			console.error(error);
+			log(error);
 			res.status(500).json({ message: error.message });
 		} finally {
 			session.endSession();
@@ -271,6 +272,7 @@ export const updateComment = [
 
 			res.status(201).json({ message: "Comment updated", comment });
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -319,6 +321,7 @@ export const deleteComment = [
 				comment: updatedComment,
 			});
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -382,14 +385,15 @@ export const createCommentReply = [
 			);
 
 			await session.commitTransaction();
-			session.endSession();
 
 			res.status(201).json({ newComment });
 		} catch (error) {
 			await session.abortTransaction();
-			session.endSession();
 
+			log(error);
 			res.status(500).json({ message: error.message });
+		} finally {
+			session.endSession();
 		}
 	}),
 ];
@@ -416,7 +420,7 @@ export const reactToComment = [
 		try {
 			const [post, comment] = await Promise.all([
 				Post.findById(req.params.post),
-				Comment.findById(req.params.id),
+				Comment.findById(req.params.id).populate("reactions"),
 			]);
 
 			if (!post) {
@@ -431,20 +435,31 @@ export const reactToComment = [
 
 			const { type } = req.body;
 
-			const reactionIndex = comment.reactions.findIndex(
-				(reaction) => reaction.user === user._id.toString(),
-			);
+			const existingReaction = await Reaction.findOne({
+				parent: comment._id,
+				author: user._id,
+			});
 
-			if (reactionIndex === -1) {
-				comment.reactions.push({ user: user._id, type });
+			if (!existingReaction) {
+				const reaction = new Reaction({
+					parent: comment._id,
+					user: user._id,
+					type,
+				});
+
+				const savedReaction = await reaction.save();
+
+				comment.reactions.push(savedReaction._id as unknown as ObjectId);
 			} else {
-				comment.reactions[reactionIndex].type = type;
+				existingReaction.type = type;
+				await existingReaction.save();
 			}
 
 			await comment.save();
 
 			res.status(201).json({ message: "Reaction added", comment });
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -478,22 +493,31 @@ export const unreactToComment = [
 				return;
 			}
 
-			const reactionIndex = comment.reactions.findIndex((reaction) => {
-				return reaction.user.toString() === user._id.toString();
+			const existingReaction = await Reaction.findOne({
+				parent: comment._id,
+				user: user._id,
 			});
 
-			if (reactionIndex === -1) {
-				res.status(404).json({ message: "Reaction not found" });
+			if (!existingReaction) {
+				res
+					.status(404)
+					.json({ message: "User has not reacted to this comment" });
 				return;
 			}
 
-			comment.reactions.splice(reactionIndex, 1);
+			await Reaction.findByIdAndDelete(existingReaction._id);
+
+			comment.reactions = comment.reactions.filter(
+				(reaction) => reaction.toString() !== existingReaction._id.toString(),
+			);
+
 			await comment.save();
 
 			res
 				.status(201)
 				.json({ message: "Reaction removed", comment: comment.toJSON() });
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),

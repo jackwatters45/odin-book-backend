@@ -1,11 +1,15 @@
 import express from "express";
+import { getPostById, getPosts } from "../controllers/post.controller";
 
 const router = express.Router();
 
 // /posts
-// router.get("/", getPosts);
+router.get("/", getPosts);
 
 // /posts/:id
+router.get("/:id", getPostById);
+
+// /posts
 // router.post("/", createPost);
 
 // /posts/popular
@@ -19,9 +23,6 @@ const router = express.Router();
 
 // /users/saved-posts/:id
 // router.put("/saved-posts/:id", toggleSavedPost);
-
-// /posts/:id
-// router.get("/:id", getPostById);
 
 // /posts/:id
 // router.put("/:id", updatePost);

@@ -8,22 +8,9 @@ export interface IComment extends Document {
 	post: ObjectId;
 	parentComment?: ObjectId;
 	replies: ObjectId[];
-	reactions: { user: ObjectId; type: string }[];
+	reactions: ObjectId[];
 	isDeleted?: boolean;
 }
-
-export const reactionTypes = [
-	"like",
-	"dislike",
-	"love",
-	"haha",
-	"wow",
-	"sad",
-	"angry",
-	"hooray",
-	"confused",
-	"heart",
-];
 
 const commentSchema = new Schema<IComment>(
 	{
@@ -33,12 +20,7 @@ const commentSchema = new Schema<IComment>(
 		parentComment: { type: Schema.Types.ObjectId, ref: "Comment" },
 		replies: [{ type: Schema.Types.ObjectId, ref: "Comment" }],
 		isDeleted: { type: Boolean, default: false },
-		reactions: [
-			{
-				user: { type: Schema.Types.ObjectId, ref: "User", required: true },
-				type: { type: String, required: true, enum: reactionTypes },
-			},
-		],
+		reactions: [{ type: Schema.Types.ObjectId, ref: "Reaction" }],
 	},
 	{ timestamps: true },
 );

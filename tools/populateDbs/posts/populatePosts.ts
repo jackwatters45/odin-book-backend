@@ -3,7 +3,8 @@ import { faker } from "@faker-js/faker";
 
 import Post, { IPost } from "../../../src/models/post.model";
 import User, { IUser } from "../../../src/models/user-model/user.model";
-import Comment, { reactionTypes } from "../../../src/models/comment.model";
+import Comment from "../../../src/models/comment.model";
+import Reaction, { reactionTypes } from "../../../src/models/reaction.model";
 
 import {
 	getComments,
@@ -13,18 +14,25 @@ import {
 	getRandomInt,
 } from "../utils/populateHelperFunctions";
 import { feelings } from "./utils/postOptions";
-import { ObjectId } from "mongoose";
+import { ObjectId, Types } from "mongoose";
 
 const log = debug("log");
 
-const getPostData = (users: IUser[]) => {
+interface ICreatePostOptions {
+	author?: ObjectId;
+	includeComments?: boolean;
+	includeReactions?: boolean;
+	allPublished?: boolean;
+}
+
+const getPostData = (users: IUser[], options?: ICreatePostOptions) => {
 	const author = getRandValueFromArrayObjs(users);
 	const likes = getRandValuesFromArrayObjs(users, 20);
 	const taggedUsers = getRandValuesFromArrayObjs(users, 5);
 
 	const postData = {
 		content: faker.lorem.paragraph(),
-		published: faker.datatype.boolean(0.8),
+		published: options?.allPublished ? true : faker.datatype.boolean(0.8),
 		feeling: faker.datatype.boolean(0.2)
 			? getRandValueFromArray(feelings)
 			: null,
@@ -50,16 +58,10 @@ const getPostData = (users: IUser[]) => {
 	return postData;
 };
 
-interface ICreatePostOptions {
-	author?: ObjectId;
-	includeComments?: boolean;
-	includeReactions?: boolean;
-}
-
 export const createPost = async (options?: ICreatePostOptions) => {
 	const users = await User.find().select("_id");
 
-	const postData = getPostData(users);
+	const postData = getPostData(users, options);
 	const post = new Post(postData);
 
 	if (options?.author) post.author = options.author;
@@ -75,12 +77,20 @@ export const createPost = async (options?: ICreatePostOptions) => {
 			const numReactions = getRandomInt(5) || 1;
 			const usersReacting = getRandValuesFromArrayObjs(users, numReactions);
 
-			const reactions = usersReacting.map((user) => ({
-				user: user._id,
-				type: getRandValueFromArray(reactionTypes),
-			}));
+			const reactions: Types.ObjectId[] = [];
+			usersReacting.forEach(async (user) => {
+				const reaction = new Reaction({
+					parent: comment._id,
+					user: user._id,
+					type: getRandValueFromArray(reactionTypes),
+				});
 
-			comment.reactions = reactions;
+				const savedReaction = await reaction.save();
+
+				reactions.push(savedReaction._id);
+			});
+
+			comment.reactions = reactions as unknown as ObjectId[];
 
 			return comment;
 		});
