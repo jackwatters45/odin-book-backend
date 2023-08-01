@@ -19,7 +19,7 @@
 	"scripts": {
 		"test": "NODE_ENV=test jest --coverage",
 		"test:dev": "DEBUG=log* NODE_ENV=test jest --detectOpenHandles",
-		"test:file": "DEBUG=log* NODE_ENV=test jest --detectOpenHandles -- /tests/post.test.ts",
+		"test:file": "DEBUG=log* NODE_ENV=test jest --detectOpenHandles -- /tests/comment.test.ts",
 		"build": "rimraf dist && tsc",
 		"start": "node dist/index.js",
 		"dev": "nodemon src/index.ts",

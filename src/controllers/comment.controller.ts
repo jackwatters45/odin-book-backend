@@ -213,7 +213,9 @@ export const createComment = [
 
 			await session.commitTransaction();
 
-			res.status(201).json(commentWithAuthor);
+			res
+				.status(201)
+				.json({ message: "Comment created", comment: commentWithAuthor });
 		} catch (error) {
 			await session.abortTransaction();
 
@@ -494,8 +496,8 @@ export const unreactToComment = [
 			}
 
 			const existingReaction = await Reaction.findOne({
-				parent: comment._id,
-				user: user._id,
+				parent: comment._id.toString(),
+				user: user._id.toString(),
 			});
 
 			if (!existingReaction) {
