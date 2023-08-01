@@ -1,7 +1,28 @@
 import { body } from "express-validator";
 import { Types } from "mongoose";
+import multer from "multer";
+import { reactionTypes } from "../../models/reaction.model";
+
+const upload = multer({
+	limits: {
+		fileSize: 1024 * 1024 * 5, // limit file size to 5MB
+	},
+	fileFilter: (req, file, cb) => {
+		if (
+			file.mimetype === "image/png" ||
+			file.mimetype === "image/jpg" ||
+			file.mimetype === "image/jpeg"
+		) {
+			cb(null, true);
+		} else {
+			cb(null, false);
+			cb(new Error("Invalid file type. Only jpg, jpeg, and png are allowed."));
+		}
+	},
+});
 
 const postValidation = [
+	upload.array("media"), // figure out facebook max files
 	body("published").isBoolean().withMessage("Published must be a boolean"),
 	body("content")
 		.optional()
@@ -13,16 +34,18 @@ const postValidation = [
 		.optional()
 		.isArray()
 		.withMessage("Tagged users must be an array")
-		.custom((value) => {
-			return !value.some((user: string) => !Types.ObjectId.isValid(user));
-		})
+		.custom((value) => Types.ObjectId.isValid(value))
 		.withMessage("Tagged users must be an array of valid user ids"),
 	body("sharedFrom")
 		.optional()
 		.custom((value) => Types.ObjectId.isValid(value))
 		.withMessage("SharedFrom must be a valid ObjectId"),
-	body("media").optional().isString().withMessage("Media must be a string"),
-	body("feeling").optional().isString().withMessage("Feeling must be a string"),
+	body("feeling")
+		.optional()
+		.isString()
+		.withMessage("Feeling must be an object")
+		.isIn([reactionTypes])
+		.withMessage("Feeling must be a valid Feeling type"),
 	body("lifeEvent")
 		.optional()
 		.isObject()

@@ -1,7 +1,42 @@
 import express from "express";
-import { getPostById, getPosts } from "../controllers/post.controller";
+import {
+	createPost,
+	deletePost,
+	getPostById,
+	getPostReactions,
+	getPosts,
+	getPostsByFriends,
+	getSavedPosts,
+	reactToPost,
+	sharePost,
+	toggleSavedPost,
+	unreactToPost,
+	updatePost,
+} from "../controllers/post.controller";
 
 const router = express.Router();
+
+// /posts/:id/react
+router.patch("/:id/react", reactToPost);
+
+// /posts/:id/unreact
+router.delete("/:id/unreact", unreactToPost);
+
+// /posts/:id/reactions
+router.get("/:id/reactions", getPostReactions);
+
+// /posts/saved-posts/:postId
+router.patch("/saved-posts/:id", toggleSavedPost);
+
+// /posts/saved-posts
+router.get("/saved-posts", getSavedPosts);
+
+// TODO
+// /posts/:id/share
+router.post("/:id/share", sharePost);
+
+// /posts/friends
+router.get("/friends", getPostsByFriends);
 
 // /posts
 router.get("/", getPosts);
@@ -10,33 +45,14 @@ router.get("/", getPosts);
 router.get("/:id", getPostById);
 
 // /posts
-// router.post("/", createPost);
-
-// /posts/popular
-// router.get("/popular", getPopularPosts);
-
-// /posts/preview
-// router.get("/preview", getPostsPreview);
-
-// /posts/following
-// router.get("/following", getFollowingPosts);
-
-// /users/saved-posts/:id
-// router.put("/saved-posts/:id", toggleSavedPost);
+router.post("/", createPost);
 
 // /posts/:id
-// router.put("/:id", updatePost);
+router.patch("/:id", updatePost);
 
 // /posts/:id
-// router.delete("/:id", deletePost);
+router.delete("/:id", deletePost);
 
-// /posts/:id/like
-// router.get("/:id/likes", getLikes);
-
-// /posts/:id/like
-// router.put("/:id/like", likePost);
-
-// /posts/:id/unlike
-// router.put("/:id/unlike", unlikePost);
+// TODO probably comments preview in other router
 
 export default router;

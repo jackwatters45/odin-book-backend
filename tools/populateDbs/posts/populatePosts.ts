@@ -14,7 +14,7 @@ import {
 	getRandomInt,
 } from "../utils/populateHelperFunctions";
 import { feelings } from "./utils/postOptions";
-import { ObjectId, Types } from "mongoose";
+import { ObjectId } from "mongoose";
 
 const log = debug("log");
 
@@ -58,7 +58,29 @@ const getPostData = (users: IUser[], options?: ICreatePostOptions) => {
 	return postData;
 };
 
-export const createPost = async (options?: ICreatePostOptions) => {
+const addReactions = async (
+	parentId: ObjectId,
+	users: IUser[],
+	maxReactions: number,
+) => {
+	const numReactions = getRandomInt(maxReactions) || 1;
+	const usersReacting = getRandValuesFromArrayObjs(users, numReactions);
+
+	return await Promise.all(
+		usersReacting.map(async (user) => {
+			const reaction = new Reaction({
+				parent: parentId,
+				user: user._id,
+				type: getRandValueFromArray(reactionTypes),
+			});
+
+			const savedReaction = await reaction.save();
+			return savedReaction._id;
+		}),
+	);
+};
+
+export const createRandomPost = async (options?: ICreatePostOptions) => {
 	const users = await User.find().select("_id");
 
 	const postData = getPostData(users, options);
@@ -66,39 +88,34 @@ export const createPost = async (options?: ICreatePostOptions) => {
 
 	if (options?.author) post.author = options.author;
 
+	if (options?.includeReactions) {
+		const postReactions = await addReactions(post._id, users, 5);
+		post.reactions = postReactions as unknown as ObjectId[];
+	}
+
 	const savedPost = await post.save();
 
-	const includeComments = options?.includeComments !== false;
+	const includeComments = options?.includeComments !== false; // defaults to true
 	if (includeComments) {
 		const commentData = getComments(users, 10, savedPost._id);
-		const commentDocs = commentData.map((data) => {
+		const commentDocsPromise = commentData.map(async (data) => {
 			const comment = new Comment(data);
 
-			const numReactions = getRandomInt(5) || 1;
-			const usersReacting = getRandValuesFromArrayObjs(users, numReactions);
-
-			const reactions: Types.ObjectId[] = [];
-			usersReacting.forEach(async (user) => {
-				const reaction = new Reaction({
-					parent: comment._id,
-					user: user._id,
-					type: getRandValueFromArray(reactionTypes),
-				});
-
-				const savedReaction = await reaction.save();
-
-				reactions.push(savedReaction._id);
-			});
-
-			comment.reactions = reactions as unknown as ObjectId[];
+			const commentReactions = await addReactions(comment._id, users, 5);
+			comment.reactions = commentReactions as unknown as ObjectId[];
 
 			return comment;
 		});
+
 		const savedComments = await Promise.all(
-			commentDocs.map((comment) => comment.save()),
+			commentDocsPromise.map(async (commentDocPromise) => {
+				const commentDoc = await commentDocPromise;
+				const savedComment = await commentDoc.save();
+				return savedComment._id;
+			}),
 		);
 
-		savedPost.comments = savedComments.map((comment) => comment._id);
+		savedPost.comments = savedComments;
 	}
 
 	const posts = await Post.find().select("_id");
@@ -107,6 +124,7 @@ export const createPost = async (options?: ICreatePostOptions) => {
 		const sharedFrom = getRandValueFromArray(posts);
 		savedPost.sharedFrom = sharedFrom._id;
 	}
+
 	await savedPost.save();
 
 	log(`Post ${savedPost._id} created!`);
@@ -119,7 +137,7 @@ export const createPosts = async (
 ) => {
 	const posts: IPost[] = [];
 	for (let i = 0; i < quantity; i++) {
-		const post = (await createPost(options)) as IPost;
+		const post = (await createRandomPost(options)) as IPost;
 		posts.push(post);
 	}
 	return posts;

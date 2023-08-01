@@ -1,4 +1,4 @@
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import request from "supertest";
 import { ObjectId } from "mongodb";
 import { Schema } from "mongoose";
@@ -13,29 +13,40 @@ import configRoutes from "../src/routes";
 import configOtherMiddleware from "../src/middleware/otherConfig";
 import { createUsers } from "../tools/populateDbs/users/populateUsers";
 import {
-	createPost,
+	createRandomPost,
 	createPosts,
 } from "../tools/populateDbs/posts/populatePosts";
 import { apiPath } from "../src/config/envVariables";
 import { addRepliesToComment } from "../tools/populateDbs/posts/utils/addRepliesToComment";
-import {
-	createComment,
-	deleteComment,
-	reactToComment,
-	unreactToComment,
-	updateComment,
-} from "../src/controllers/comment.controller";
 
 const log = debug("log:comment:test");
 
 const app = express();
+
+// Passport Request Interface Extension
+interface IRequestWithUser extends Request {
+	user?: IUser;
+}
+
+// Mock Passport Authentication
+// let userUndefined = false;
+// let randomUser = false;
+// let adminUser = false;
+
+jest.mock("passport", () => ({
+	authenticate: jest.fn((strategy, options) => {
+		return async (req: IRequestWithUser, res: Response, next: NextFunction) => {
+			req.user = (await Comment.findById(posts[0].author)) as IUser;
+			next();
+		};
+	}),
+}));
 
 let users: IUser[] = [];
 let posts: IPost[] = [];
 
 let postNoComments: IPost;
 const numUsers = 5;
-
 beforeAll(async () => {
 	await configDb();
 
@@ -44,7 +55,7 @@ beforeAll(async () => {
 	await Comment.deleteMany({});
 	users = (await createUsers(numUsers)) as IUser[];
 	posts = await createPosts(numUsers + 1);
-	postNoComments = await createPost({ includeComments: false });
+	postNoComments = await createRandomPost({ includeComments: false });
 
 	configOtherMiddleware(app);
 	configRoutes(app);
@@ -397,51 +408,33 @@ describe("GET /posts/:post/comments/:id", () => {
 
 describe("POST /posts/:post/comments", () => {
 	let post: IPost;
-	let user: IUser;
 
 	let req: Request;
 	let res: Response;
-	const next = jest.fn();
 
 	beforeEach(() => {
 		post = posts[0];
-		user = users[0];
-
-		req = {
-			user,
-			params: { post: post._id },
-			body: { content: "test comment" },
-		} as unknown as Request;
-
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
 	});
 
 	it("should return 201 and a comment", async () => {
-		for (let i = 1; i < createComment.length; i++) {
-			await createComment[i](req, res, next);
-		}
+		const res = await request(app)
+			.post(`${apiPath}/posts/${post._id}/comments`)
+			.send({ content: "test comment" });
 
-		expect(res.status).toBeCalledWith(201);
-		expect(res.json).toBeCalledWith(
-			expect.objectContaining({
-				content: req.body.content,
-				post: post._id,
-				author: expect.objectContaining({
-					_id: user._id,
-				}),
-			}),
-		);
+		expect(res.status).toBe(201);
+		// expect(res.json).toBeCalledWith(
+		// 	expect.objectContaining({
+		// 		content: req.body.content,
+		// 		post: post._id,
+		// 		author: expect.objectContaining({
+		// 			_id: user._id,
+		// 		}),
+		// 	}),
+		// );
 	});
 
 	it("should return 400 if content is empty", async () => {
 		req.body.content = "";
-
-		for (let i = 1; i < createComment.length; i++) {
-			await createComment[i](req, res, next);
-		}
 
 		expect(res.status).toBeCalledWith(400);
 		expect(res.json).toBeCalledWith(
@@ -458,10 +451,6 @@ describe("POST /posts/:post/comments", () => {
 	it("should return 401 if no user is logged in", async () => {
 		req.user = undefined;
 
-		for (let i = 1; i < createComment.length; i++) {
-			await createComment[i](req, res, next);
-		}
-
 		expect(res.status).toBeCalledWith(401);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -474,10 +463,6 @@ describe("POST /posts/:post/comments", () => {
 		jest.spyOn(Comment.prototype, "save").mockImplementationOnce(() => {
 			throw new Error("error");
 		});
-
-		for (let i = 1; i < createComment.length; i++) {
-			await createComment[i](req, res, next);
-		}
 
 		expect(res.status).toBeCalledWith(500);
 		expect(res.json).toBeCalledWith(
@@ -496,7 +481,6 @@ describe("PUT /posts/:post/comments/:id", () => {
 
 	let req: Request;
 	let res: Response;
-	const next = jest.fn();
 
 	beforeEach(async () => {
 		user = users[num];
@@ -517,10 +501,6 @@ describe("PUT /posts/:post/comments/:id", () => {
 	});
 
 	it("should return 201 and a comment", async () => {
-		for (let i = 1; i < createComment.length; i++) {
-			await updateComment[i](req, res, next);
-		}
-
 		expect(res.status).toBeCalledWith(201);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -535,10 +515,6 @@ describe("PUT /posts/:post/comments/:id", () => {
 
 	it("should return 400 if content is empty", async () => {
 		req.body.content = "";
-
-		for (let i = 1; i < createComment.length; i++) {
-			await updateComment[i](req, res, next);
-		}
 
 		expect(res.status).toBeCalledWith(400);
 		expect(res.json).toBeCalledWith(
@@ -555,10 +531,6 @@ describe("PUT /posts/:post/comments/:id", () => {
 	it("should return 401 if no user is logged in", async () => {
 		req.user = undefined;
 
-		for (let i = 1; i < createComment.length; i++) {
-			await updateComment[i](req, res, next);
-		}
-
 		expect(res.status).toBeCalledWith(401);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -569,10 +541,6 @@ describe("PUT /posts/:post/comments/:id", () => {
 
 	it("should return 403 if user is not the original commenter", async () => {
 		req.user = users[num];
-
-		for (let i = 1; i < createComment.length; i++) {
-			await updateComment[i](req, res, next);
-		}
 
 		expect(res.status).toBeCalledWith(403);
 		expect(res.json).toBeCalledWith(
@@ -585,10 +553,6 @@ describe("PUT /posts/:post/comments/:id", () => {
 	it("should return 404 if post does not exist", async () => {
 		req.params.post = new ObjectId().toString();
 
-		for (let i = 1; i < createComment.length; i++) {
-			await updateComment[i](req, res, next);
-		}
-
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -599,10 +563,6 @@ describe("PUT /posts/:post/comments/:id", () => {
 
 	it("should return 404 if comment does not exist", async () => {
 		req.params.id = new ObjectId().toString();
-
-		for (let i = 1; i < createComment.length; i++) {
-			await updateComment[i](req, res, next);
-		}
 
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
@@ -616,10 +576,6 @@ describe("PUT /posts/:post/comments/:id", () => {
 		jest.spyOn(Comment.prototype, "save").mockImplementationOnce(() => {
 			throw new Error("error");
 		});
-
-		for (let i = 1; i < createComment.length; i++) {
-			await updateComment[i](req, res, next);
-		}
 
 		expect(res.status).toBeCalledWith(500);
 		expect(res.json).toBeCalledWith(
@@ -638,7 +594,6 @@ describe("DELETE /posts/:post/comments/:id", () => {
 
 	let req: Request;
 	let res: Response;
-	const next = jest.fn();
 
 	beforeEach(async () => {
 		user = users[num];
@@ -658,8 +613,6 @@ describe("DELETE /posts/:post/comments/:id", () => {
 	});
 
 	it("should return 200 and a comment", async () => {
-		await deleteComment[1](req, res, next);
-
 		expect(res.status).toBeCalledWith(200);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -676,8 +629,6 @@ describe("DELETE /posts/:post/comments/:id", () => {
 	it("should return 401 if no user is logged in", async () => {
 		req.user = undefined;
 
-		await deleteComment[1](req, res, next);
-
 		expect(res.status).toBeCalledWith(401);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -688,8 +639,6 @@ describe("DELETE /posts/:post/comments/:id", () => {
 
 	it("should return 403 if user is not the original commenter", async () => {
 		req.user = users[num];
-
-		await deleteComment[1](req, res, next);
 
 		expect(res.status).toBeCalledWith(403);
 		expect(res.json).toBeCalledWith(
@@ -702,8 +651,6 @@ describe("DELETE /posts/:post/comments/:id", () => {
 	it("should return 404 if post does not exist", async () => {
 		req.params.post = new ObjectId().toString();
 
-		await deleteComment[1](req, res, next);
-
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -714,8 +661,6 @@ describe("DELETE /posts/:post/comments/:id", () => {
 
 	it("should return 404 if comment does not exist", async () => {
 		req.params.id = new ObjectId().toString();
-
-		await deleteComment[1](req, res, next);
 
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
@@ -729,8 +674,6 @@ describe("DELETE /posts/:post/comments/:id", () => {
 		jest.spyOn(Comment.prototype, "save").mockImplementationOnce(() => {
 			throw new Error("error");
 		});
-
-		await deleteComment[1](req, res, next);
 
 		expect(res.status).toBeCalledWith(500);
 		expect(res.json).toBeCalledWith(
@@ -748,7 +691,6 @@ describe("POST /posts/:post/comments/:id/react", () => {
 
 	let req: Request;
 	let res: Response;
-	const next = jest.fn();
 
 	beforeEach(async () => {
 		user = users[num];
@@ -769,10 +711,6 @@ describe("POST /posts/:post/comments/:id/react", () => {
 	});
 
 	it("should return 201 and a comment", async () => {
-		for (let i = 1; i < reactToComment.length; i++) {
-			await reactToComment[i](req, res, next);
-		}
-
 		expect(res.status).toBeCalledWith(201);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -787,10 +725,6 @@ describe("POST /posts/:post/comments/:id/react", () => {
 
 	it("should return 400 if type is invalid", async () => {
 		req.body.type = "invalid";
-
-		for (let i = 1; i < reactToComment.length; i++) {
-			await reactToComment[i](req, res, next);
-		}
 
 		expect(res.status).toBeCalledWith(400);
 		expect(res.json).toBeCalledWith(
@@ -807,10 +741,6 @@ describe("POST /posts/:post/comments/:id/react", () => {
 	it("should return 401 if no user is logged in", async () => {
 		req.user = undefined;
 
-		for (let i = 1; i < reactToComment.length; i++) {
-			await reactToComment[i](req, res, next);
-		}
-
 		expect(res.status).toBeCalledWith(401);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -822,10 +752,6 @@ describe("POST /posts/:post/comments/:id/react", () => {
 	it("should return 404 if post does not exist", async () => {
 		req.params.post = new ObjectId().toString();
 
-		for (let i = 1; i < reactToComment.length; i++) {
-			await reactToComment[i](req, res, next);
-		}
-
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -836,10 +762,6 @@ describe("POST /posts/:post/comments/:id/react", () => {
 
 	it("should return 404 if comment does not exist", async () => {
 		req.params.id = new ObjectId().toString();
-
-		for (let i = 1; i < reactToComment.length; i++) {
-			await reactToComment[i](req, res, next);
-		}
 
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
@@ -853,10 +775,6 @@ describe("POST /posts/:post/comments/:id/react", () => {
 		jest.spyOn(Comment.prototype, "save").mockImplementationOnce(() => {
 			throw new Error("error");
 		});
-
-		for (let i = 1; i < reactToComment.length; i++) {
-			await reactToComment[i](req, res, next);
-		}
 
 		expect(res.status).toBeCalledWith(500);
 		expect(res.json).toBeCalledWith(
@@ -874,7 +792,6 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 
 	let req: Request;
 	let res: Response;
-	const next = jest.fn();
 
 	beforeEach(async () => {
 		const postId = posts[num]._id.toString();
@@ -907,8 +824,6 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	});
 
 	it("should return 201 and a comment", async () => {
-		await unreactToComment[1](req, res, next);
-
 		expect(res.status).toBeCalledWith(201);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -928,8 +843,6 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	it("should return 401 if no user is logged in", async () => {
 		req.user = undefined;
 
-		await unreactToComment[1](req, res, next);
-
 		expect(res.status).toBeCalledWith(401);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -940,8 +853,6 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 
 	it("should return 404 if post does not exist", async () => {
 		req.params.post = new ObjectId().toString();
-
-		await unreactToComment[1](req, res, next);
 
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
@@ -954,8 +865,6 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	it("should return 404 if comment does not exist", async () => {
 		req.params.id = new ObjectId().toString();
 
-		await unreactToComment[1](req, res, next);
-
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
 			expect.objectContaining({
@@ -966,8 +875,6 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 
 	it("should return 404 if reaction does not exist", async () => {
 		req.user = { _id: new ObjectId() } as IUser;
-
-		await unreactToComment[1](req, res, next);
 
 		expect(res.status).toBeCalledWith(404);
 		expect(res.json).toBeCalledWith(
@@ -981,8 +888,6 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 		jest.spyOn(Comment.prototype, "save").mockImplementationOnce(() => {
 			throw new Error("error");
 		});
-
-		await unreactToComment[1](req, res, next);
 
 		expect(res.status).toBeCalledWith(500);
 		expect(res.json).toBeCalledWith(

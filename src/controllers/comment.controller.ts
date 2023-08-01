@@ -417,6 +417,8 @@ export const reactToComment = [
 			return;
 		}
 
+		const { type } = req.body;
+
 		try {
 			const [post, comment] = await Promise.all([
 				Post.findById(req.params.post),
@@ -432,8 +434,6 @@ export const reactToComment = [
 				res.status(404).json({ message: "Comment not found" });
 				return;
 			}
-
-			const { type } = req.body;
 
 			const existingReaction = await Reaction.findOne({
 				parent: comment._id,
@@ -513,9 +513,7 @@ export const unreactToComment = [
 
 			await comment.save();
 
-			res
-				.status(201)
-				.json({ message: "Reaction removed", comment: comment.toJSON() });
+			res.status(201).json({ message: "Reaction removed", comment });
 		} catch (error) {
 			log(error);
 			res.status(500).json({ message: error.message });

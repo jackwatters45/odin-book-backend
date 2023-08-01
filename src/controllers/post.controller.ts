@@ -1,19 +1,20 @@
 import { body, validationResult } from "express-validator";
 import { Request, Response } from "express";
-import multer from "multer";
-import { v2 as cloudinary } from "cloudinary";
-import uploadToCloudinary from "../utils/uploadToCloudinary";
-import { Types } from "mongoose";
+// import { v2 as cloudinary } from "cloudinary";
+// import uploadToCloudinary from "../utils/uploadToCloudinary";
+import { ObjectId } from "mongoose";
 import passport from "passport";
+import debug from "debug";
 
 import Post from "../models/post.model";
 import User, { IUser } from "../models/user-model/user.model";
 import expressAsyncHandler from "express-async-handler";
-import { calculateStartTime } from "../utils/calculateStartTime";
+// import { calculateStartTime } from "../utils/calculateStartTime";
 import postValidation from "./utils/postValidation";
-import { reactionTypes } from "../models/reaction.model";
+import Reaction, { reactionTypes } from "../models/reaction.model";
+// import resizeImages from "../utils/resizeImages";
 
-const upload = multer();
+const log = debug("log:post:controller");
 
 // TODO specific populate options
 
@@ -41,6 +42,7 @@ export const getPosts = expressAsyncHandler(
 			const posts = await postsQuery.exec();
 			res.status(200).json({ posts, meta: { total: postsCount } });
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -67,6 +69,7 @@ export const getPostById = expressAsyncHandler(
 
 			res.status(200).json({ post });
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -100,11 +103,14 @@ export const createPost = [
 			taggedUsers,
 			sharedFrom,
 			content,
-			media,
 			feeling,
 			lifeEvent,
 			checkIn,
 		} = req.body;
+
+		// let media = "";
+		// const resizedImages = await resizeImages(req.files);
+		// if (resizedImages) media = await uploadToCloudinary(resizedImages);
 
 		const post = new Post({
 			author: author._id,
@@ -112,7 +118,7 @@ export const createPost = [
 			taggedUsers,
 			sharedFrom,
 			content,
-			media,
+			// media,
 			feeling,
 			lifeEvent,
 			checkIn,
@@ -122,13 +128,14 @@ export const createPost = [
 			await post.save();
 			res.status(201).json({ post });
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message, post });
 		}
 	}),
 ];
 
 // @desc    Update post
-// @route   PUT /posts/:id
+// @route   PATCH /posts/:id
 // @access  Private
 export const updatePost = [
 	passport.authenticate("jwt", { session: false }),
@@ -163,7 +170,12 @@ export const updatePost = [
 				return;
 			}
 
-			if (post.author.toString() !== user.id && user.userType !== "admin") {
+			log(post);
+			log(user);
+			if (
+				post.author.toString() !== user._id.toString() &&
+				user.userType !== "admin"
+			) {
 				res.status(403).json({
 					message: "Only admin and the original author can update post",
 				});
@@ -182,6 +194,7 @@ export const updatePost = [
 
 			res.status(200).json({ post: updatedPost, message: "Post updated" });
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -213,73 +226,279 @@ export const deletePost = [
 
 			await Post.findByIdAndDelete(req.params.id);
 
-			res.status(200).json({ message: "Post deleted" });
+			res.status(200).json({ message: "Post deleted", post });
 		} catch (error) {
+			log(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
 ];
 
 // @desc    React to post
-// @route   PUT /posts/:id/react
+// @route   PATCH /posts/:id/react
 // @access  Private
-// export const reactToPost = [
-// 	passport.authenticate("jwt", { session: false }),
-// 	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
-// 	expressAsyncHandler(async (req: Request, res: Response) => {
-// 		const errors = validationResult(req);
-// 		if (!errors.isEmpty()) {
-// 			res.status(400).json({ errors: errors.array() });
-// 			return;
-// 		}
+export const reactToPost = [
+	passport.authenticate("jwt", { session: false }),
+	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			res.status(400).json({ errors: errors.array() });
+			return;
+		}
 
-// 		const user = req.user as IUser;
-// 		if (!user) {
-// 			res.status(401).json({ message: "No user logged in" });
-// 			return;
-// 		}
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "No user logged in" });
+			return;
+		}
 
-// 		const { type } = req.body;
+		const { type } = req.body;
 
-// 		try {
-// 			const post = await Post.findById(req.params.post);
-// 			if (!post) {
-// 				res.status(404).json({ message: "Post not found" });
-// 				return;
-// 			}
+		try {
+			const post = await Post.findById(req.params.id);
+			if (!post) {
+				res.status(404).json({ message: "Post not found" });
+				return;
+			}
 
-// 			const reactionIndex = post.reactions.findIndex(
-// 				(reaction) => reaction.user === user._id.toString(),
-// 			);
+			const existingReaction = await Reaction.findOne({
+				parent: post._id,
+				author: user._id,
+			});
 
-// 			if (reactionIndex === -1) {
-// 				post.reactions.push({ user: user._id, type, createdAt: new Date() });
-// 			} else {
-// 				post.reactions[reactionIndex].type = type;
+			if (!existingReaction) {
+				const reaction = new Reaction({
+					parent: post._id,
+					user: user._id,
+					type,
+				});
 
-// 			}
+				const savedReaction = await reaction.save();
 
-// 			await post.save();
+				post.reactions.push(savedReaction._id as unknown as ObjectId);
+			} else {
+				existingReaction.type = type;
+				await existingReaction.save();
+			}
 
-// 			res.status(201).json({ message: "Reaction added", post });
-// 		} catch (error) {
-// 			res.status(500).json({ message: error.message });
-// 		}
-// 	}),
-// ];
+			await post.save();
+
+			res.status(201).json({ message: "Reaction added", post });
+		} catch (error) {
+			log(error);
+			res.status(500).json({ message: error.message });
+		}
+	}),
+];
 
 // @desc    Unreact to post
-// @route   PUT /posts/:id/unreact
+// @route   DELETE /posts/:id/unreact
 // @access  Private
+export const unreactToPost = [
+	passport.authenticate("jwt", { session: false }),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "No user logged in" });
+			return;
+		}
+
+		try {
+			const post = await Post.findById(req.params.id);
+			if (!post) {
+				res.status(404).json({ message: "Post not found" });
+				return;
+			}
+
+			const existingReaction = await Reaction.findOne({
+				parent: post._id,
+				user: user._id,
+			});
+
+			if (!existingReaction) {
+				res
+					.status(404)
+					.json({ message: "User has not reacted to this comment" });
+				return;
+			}
+
+			await Reaction.findByIdAndDelete(existingReaction._id);
+
+			post.reactions = post.reactions.filter(
+				(reaction) => reaction.toString() !== existingReaction._id.toString(),
+			);
+
+			await post.save();
+
+			res.status(200).json({ message: "Reaction removed", post });
+		} catch (error) {
+			log(error);
+			res.status(500).json({ message: error.message });
+		}
+	}),
+];
+
+// @desc    Get post reactions
+// @route   GET /posts/:id/reactions
+// @access  Public
+export const getPostReactions = expressAsyncHandler(
+	async (req: Request, res: Response) => {
+		try {
+			const post = await Post.findById(req.params.id);
+			if (!post) {
+				res.status(404).json({ message: "Post not found" });
+				return;
+			}
+
+			log(post);
+
+			const reactions = await Reaction.find({ parent: post._id })
+				.populate("user", "firstName lastName isDeleted avatarUrl")
+				.sort({ createdAt: -1 });
+
+			res.status(200).json({ reactions });
+		} catch (error) {
+			log(error);
+			res.status(500).json({ message: error.message });
+		}
+	},
+);
+
+// @desc    Toggle saved post
+// @route   PATCH /posts/saved-posts/:id
+// @access  Private
+export const toggleSavedPost = [
+	passport.authenticate("jwt", { session: false }),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "No user logged in" });
+			return;
+		}
+
+		try {
+			const post = await Post.findById(req.params.id);
+			if (!post) {
+				res.status(404).json({ message: "Post not found" });
+				return;
+			}
+
+			const postId = post._id;
+
+			const isPostSaved = user.savedPosts.includes(postId);
+
+			const updateOperation = isPostSaved
+				? { $pull: { savedPosts: postId } }
+				: { $addToSet: { savedPosts: postId } };
+
+			const userUpdated = await User.findByIdAndUpdate(
+				user._id,
+				updateOperation,
+				{ new: true },
+			);
+
+			res.status(200).json({ savedPosts: userUpdated?.savedPosts });
+		} catch (error) {
+			res.status(500).json({ message: error.message });
+		}
+	}),
+];
+
+// @desc    Get saved posts
+// @route   GET /posts/saved-posts
+// @access  Private
+export const getSavedPosts = [
+	passport.authenticate("jwt", { session: false }),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "No user logged in" });
+			return;
+		}
+
+		try {
+			const posts = await Post.find({ _id: { $in: user.savedPosts } })
+				.populate("author", "firstName lastName isDeleted avatarUrl")
+				.sort({ createdAt: -1 });
+
+			res.status(200).json({ posts });
+		} catch (error) {
+			res.status(500).json({ message: error.message });
+		}
+	}),
+];
 
 // @desc    Share post
-// @route   PUT /posts/:id/share
+// @route   POST /posts/:id/share
 // @access  Private
+export const sharePost = [
+	passport.authenticate("jwt", { session: false }),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "No user logged in" });
+			return;
+		}
 
-// @desc    Unshare post
-// @route   PUT /posts/:id/unshare
+		try {
+			const post = await Post.findById(req.params.id);
+
+			if (!post) {
+				res.status(404).json({ message: "Post not found" });
+				return;
+			}
+
+			const sharedPost = new Post({
+				author: user._id,
+				published: true,
+				sharedFrom: post._id,
+			});
+
+			await sharedPost.save();
+
+			res.status(201).json({ message: "Post shared successfully", sharedPost });
+		} catch (error) {
+			res.status(500).json({ message: error.message });
+		}
+	}),
+];
+
+// @desc    Get posts by user's friends
+// @route   GET /posts/friends
 // @access  Private
+export const getPostsByFriends = [
+	passport.authenticate("jwt", { session: false }),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "No user logged in" });
+			return;
+		}
 
-// @desc    Get post likes
-// @route   GET /posts/:id/likes
-// @access  Public
+		try {
+			const match = {
+				published: true,
+				author: { $in: user.friends },
+			};
+
+			const postsCount = await Post.countDocuments(match);
+			const { offset, limit } = req.query;
+			const posts = await Post.find(match)
+				.skip(parseInt(offset as string) || 0)
+				.limit(parseInt(limit as string) || 0)
+				.populate("author", "firstName lastName isDeleted")
+				.sort({ createdAt: -1 });
+
+			if (!posts) {
+				res.status(404).json({ message: "No posts found" });
+				return;
+			}
+
+			res.status(200).json({ posts, meta: { total: postsCount } });
+		} catch (error) {
+			console.error(error);
+			res.status(500).json({ message: error.message });
+		}
+	}),
+];
