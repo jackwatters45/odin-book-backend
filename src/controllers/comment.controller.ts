@@ -468,7 +468,7 @@ export const reactToComment = [
 ];
 
 // @desc    Unreact to comment
-// @route   POST posts/:post/comments/:id/unreact
+// @route   DELETE posts/:post/comments/:id/unreact
 // @access  Private
 export const unreactToComment = [
 	passport.authenticate("jwt", { session: false }),

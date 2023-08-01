@@ -21,17 +21,13 @@ import {
 } from "../tools/populateDbs/users/populateUsers";
 import Reaction, { reactionTypes } from "../src/models/reaction.model";
 import { getRandValueFromArray } from "../tools/populateDbs/utils/populateHelperFunctions";
+import IRequestWithUser from "../types/IRequestWithUser";
 
 // Initialize Debug Log
 const log = debug("log:post:test");
 
 // Initialize Express App
 const app = express();
-
-// Passport Request Interface Extension
-interface IRequestWithUser extends Request {
-	user?: IUser;
-}
 
 // Mock Passport Authentication
 let userUndefined = false;

@@ -1,4 +1,4 @@
-import express, { NextFunction, Request, Response } from "express";
+import express, { NextFunction, Response } from "express";
 import request from "supertest";
 import { ObjectId } from "mongodb";
 import { Schema } from "mongoose";
@@ -21,20 +21,15 @@ import {
 } from "../tools/populateDbs/posts/populatePosts";
 import { apiPath } from "../src/config/envVariables";
 import { addRepliesToComment } from "../tools/populateDbs/posts/utils/addRepliesToComment";
+import IRequestWithUser from "../types/IRequestWithUser";
 
 const log = debug("log:comment:test");
 
 const app = express();
 
-// Passport Request Interface Extension
-interface IRequestWithUser extends Request {
-	user?: IUser;
-}
-
 // Mock Passport Authentication
 let userUndefined = false;
 let randomUser = false;
-// let adminUser = false;
 
 jest.mock("passport", () => ({
 	authenticate: jest.fn((strategy, options) => {
@@ -843,7 +838,7 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 
 	it("should return 201 and a comment", async () => {
 		log(post.comments[0]);
-		const res = await request(app).post(
+		const res = await request(app).delete(
 			`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`,
 		);
 
@@ -865,7 +860,7 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 
 	it("should return 401 if no user is logged in", async () => {
 		userUndefined = true;
-		const res = await request(app).post(
+		const res = await request(app).delete(
 			`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`,
 		);
 
@@ -880,7 +875,7 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	});
 
 	it("should return 404 if post does not exist", async () => {
-		const res = await request(app).post(
+		const res = await request(app).delete(
 			`${apiPath}/posts/${new ObjectId()}/comments/${comment._id}/unreact`,
 		);
 
@@ -893,7 +888,7 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	});
 
 	it("should return 404 if comment does not exist", async () => {
-		const res = await request(app).post(
+		const res = await request(app).delete(
 			`${apiPath}/posts/${post._id}/comments/${new ObjectId()}/unreact`,
 		);
 
@@ -908,7 +903,7 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	it("should return 404 if reaction does not exist", async () => {
 		randomUser = true;
 
-		const res = await request(app).post(
+		const res = await request(app).delete(
 			`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`,
 		);
 
@@ -927,7 +922,7 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 			throw new Error("error");
 		});
 
-		const res = await request(app).post(
+		const res = await request(app).delete(
 			`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`,
 		);
 

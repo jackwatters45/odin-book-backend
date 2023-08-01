@@ -38,6 +38,6 @@ router.post("/:id/reply", createCommentReply);
 router.post("/:id/react", reactToComment);
 
 // posts/:post/comments/:id/unreact
-router.post("/:id/unreact", unreactToComment);
+router.delete("/:id/unreact", unreactToComment);
 
 export default router;
