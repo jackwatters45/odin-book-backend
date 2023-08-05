@@ -75,6 +75,10 @@ export interface IUser
 	comparePassword: (password: string) => Promise<boolean>;
 }
 
+export interface IUserWithId extends IUser {
+	_id: ObjectId;
+}
+
 const UserSchema = new Schema<IUser>(
 	{
 		firstName: { type: String, required: true, trim: true, maxlength: 25 },

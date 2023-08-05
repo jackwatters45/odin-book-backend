@@ -8,7 +8,8 @@ import User, { IUser } from "../models/user-model/user.model";
 import Post from "../models/post.model";
 import Comment from "../models/comment.model";
 
-const log = debug("server:user:controller");
+const log = debug("log:user:controller");
+const errorLog = debug("error:user:controller");
 
 // @desc    Get all users
 // @route   GET /users
@@ -16,18 +17,15 @@ const log = debug("server:user:controller");
 export const getUsers = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		try {
-			const usersQuery = User.find({ isDeleted: false }, { password: 0 });
+			const usersTotal = await User.countDocuments({ isDeleted: false });
+			const users = await User.find({ isDeleted: false }, { password: 0 })
+				.limit(req.query.limit ? parseInt(req.query.limit as string) : 0)
+				.skip(req.query.offset ? parseInt(req.query.offset as string) : 0)
+				.sort({ createdAt: -1 });
 
-			if (req.query.limit) {
-				const limit = parseInt(req.query.limit as string);
-				usersQuery.limit(limit);
-			}
-
-			const users = await usersQuery.exec();
-
-			res.status(200).json(users);
+			res.status(200).json({ users, meta: { total: usersTotal } });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -55,7 +53,7 @@ export const getUserById = expressAsyncHandler(
 
 			res.status(200).json({ user, posts, comments });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -99,7 +97,7 @@ export const getDeletedUserById = [
 
 			res.status(200).json({ user, posts, comments });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -202,7 +200,7 @@ export const createUser = [
 
 			res.status(201).json({ message: "User created successfully", user });
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res.status(500).json({ message: err.message });
 		}
 	}),
@@ -265,6 +263,7 @@ export const updateUserPassword = [
 
 			res.status(201).json({ message: "Password updated successfully" });
 		} catch (error) {
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -347,7 +346,7 @@ export const updateUserBasicInfo = [
 				.status(201)
 				.json({ updatedUser, message: "User updated successfully" });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -371,24 +370,18 @@ export const getUserPosts = expressAsyncHandler(
 			}
 
 			const postCount = await Post.countDocuments({ author: req.params.id });
-			const postsQuery = Post.find({ author: req.params.id });
+			const posts = await Post.find({ author: req.params.id })
+				.skip(req.query.offset ? parseInt(req.query.offset as string) : 0)
+				.limit(req.query.limit ? parseInt(req.query.limit as string) : 0)
+				.sort({ createdAt: -1 });
 
-			if (req.query.offset) {
-				const offset = parseInt(req.query.offset as string);
-				postsQuery.skip(offset);
-			}
-			if (req.query.limit) {
-				const limit = parseInt(req.query.limit as string);
-				postsQuery.limit(limit);
-			}
-
-			const posts = await postsQuery.exec();
 			res.status(200).json({
 				posts,
 				message: "Posts retrieved successfully",
 				meta: { total: postCount },
 			});
 		} catch (error) {
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -419,7 +412,7 @@ export const getUserFriends = expressAsyncHandler(
 				message: "Friends retrieved successfully",
 			});
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -431,10 +424,23 @@ export const getUserFriends = expressAsyncHandler(
 export const getUserSavedPosts = [
 	passport.authenticate("jwt", { session: false }),
 	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "User not logged in" });
+			return;
+		}
+
 		const userId = String(req.params.id);
+		if (userId !== user.id && user.userType !== "admin") {
+			res.status(403).json({ message: "Unauthorized" });
+			return;
+		}
 
 		try {
-			const userSavedPosts = await User.findById(userId)
+			const userSavedPosts = await User.findOne({
+				_id: userId,
+				isDeleted: false,
+			})
 				.populate({
 					path: "savedPosts",
 					populate: [
@@ -442,34 +448,36 @@ export const getUserSavedPosts = [
 							path: "author",
 							select: "firstName lastName isDeleted",
 						},
-						{
-							path: "topic",
-							select: "name",
-						},
 					],
 				})
 				.select("savedPosts isDeleted")
-				.exec();
+				.sort({ createdAt: -1 });
 
 			if (!userSavedPosts) {
 				res.status(404).json({ message: "User not found" });
 				return;
 			}
 
-			if (userSavedPosts.isDeleted) {
-				res.status(404).json({ message: "User has been deleted" });
-				return;
-			}
-
 			const savedPostsCount = userSavedPosts.savedPosts.length;
+			const offset = req.query.offset
+				? parseInt(req.query.offset as string)
+				: 0;
+			const limit = req.query.limit
+				? parseInt(req.query.limit as string)
+				: userSavedPosts.savedPosts.length;
+
+			const savedPostsWithLimitOffset = userSavedPosts.savedPosts.slice(
+				offset,
+				offset + limit,
+			);
 
 			res.status(200).json({
 				message: "Saved posts retrieved successfully",
-				savedPosts: userSavedPosts?.savedPosts,
+				savedPosts: savedPostsWithLimitOffset,
 				meta: { total: savedPostsCount },
 			});
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -482,7 +490,6 @@ export const sendFriendRequest = [
 	passport.authenticate("jwt", { session: false }),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
-
 		if (!reqUser) {
 			res
 				.status(401)
@@ -528,31 +535,24 @@ export const sendFriendRequest = [
 
 			res.status(200).json({ message: "Friend request sent successfully" });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
 ];
 
 // @desc    Remove friend
-// @route   DELETE /users/:id/friends/:friendId
+// @route   DELETE /users/me/friends/:friendId
 // @access  Private
 export const unfriendUser = [
 	passport.authenticate("jwt", { session: false }),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
-		const userId = String(req.params.id);
 		const userToUnfriendId = String(req.params.friendId);
-
 		if (!reqUser) {
 			res
 				.status(401)
 				.json({ message: "You must be logged in to perform this action" });
-			return;
-		}
-
-		if (String(reqUser._id) !== userId) {
-			res.status(401).json({ message: "You cannot perform this action" });
 			return;
 		}
 
@@ -563,6 +563,7 @@ export const unfriendUser = [
 
 		try {
 			const userToRemove = await User.findById(userToUnfriendId);
+
 			if (!userToRemove || userToRemove.isDeleted) {
 				res.status(404).json({ message: "User not found" });
 				return;
@@ -570,7 +571,7 @@ export const unfriendUser = [
 
 			const userAlreadyRemoved = !userToRemove.friends.includes(reqUser._id);
 			if (userAlreadyRemoved) {
-				res.status(400).json({ message: "User already removed" });
+				res.status(400).json({ message: "Already not friends with user" });
 				return;
 			}
 
@@ -579,29 +580,29 @@ export const unfriendUser = [
 
 			userToRemove.friends.splice(userToRemoveIndex, 1);
 
-			reqUser.friends.splice(reqUserIndex, 1);
+			const updatedFriendsList = reqUser.friends.splice(reqUserIndex, 1);
 
 			await userToRemove.save();
 			await reqUser.save();
 
-			res.status(200).json({ message: "Friend removed successfully" });
+			res.status(200).json({
+				message: "Friend removed successfully",
+				updatedFriendsList,
+			});
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
 ];
 
 // @desc    Accept friend request
-// @route   POST /users/:id/friend-requests/:requestId/accept
+// @route   POST /users/me/friend-requests/:requestId/accept
 // @access  Private
 export const acceptFriendRequest = [
 	passport.authenticate("jwt", { session: false }),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
-		const userId = String(req.params.id);
-		const requestId = String(req.params.requestId);
-
 		if (!reqUser) {
 			res
 				.status(401)
@@ -609,11 +610,7 @@ export const acceptFriendRequest = [
 			return;
 		}
 
-		if (String(reqUser._id) !== userId) {
-			res.status(401).json({ message: "You cannot perform this action" });
-			return;
-		}
-
+		const requestId = String(req.params.requestId);
 		try {
 			const userToAccept = await User.findById(requestId);
 			if (!userToAccept || userToAccept.isDeleted) {
@@ -621,44 +618,67 @@ export const acceptFriendRequest = [
 				return;
 			}
 
+			const userAlreadyFriended =
+				userToAccept.friends.includes(reqUser._id) ||
+				reqUser.friends.includes(userToAccept._id);
+			if (userAlreadyFriended) {
+				res.status(400).json({ message: "Already friends with user" });
+				return;
+			}
+
 			const userToAcceptRequestIndex =
-				userToAccept.friendRequestsReceived.findIndex(
-					(request) => String(request) === requestId,
+				userToAccept.friendRequestsSent.findIndex(
+					(request) => String(request) === reqUser.id,
 				);
-			const reqUserRequestIndex = reqUser.friendRequestsSent.findIndex(
+
+			const reqUserRequestIndex = reqUser.friendRequestsReceived.findIndex(
 				(request) => String(request) === requestId,
 			);
+
 			if (userToAcceptRequestIndex === -1 || reqUserRequestIndex === -1) {
 				res.status(404).json({ message: "Friend request not found" });
 				return;
 			}
 
-			await User.findByIdAndUpdate(reqUser._id, {
-				$pull: { friendRequestsSent: requestId },
-				$addToSet: { friends: userToAccept._id },
-			});
+			const updatedUser = (await User.findByIdAndUpdate(
+				reqUser._id,
+				{
+					$pull: { friendRequestsReceived: requestId },
+					$addToSet: { friends: userToAccept._id },
+				},
+				{ new: true },
+			).select("friends friendRequestsReceived")) as IUser;
 
-			await User.findByIdAndUpdate(userToAccept._id, {
-				$pull: { friendRequestsReceived: requestId },
-				$addToSet: { friends: reqUser._id },
-			});
+			const updatedOtherUser = (await User.findByIdAndUpdate(
+				userToAccept._id,
+				{
+					$pull: { friendRequestsSent: reqUser._id },
+					$addToSet: { friends: reqUser._id },
+				},
+				{ new: true },
+			).select("friends friendRequestsSent")) as IUser;
 
-			res.status(200).json({ message: "Friend request accepted successfully" });
+			res.status(200).json({
+				message: "Friend request accepted successfully",
+				myUpdatedFriendsList: updatedUser.friends,
+				myUpdatedFriendRequestsReceived: updatedUser.friendRequestsReceived,
+				otherUserUpdatedFriendsList: updatedOtherUser.friends,
+				otherUserUpdatedFriendRequestsSent: updatedOtherUser.friendRequestsSent,
+			});
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
 ];
 
 // @desc    Reject friend request
-// @route   POST /users/:id/friend-requests/:requestId/reject
+// @route   POST /users/me/friend-requests/:requestId/reject
 // @access  Private
 export const rejectFriendRequest = [
 	passport.authenticate("jwt", { session: false }),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
-		const userId = String(req.params.id);
 		const requestId = String(req.params.requestId);
 
 		if (!reqUser) {
@@ -668,23 +688,26 @@ export const rejectFriendRequest = [
 			return;
 		}
 
-		if (String(reqUser._id) !== userId) {
-			res.status(401).json({ message: "You cannot perform this action" });
-			return;
-		}
-
 		try {
-			const userToReject = await User.findById(requestId);
+			const userToReject = await User.findById(requestId, { password: 0 });
 			if (!userToReject || userToReject.isDeleted) {
 				res.status(404).json({ message: "User not found" });
 				return;
 			}
 
+			const userAlreadyFriended =
+				userToReject.friends.includes(reqUser._id) ||
+				reqUser.friends.includes(userToReject._id);
+			if (userAlreadyFriended) {
+				res.status(400).json({ message: "Already friends with user" });
+				return;
+			}
+
 			const userToRejectRequestIndex =
-				userToReject.friendRequestsReceived.findIndex(
-					(request) => String(request) === requestId,
+				userToReject.friendRequestsSent.findIndex(
+					(request) => String(request) === reqUser.id,
 				);
-			const reqUserRequestIndex = reqUser.friendRequestsSent.findIndex(
+			const reqUserRequestIndex = reqUser.friendRequestsReceived.findIndex(
 				(request) => String(request) === requestId,
 			);
 			if (userToRejectRequestIndex === -1 || reqUserRequestIndex === -1) {
@@ -692,16 +715,30 @@ export const rejectFriendRequest = [
 				return;
 			}
 
-			await User.findByIdAndUpdate(reqUser._id, {
-				$pull: { friendRequestsSent: requestId },
-			});
-			await User.findByIdAndUpdate(userToReject._id, {
-				$pull: { friendRequestsReceived: requestId },
-			});
+			const myUpdatedFriendRequestsReceived = await User.findByIdAndUpdate(
+				reqUser._id,
+				{
+					$pull: { friendRequestsReceived: requestId },
+				},
+				{ new: true },
+			).select("friendRequestsReceived");
+			const otherUserUpdatedFriendRequestsSent = await User.findByIdAndUpdate(
+				userToReject._id,
+				{
+					$pull: { friendRequestsSent: reqUser._id },
+				},
+				{ new: true },
+			).select("friendRequestsSent");
 
-			res.status(200).json({ message: "Friend request rejected successfully" });
+			res.status(200).json({
+				message: "Friend request rejected successfully",
+				myUpdatedFriendRequestsReceived,
+				myUpdatedFriendsList: reqUser.friends,
+				otherUserUpdatedFriendRequestsSent,
+				otherUserUpdatedFriendsList: userToReject.friends,
+			});
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),

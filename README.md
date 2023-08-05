@@ -2,12 +2,11 @@
 
 ## Next
 
-- properly use request for rest of tests..
-
-  - auth
-  - users
-
-- comment unreact -> delete instead of post
+- auth
+- remove logs
 
 - posts - file uploads
-- notifications (maybe)
+
+## once ready
+
+- notifications test + routes

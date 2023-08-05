@@ -30,10 +30,10 @@ router.get("/:id/deleted", getDeletedUserById);
 router.post("/", createUser);
 
 // /updateUserPassword/:id
-router.put("/updateUserPassword/:id", updateUserPassword);
+router.patch("/updateUser/:id/password", updateUserPassword);
 
 // /updateUser/:id/basic
-router.put("/updateUser/:id/basic", updateUserBasicInfo);
+router.patch("/updateUser/:id/basic", updateUserBasicInfo);
 
 // TODO -> getUserActivity?
 // /users/:id/posts
@@ -46,15 +46,15 @@ router.get("/:id/friends", getUserFriends);
 router.get("/:id/saved-posts", getUserSavedPosts);
 
 // @route   POST /users/:id/friend-requests
-router.post("/:id/friend-requests", sendFriendRequest);
+router.post("/me/friend-requests/:id", sendFriendRequest);
 
-// @route   DELETE /users/:id/friends/:friendId
-router.delete("/:id/friends/:friendId", unfriendUser);
+// @route   DELETE /users/me/friends/:friendId
+router.delete("/me/friends/:friendId", unfriendUser);
 
-// @route   POST /users/:id/friend-requests/:requestId/accept
-router.post("/:id/friend-requests/:requestId/accept", acceptFriendRequest);
+// @route   POST /users/me/friend-requests/:requestId/accept
+router.post("/me/friend-requests/:requestId/accept", acceptFriendRequest);
 
-// @route   POST /users/:id/friend-requests/:requestId/reject
-router.post("/:id/friend-requests/:requestId/reject", rejectFriendRequest);
+// @route   POST /users/me/friend-requests/:requestId/reject
+router.post("/me/friend-requests/:requestId/reject", rejectFriendRequest);
 
 export default router;

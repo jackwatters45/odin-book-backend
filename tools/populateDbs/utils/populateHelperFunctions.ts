@@ -1,29 +1,36 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { faker } from "@faker-js/faker";
 import debug from "debug";
+import { ObjectId } from "mongoose";
 
-const log = debug("log");
+const log = debug("log:populateHelperFunctions");
 
-export const getRandomInt = (max = 5) => {
-	return Math.floor(Math.random() * max);
-};
+export const getRandomInt = (max = 5) => Math.floor(Math.random() * max);
 
-export const getRandValueFromArray = (arr: any[]) => {
+export const getRandValueFromArray = <T>(arr: T[]) => {
 	return arr[getRandomInt(arr.length)];
 };
 
-export const getRandValueFromArrayObjs = (
-	arr: any[],
-	selectedValue = "_id",
+interface objectWithId {
+	_id: ObjectId;
+}
+
+export const getRandValueFromArrayOfObjs = <T extends objectWithId>(
+	arr: T[],
+	selectedValue?: keyof T,
 ) => {
-	const randElement = arr[getRandomInt(arr.length)];
-	if (!randElement) log(arr);
-	return selectedValue && selectedValue in randElement
-		? randElement[selectedValue]
-		: randElement;
+	const selectedItem = arr[getRandomInt(arr.length)];
+
+	if (!selectedValue) return selectedItem._id;
+
+	if (selectedValue in selectedItem) return selectedItem[selectedValue];
+	else {
+		throw new Error(
+			`Property ${String(selectedValue)} does not exist on selected item`,
+		);
+	}
 };
 
-export const getRandValuesFromArray = (arr: any[], max = 3) => {
+export const getRandValuesFromArray = <T>(arr: T[], max = 3) => {
 	const copyArr = [...arr];
 	for (let i = copyArr.length - 1; i > 0; i--) {
 		const j = Math.floor(Math.random() * (i + 1));
@@ -32,38 +39,25 @@ export const getRandValuesFromArray = (arr: any[], max = 3) => {
 	return copyArr.slice(0, max);
 };
 
-export const getRandValuesFromArrayObjs = (
-	arr: any[],
+export const getRandValuesFromArrayOfObjs = <T extends objectWithId>(
+	arr: T[],
 	max = 3,
-	selectedValue = "_id",
+	selectedValue?: keyof T,
 ) => {
 	const copyArr = [...arr];
 	for (let i = copyArr.length - 1; i > 0; i--) {
 		const j = Math.floor(Math.random() * (i + 1));
 		[copyArr[i], copyArr[j]] = [copyArr[j], copyArr[i]];
 	}
-	const selected = copyArr.slice(0, max);
-
-	if (selectedValue) {
-		return selected.map((item) => item[selectedValue]);
-	}
-
-	return selected;
-};
-
-export const getComments = (arr: any[], max = 3, post: string) => {
-	const users = getRandValuesFromArray(arr, max);
-	return users.map((user) => ({
-		author: user,
-		content: faker.lorem.sentence(),
-		post,
-		likes: getRandValuesFromArray(arr, 5),
-	}));
+	return copyArr.slice(0, max).map((item) => {
+		return selectedValue ? item[selectedValue] : item._id;
+	});
 };
 
 export const convertToSlug = (text: string) =>
 	text.replace(/\s+/g, "-").toLowerCase();
 
+//
 export const formatYears = (
 	yearsStartJob: number[],
 ): {

@@ -1,76 +1,117 @@
-import express, { Request, Response } from "express";
+import express, { NextFunction, Response } from "express";
 import request from "supertest";
 import { ObjectId } from "mongodb";
-import { Query } from "mongoose";
+import debug from "debug";
 
+import getNextIndexArray from "../src/utils/getNextIndexArray";
 import { disconnectFromDatabase, configDb } from "../src/config/database";
 import configOtherMiddleware from "../src/middleware/otherConfig";
 import configRoutes from "../src/routes";
 import User, { IUser } from "../src/models/user-model/user.model";
-import Post, { IPost } from "../src/models/post.model";
+import { IPost } from "../src/models/post.model";
 import {
 	createRandomUser,
-	createUsers,
+	createUser,
 } from "../tools/populateDbs/users/populateUsers";
 import { apiPath } from "../src/config/envVariables";
 import { createPosts } from "../tools/populateDbs/posts/populatePosts";
-import {
-	acceptFriendRequest,
-	createUser,
-	getDeletedUserById,
-	getUserSavedPosts,
-	rejectFriendRequest,
-	sendFriendRequest,
-	unfriendUser,
-	updateUserBasicInfo,
-	updateUserPassword,
-} from "../src/controllers/user.controller";
+
 import generateUser, { TestUser } from "./utils/generateUser";
 import {
 	generateInvalidPassword,
 	generatePassword,
 } from "./utils/generatePassword";
+import IRequestWithUser from "../types/IRequestWithUser";
+import createUsersAndSavedPosts from "../tools/populateDbs/createUsersAndPosts";
+import { addSavedPostsToUser } from "../tools/populateDbs/posts/utils/addSavedPosts";
+import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
+import getPostIdsFromPosts from "./utils/getPostIdsFromPosts";
+
+const log = debug("log:user:test");
 
 const app = express();
 
-let users: IUser[] = [];
-let posts: IPost[] = [];
+const users: IUser[] = [];
+const posts: IPost[] = [];
+
+let randomUser: IUser;
+let adminUser: IUser;
+let standardUser: IUser;
 let deletedUser: IUser;
-const numUsers = 7;
+const numUsers = 6;
 
 beforeAll(async () => {
 	await configDb();
+	await clearDatabase();
 
-	await User.deleteMany({});
-	await Post.deleteMany({});
-	users = (await createUsers(numUsers)) as IUser[];
+	const usersAndPosts = await createUsersAndSavedPosts(numUsers - 2);
+	posts.push(...usersAndPosts.posts);
+	const postIds = getPostIdsFromPosts(posts);
+	users.push(...usersAndPosts.users);
+
 	deletedUser = (await createRandomUser({ isDeleted: true })) as IUser;
-	posts = await createPosts(numUsers + 1);
+	randomUser = (await createUser(users, postIds, {
+		userType: "user",
+		posts,
+		noFriends: true,
+	})) as IUser;
+	users.push(randomUser);
+	adminUser = (await createUser(users, postIds, {
+		userType: "admin",
+		posts,
+	})) as IUser;
+	users.push(adminUser);
+	standardUser = (await User.findById(posts[0].author)) as IUser;
+
+	users.sort((a, b) => {
+		if (!a.createdAt || !b.createdAt) return 0;
+		return b.createdAt.getTime() - a.createdAt.getTime();
+	});
 
 	configOtherMiddleware(app);
 	configRoutes(app);
-}, 20000);
+}, 50000);
+
+// Mock Passport Authentication
+let isUserUndefined = false;
+let isRandomUser = false;
+let isAdminUser = true;
+
+jest.mock("passport", () => ({
+	authenticate: jest.fn((strategy, options) => {
+		return async (req: IRequestWithUser, res: Response, next: NextFunction) => {
+			if (isUserUndefined) req.user = undefined;
+			else if (isRandomUser) req.user = randomUser;
+			else if (isAdminUser) req.user = adminUser;
+			else req.user = standardUser;
+			next();
+		};
+	}),
+}));
 
 describe("GET /users", () => {
 	it("should return an array of users", async () => {
 		const res = await request(app).get(`${apiPath}/users`);
 
 		expect(res.statusCode).toEqual(200);
-		expect(res.body).toHaveLength(numUsers);
+		expect(res.body.meta.total).toEqual(numUsers);
+		expect(res.body.users.length).toEqual(numUsers);
 
-		expect(res.body[0].id).toEqual(users[0].id);
-		expect(res.body[1].id).toEqual(users[1].id);
-		expect(res.body[2].id).toEqual(users[2].id);
+		expect(res.body.users[0].id).toEqual(users[0].id);
+		expect(res.body.users[numUsers - 1].id).toEqual(users[numUsers - 1].id);
 	});
 
-	it("should limit the number of users returned when limit query param is provided", async () => {
-		const res = await request(app).get(`${apiPath}/users`).query({ limit: 2 });
+	it("should limit + offset the number of users returned when limit and offset query param is provided", async () => {
+		const res = await request(app)
+			.get(`${apiPath}/users`)
+			.query({ limit: 2, offset: 1 });
 
 		expect(res.statusCode).toEqual(200);
-		expect(res.body).toHaveLength(2);
+		expect(res.body.users.length).toEqual(2);
+		expect(res.body.meta.total).toEqual(numUsers);
 
-		expect(res.body[0].id).toEqual(users[0].id);
-		expect(res.body[1].id).toEqual(users[1].id);
+		expect(res.body.users[0].id).toEqual(users[1].id);
+		expect(res.body.users[1].id).toEqual(users[2].id);
 	});
 
 	it("should return a 500 error if the database query fails", async () => {
@@ -80,6 +121,7 @@ describe("GET /users", () => {
 
 		const res = await request(app).get(`${apiPath}/users`);
 
+		expect(User.find).toHaveBeenCalled();
 		expect(res.statusCode).toEqual(500);
 		expect(res.body.message).toEqual("Database error");
 	});
@@ -128,30 +170,13 @@ describe("GET /users/:id", () => {
 });
 
 describe("GET /users/:id/deleted", () => {
-	const adminUser = { userType: "admin" };
-
-	let req: Request;
-	let res: Response;
-	const next = jest.fn();
-
-	beforeEach(() => {
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-		req = {
-			user: adminUser,
-			params: {
-				id: deletedUser.id,
-			},
-		} as unknown as Request;
-	});
-
 	it("should return the user details and posts by the given user id", async () => {
-		await getDeletedUserById[1](req, res, next);
+		const res = await request(app).get(
+			`${apiPath}/users/${deletedUser.id}/deleted`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual({
 			user: expect.objectContaining({
 				id: deletedUser.id,
 				isDeleted: true,
@@ -160,41 +185,42 @@ describe("GET /users/:id/deleted", () => {
 			comments: expect.any(Array),
 		});
 
-		const responseJson = (res.json as jest.Mock).mock.calls[0][0];
-		if (responseJson.posts.length > 0)
-			expect(responseJson.posts[0].author.toString()).toEqual(
-				responseJson.user.id,
-			);
+		if (res.body.posts.length > 0)
+			expect(res.body.posts[0].author.toString()).toEqual(res.body.user.id);
 
-		if (responseJson.comments.length > 0)
-			expect(responseJson.comments[0].author.toString()).toEqual(
-				responseJson.user.id,
-			);
+		if (res.body.comments.length > 0)
+			expect(res.body.comments[0].author.toString()).toEqual(res.body.user.id);
 	});
 
 	it("should return a 403 error if the user is not an admin", async () => {
-		req = { ...req, user: { userType: "user" } } as unknown as Request;
+		isAdminUser = false;
 
-		await getDeletedUserById[1](req, res, next);
+		const res = await request(app).get(
+			`${apiPath}/users/${deletedUser.id}/deleted`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(403);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.status).toBe(403);
+		expect(res.body).toEqual({
 			message: "Unauthorized",
 		});
+		expect(res.body.posts).not.toBeDefined();
+
+		isAdminUser = true;
 	});
 
 	it("should return a 401 error if the user is not logged in", async () => {
-		req = {
-			...req,
-			user: null,
-		} as unknown as Request;
+		isUserUndefined = true;
 
-		await getDeletedUserById[1](req, res, next);
+		const res = await request(app).get(
+			`${apiPath}/users/${deletedUser.id}/deleted`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.status).toBe(401);
+		expect(res.body).toEqual({
 			message: "User not logged in",
 		});
+
+		isUserUndefined = false;
 	});
 
 	it("should return a 500 error if the database query fails", async () => {
@@ -202,10 +228,12 @@ describe("GET /users/:id/deleted", () => {
 			throw new Error("Database error");
 		});
 
-		await getDeletedUserById[1](req, res, next);
+		const res = await request(app).get(
+			`${apiPath}/users/${deletedUser.id}/deleted`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.status).toBe(500);
+		expect(res.body).toEqual({
 			message: "Database error",
 		});
 	});
@@ -214,36 +242,22 @@ describe("GET /users/:id/deleted", () => {
 describe("POST /createUser", () => {
 	let existingUser: TestUser;
 
-	let req: Request;
-	let res: Response;
-	const next = jest.fn();
-
-	beforeEach(async () => {
-		req = {
-			body: generateUser(),
-			user: { userType: "admin" },
-		} as unknown as Request;
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-	});
+	beforeAll(() => (existingUser = generateUser()));
 
 	it("should create a new user", async () => {
-		existingUser = req.body;
-		for (let i = 1; i < createUser.length; i++) {
-			await createUser[i](req, res, next);
-		}
+		const res = await request(app)
+			.post(`${apiPath}/users`)
+			.send({ ...existingUser });
 
-		expect(res.status).toHaveBeenCalledWith(201);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(201);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User created successfully",
 				user: expect.objectContaining({
-					_id: expect.any(ObjectId),
+					_id: expect.any(String),
 					firstName: existingUser.firstName,
 					lastName: existingUser.lastName,
-					birthday: new Date(existingUser.birthday),
+					birthday: existingUser.birthday,
 					pronouns: existingUser.pronouns,
 				}),
 			}),
@@ -251,88 +265,100 @@ describe("POST /createUser", () => {
 	});
 
 	it("should fail when the user already exists", async () => {
-		req.body = existingUser;
-		for (let i = 1; i < createUser.length; i++) {
-			await createUser[i](req, res, next);
-		}
+		const res = await request(app)
+			.post(`${apiPath}/users`)
+			.send({ ...existingUser });
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual({
 			message: "User with this email/phone already exists",
 		});
 	});
 
 	it("should fail when password is not min 8 chars and does not contain an uppercase, lowercase, number, special character ", async () => {
-		req.body = { ...req.body, password: generateInvalidPassword() };
-		for (let i = 1; i < createUser.length; i++) {
-			await createUser[i](req, res, next);
-		}
+		const res = await request(app)
+			.post(`${apiPath}/users`)
+			.send({ ...generateUser(), password: generateInvalidPassword() });
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
 			expect.objectContaining({
-				errors: expect.any(Array),
+				errors: expect.arrayContaining([
+					expect.objectContaining({
+						msg: expect.stringContaining(
+							"Password must contain at least one uppercase letter, one lowercase letter, one special character, one number, and be at least 8 characters long",
+						),
+					}),
+				]),
 			}),
 		);
 	});
 
 	it("should fail when required fields are not provided", async () => {
-		req.body = { ...req.body, firstName: undefined };
-		for (let i = 1; i < createUser.length; i++) {
-			await createUser[i](req, res, next);
-		}
+		const res = await request(app)
+			.post(`${apiPath}/users`)
+			.send({ ...generateUser(), firstName: undefined });
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
 			expect.objectContaining({
-				errors: expect.any(Array),
+				errors: expect.arrayContaining([
+					expect.objectContaining({
+						msg: expect.stringContaining("First name is required"),
+					}),
+				]),
 			}),
 		);
 	});
 
 	it("should not fail when no pronouns provided", async () => {
-		req.body = { ...req.body, pronouns: undefined };
+		const newUser = generateUser();
+		const res = await request(app)
+			.post(`${apiPath}/users`)
+			.send({ ...newUser, pronouns: undefined });
 
-		for (let i = 1; i < createUser.length; i++) {
-			await createUser[i](req, res, next);
-		}
-
-		expect(res.status).toHaveBeenCalledWith(201);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(201);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User created successfully",
 				user: expect.objectContaining({
-					_id: expect.any(ObjectId),
-					firstName: req.body.firstName,
-					lastName: req.body.lastName,
-					birthday: new Date(req.body.birthday),
+					_id: expect.any(String),
+					firstName: newUser.firstName,
+					lastName: newUser.lastName,
+					birthday: newUser.birthday,
 				}),
 			}),
 		);
 	});
 
 	it("should fail when no user is provided", async () => {
-		req.user = undefined;
-		for (let i = 1; i < createUser.length; i++) {
-			await createUser[i](req, res, next);
-		}
+		isUserUndefined = true;
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
+		const res = await request(app)
+			.post(`${apiPath}/users`)
+			.send({ ...existingUser });
+
+		expect(res.status).toBe(401);
+		expect(res.body).toEqual({
 			message: "User not logged in",
 		});
+
+		isUserUndefined = false;
 	});
 
 	it("should fail when user is not an admin", async () => {
-		req.user = { userType: "user" };
-		for (let i = 1; i < createUser.length; i++) {
-			await createUser[i](req, res, next);
-		}
+		isAdminUser = false;
 
-		expect(res.status).toHaveBeenCalledWith(403);
-		expect(res.json).toHaveBeenCalledWith({
+		const res = await request(app)
+			.post(`${apiPath}/users`)
+			.send({ ...existingUser });
+
+		expect(res.status).toBe(403);
+		expect(res.body).toEqual({
 			message: "Unauthorized",
 		});
+
+		isAdminUser = true;
 	});
 
 	it("should fail when database query fails", async () => {
@@ -340,105 +366,106 @@ describe("POST /createUser", () => {
 			throw new Error("Database error");
 		});
 
-		for (let i = 1; i < createUser.length; i++) {
-			await createUser[i](req, res, next);
-		}
+		const res = await request(app)
+			.post(`${apiPath}/users`)
+			.send({ ...existingUser });
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.status).toBe(500);
+		expect(res.body).toEqual({
 			message: "Database error",
 		});
 	});
 });
 
-describe("PUT /updateUserPassword/:id", () => {
+describe("PATCH /updateUserPassword/:id", () => {
 	let userNum = 0;
-	let req: Request;
-	let res: Response;
-	const next = jest.fn();
+	let user: IUser;
+	let validPassword: string;
 
 	beforeEach(async () => {
-		const user = users[userNum];
-		const password = generatePassword();
-		req = {
-			params: { id: user._id },
-			body: {
-				newPassword: password,
-				confirmPassword: password,
-			},
-			user: { userType: "admin" },
-		} as unknown as Request;
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-
-		userNum++;
+		user = users[userNum];
+		validPassword = generatePassword();
+		userNum = getNextIndexArray(userNum, users.length);
 	});
 
 	it("should update the user password", async () => {
-		for (let i = 1; i < updateUserPassword.length; i++) {
-			await updateUserPassword[i](req, res, next);
-		}
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${user.id}/password`)
+			.send({ newPassword: validPassword, confirmPassword: validPassword });
 
-		expect(res.status).toHaveBeenCalledWith(201);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.status).toBe(201);
+		expect(res.body).toEqual({
 			message: "Password updated successfully",
 		});
 	});
 
 	it("should fail when passwords do not match", async () => {
-		req.body = { ...req.body, confirmPassword: generatePassword() };
-		for (let i = 1; i < updateUserPassword.length; i++) {
-			await updateUserPassword[i](req, res, next);
-		}
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${user.id}/password`)
+			.send({
+				newPassword: validPassword,
+				confirmPassword: generatePassword(),
+			});
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith(
-			expect.objectContaining({ errors: expect.any(Array) }),
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
+			expect.objectContaining({
+				errors: expect.arrayContaining([
+					expect.objectContaining({
+						msg: expect.stringContaining("Passwords do not match"),
+					}),
+				]),
+			}),
 		);
 	});
 
 	it("should fail when new password does not meet requirements", async () => {
-		req.body = { ...req.body, newPassword: generateInvalidPassword() };
-		for (let i = 1; i < updateUserPassword.length; i++) {
-			await updateUserPassword[i](req, res, next);
-		}
+		const invalidPassword = generateInvalidPassword();
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${user.id}/password`)
+			.send({ newPassword: invalidPassword, confirmPassword: invalidPassword });
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
 			expect.objectContaining({ errors: expect.any(Array) }),
 		);
 	});
 
 	it("should fail when user is not found", async () => {
-		req.params = { id: new ObjectId().toString() };
-		for (let i = 1; i < updateUserPassword.length; i++) {
-			await updateUserPassword[i](req, res, next);
-		}
+		const res = await request(app)
+			.patch(
+				`${apiPath}/users/updateUser/${new ObjectId().toString()}/password`,
+			)
+			.send({ newPassword: validPassword, confirmPassword: validPassword });
 
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith({ message: "User not found" });
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual({ message: "User not found" });
 	});
 
 	it("should fail when user is not logged in", async () => {
-		req.user = undefined;
-		for (let i = 1; i < updateUserPassword.length; i++) {
-			await updateUserPassword[i](req, res, next);
-		}
+		isUserUndefined = true;
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({ message: "User not logged in" });
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${user.id}/password`)
+			.send({ newPassword: validPassword, confirmPassword: validPassword });
+
+		expect(res.status).toBe(401);
+		expect(res.body).toEqual({ message: "User not logged in" });
+
+		isUserUndefined = false;
 	});
 
 	it("should fail when user is not an admin", async () => {
-		req.user = { userType: "user" };
-		for (let i = 1; i < updateUserPassword.length; i++) {
-			await updateUserPassword[i](req, res, next);
-		}
+		isAdminUser = false;
 
-		expect(res.status).toHaveBeenCalledWith(403);
-		expect(res.json).toHaveBeenCalledWith({ message: "Unauthorized" });
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${user.id}/password`)
+			.send({ newPassword: validPassword, confirmPassword: validPassword });
+
+		expect(res.status).toBe(403);
+		expect(res.body).toEqual({ message: "Unauthorized" });
+
+		isAdminUser = true;
 	});
 
 	it("should fail when database query fails", async () => {
@@ -446,51 +473,38 @@ describe("PUT /updateUserPassword/:id", () => {
 			throw new Error("Database error");
 		});
 
-		for (let i = 1; i < updateUserPassword.length; i++) {
-			await updateUserPassword[i](req, res, next);
-		}
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${user.id}/password`)
+			.send({ newPassword: validPassword, confirmPassword: validPassword });
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith({ message: "Database error" });
+		expect(res.status).toBe(500);
+		expect(res.body).toEqual({ message: "Database error" });
 	});
 });
 
-describe("PUT /updateUser/:id/basic", () => {
-	let userNum = 0;
-	let req: Request;
-	let res: Response;
-	const next = jest.fn();
+describe("PATCH /updateUser/:id/basic", () => {
+	let userData: Partial<IUser>;
 
-	beforeEach(async () => {
-		const user = users[userNum];
-		req = {
-			params: { id: user._id },
-			body: {
-				firstName: user.firstName,
-				lastName: user.lastName,
-				email: user.email,
-				phoneNumber: user.phoneNumber,
-				birthday: user.birthday,
-				pronouns: user.pronouns,
-				userType: user.userType,
-			},
-			user: { userType: "admin", _id: undefined },
-		} as unknown as Request;
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-
-		userNum++;
+	beforeAll(() => {
+		const user = standardUser;
+		userData = {
+			firstName: user.firstName,
+			lastName: user.lastName,
+			email: user.email,
+			phoneNumber: user.phoneNumber,
+			birthday: user.birthday,
+			pronouns: user.pronouns,
+			userType: user.userType,
+		};
 	});
 
 	it("should update the user", async () => {
-		for (let i = 1; i < updateUserBasicInfo.length; i++) {
-			await updateUserBasicInfo[i](req, res, next);
-		}
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/basic`)
+			.send({ ...userData, firstName: "New First Name" });
 
-		expect(res.status).toHaveBeenCalledWith(201);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(201);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User updated successfully",
 				updatedUser: expect.any(Object),
@@ -499,13 +513,12 @@ describe("PUT /updateUser/:id/basic", () => {
 	});
 
 	it("should fail when required fields are not provided", async () => {
-		req.body = { ...req.body, firstName: undefined };
-		for (let i = 1; i < updateUserBasicInfo.length; i++) {
-			await updateUserBasicInfo[i](req, res, next);
-		}
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/basic`)
+			.send({ ...userData, firstName: undefined });
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				errors: expect.any(Array),
 			}),
@@ -513,48 +526,56 @@ describe("PUT /updateUser/:id/basic", () => {
 	});
 
 	it("should fail when user is not found", async () => {
-		req.params = { id: new ObjectId().toString() };
-		for (let i = 1; i < updateUserBasicInfo.length; i++) {
-			await updateUserBasicInfo[i](req, res, next);
-		}
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${new ObjectId().toString()}/basic`)
+			.send({ ...userData, firstName: "New First Name" });
 
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith({ message: "User not found" });
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual({ message: "User not found" });
 	});
 
 	it("should fail when user is not logged in", async () => {
-		req.user = undefined;
-		for (let i = 1; i < updateUserBasicInfo.length; i++) {
-			await updateUserBasicInfo[i](req, res, next);
-		}
+		isUserUndefined = true;
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({ message: "No user logged in" });
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/basic`)
+			.send({ ...userData, firstName: "New First Name" });
+
+		expect(res.status).toBe(401);
+		expect(res.body).toEqual({ message: "No user logged in" });
+
+		isUserUndefined = false;
 	});
 
 	it("should fail when user is not an admin", async () => {
-		req.user = { userType: "user" };
-		for (let i = 1; i < updateUserBasicInfo.length; i++) {
-			await updateUserBasicInfo[i](req, res, next);
-		}
+		isRandomUser = true;
 
-		expect(res.status).toHaveBeenCalledWith(403);
-		expect(res.json).toHaveBeenCalledWith({ message: "Unauthorized" });
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/basic`)
+			.send({ ...userData, firstName: "New First Name" });
+
+		expect(res.status).toBe(403);
+		expect(res.body).toEqual({ message: "Unauthorized" });
+
+		isRandomUser = false;
 	});
 
 	it("should update user when user is not an admin but is editing their own profile", async () => {
-		req.user = { userType: "user", _id: req.params.id };
-		for (let i = 1; i < updateUserBasicInfo.length; i++) {
-			await updateUserBasicInfo[i](req, res, next);
-		}
+		isAdminUser = false;
 
-		expect(res.status).toHaveBeenCalledWith(201);
-		expect(res.json).toHaveBeenCalledWith(
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/basic`)
+			.send({ ...userData, lastName: "New Last Name" });
+
+		expect(res.status).toBe(201);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User updated successfully",
 				updatedUser: expect.any(Object),
 			}),
 		);
+
+		isAdminUser = true;
 	});
 
 	it("should fail when database query fails", async () => {
@@ -562,26 +583,25 @@ describe("PUT /updateUser/:id/basic", () => {
 			throw new Error("Database error");
 		});
 
-		for (let i = 1; i < updateUserBasicInfo.length; i++) {
-			await updateUserBasicInfo[i](req, res, next);
-		}
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/basic`)
+			.send({ ...userData, firstName: "New First Name" });
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith({ message: "Database error" });
+		expect(res.status).toBe(500);
+		expect(res.body).toEqual({ message: "Database error" });
 	});
 });
 
 describe("GET /:id/posts", () => {
-	let user: IUser;
 	let userPosts: IPost[];
-
 	beforeAll(async () => {
-		user = (await createRandomUser()) as IUser;
-		userPosts = await createPosts(3, { author: user._id });
+		userPosts = await createPosts(3, { author: standardUser._id });
 	});
 
 	it("should return the user's posts", async () => {
-		const res = await request(app).get(`${apiPath}/users/${user.id}/posts`);
+		const res = await request(app).get(
+			`${apiPath}/users/${standardUser.id}/posts`,
+		);
 
 		expect(res.status).toBe(200);
 		expect(res.body).toEqual(
@@ -590,7 +610,7 @@ describe("GET /:id/posts", () => {
 				posts: expect.arrayContaining([
 					expect.objectContaining({
 						content: expect.any(String),
-						author: user.id,
+						author: standardUser.id,
 					}),
 				]),
 				meta: expect.objectContaining({
@@ -602,7 +622,7 @@ describe("GET /:id/posts", () => {
 
 	it("should return the user's posts with pagination", async () => {
 		const res = await request(app).get(
-			`${apiPath}/users/${user.id}/posts?limit=2&offset=1`,
+			`${apiPath}/users/${standardUser.id}/posts?limit=2&offset=1`,
 		);
 
 		expect(res.status).toBe(200);
@@ -612,7 +632,7 @@ describe("GET /:id/posts", () => {
 				posts: expect.arrayContaining([
 					expect.objectContaining({
 						content: expect.any(String),
-						author: user.id,
+						author: standardUser.id,
 					}),
 				]),
 				meta: expect.objectContaining({
@@ -675,7 +695,7 @@ describe("GET /:id/posts", () => {
 		});
 
 		const res = await request(app).get(
-			`${apiPath}/users/${new ObjectId()}/posts`,
+			`${apiPath}/users/${standardUser.id}/posts`,
 		);
 
 		expect(res.status).toBe(500);
@@ -689,8 +709,9 @@ describe("GET /:id/posts", () => {
 
 describe("GET /:id/friends", () => {
 	it("should return the user's friends", async () => {
-		const user = users[0];
-		const res = await request(app).get(`${apiPath}/users/${user.id}/friends`);
+		const res = await request(app).get(
+			`${apiPath}/users/${adminUser.id}/friends`,
+		);
 
 		expect(res.status).toBe(200);
 		expect(res.body).toEqual(
@@ -767,82 +788,103 @@ describe("GET /:id/friends", () => {
 	});
 });
 
-const mockPosts = [
-	{
-		_id: new ObjectId(),
-		content: "This is a mock post",
-	},
-	{
-		_id: new ObjectId(),
-		content: "This is a another mock post",
-	},
-];
 describe("GET /:id/saved-posts", () => {
-	let req: Request;
-	let res: Response;
-	const next = jest.fn();
-
-	beforeAll(async () => {
-		const mockUser = {
-			_id: users[0]._id,
-			savedPosts: [posts[0]._id, posts[1]._id],
-		};
-
-		jest.spyOn(User, "findById").mockImplementationOnce((id: string) => {
-			return {
-				exec: jest.fn().mockResolvedValue(mockUser),
-				select: jest.fn().mockReturnThis(),
-				populate: jest.fn().mockImplementationOnce(() => {
-					return {
-						exec: jest.fn().mockResolvedValueOnce({
-							_id: id,
-							savedPosts: mockPosts,
-						}),
-						select: jest.fn().mockReturnThis(),
-					};
-				}),
-			} as unknown as Query<typeof User, typeof User>;
-		});
-	});
-
-	beforeEach(async () => {
-		req = {
-			params: { id: users[0]._id },
-			user: { ...users[0], savedPosts: [posts[0]._id, posts[1]._id] } as IUser,
-		} as unknown as Request;
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-	});
-
 	it("should return the user's saved posts", async () => {
-		await getUserSavedPosts[1](req, res, next);
+		const res = await request(app).get(
+			`${apiPath}/users/${standardUser.id}/saved-posts`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Saved posts retrieved successfully",
 				savedPosts: expect.arrayContaining([
 					expect.objectContaining({
-						_id: expect.any(ObjectId),
+						_id: expect.any(String),
 						content: expect.any(String),
 					}),
 				]),
 				meta: expect.objectContaining({
-					total: expect.any(Number),
+					total: standardUser.savedPosts.length,
 				}),
 			}),
 		);
 	});
 
+	it("should return the user's saved posts with pagination", async () => {
+		if (standardUser.savedPosts.length < 3) {
+			await addSavedPostsToUser(standardUser, getPostIdsFromPosts(posts));
+		}
+
+		const res = await request(app).get(
+			`${apiPath}/users/${standardUser.id}/saved-posts?limit=2&offset=1`,
+		);
+
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual(
+			expect.objectContaining({
+				message: "Saved posts retrieved successfully",
+				savedPosts: expect.arrayContaining([
+					expect.objectContaining({
+						_id: expect.any(String),
+						content: expect.any(String),
+					}),
+				]),
+				meta: expect.objectContaining({
+					total: standardUser.savedPosts.length,
+				}),
+			}),
+		);
+
+		expect(res.body.savedPosts.length).toBe(2);
+		expect(res.body.savedPosts[0]._id.toString()).toBe(
+			standardUser.savedPosts[1].toString(),
+		);
+	});
+
+	it("should return an empty array when user has no saved posts", async () => {
+		const user = await createRandomUser();
+
+		const res = await request(app).get(
+			`${apiPath}/users/${user.id}/saved-posts`,
+		);
+
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual(
+			expect.objectContaining({
+				message: "Saved posts retrieved successfully",
+				savedPosts: expect.arrayContaining([]),
+				meta: expect.objectContaining({
+					total: 0,
+				}),
+			}),
+		);
+	});
+
+	it("should return error when user is not signed in", async () => {
+		isUserUndefined = true;
+
+		const res = await request(app).get(
+			`${apiPath}/users/${standardUser.id}/saved-posts`,
+		);
+
+		expect(res.status).toBe(401);
+		expect(res.body).toEqual(
+			expect.objectContaining({
+				message: "User not logged in",
+			}),
+		);
+
+		isUserUndefined = false;
+	});
+
 	it("should return error when user is not found", async () => {
-		req.params.id = String(new ObjectId());
+		const res = await request(app).get(
+			`${apiPath}/users/${new ObjectId()}/saved-posts`,
+		);
 
-		await getUserSavedPosts[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User not found",
 			}),
@@ -850,28 +892,29 @@ describe("GET /:id/saved-posts", () => {
 	});
 
 	it("should return error when user has been deleted", async () => {
-		req.user = deletedUser;
-		req.params.id = deletedUser._id;
+		const res = await request(app).get(
+			`${apiPath}/users/${deletedUser._id}/saved-posts`,
+		);
 
-		await getUserSavedPosts[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
-				message: "User has been deleted",
+				message: "User not found",
 			}),
 		);
 	});
 
 	it("should return error when database query fails", async () => {
-		jest.spyOn(User, "findById").mockImplementationOnce(() => {
+		jest.spyOn(User, "findOne").mockImplementationOnce(() => {
 			throw new Error("Database error");
 		});
 
-		await getUserSavedPosts[1](req, res, next);
+		const res = await request(app).get(
+			`${apiPath}/users/${deletedUser._id}/saved-posts`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(500);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Database error",
 			}),
@@ -879,71 +922,48 @@ describe("GET /:id/saved-posts", () => {
 	});
 });
 
-describe("POST /users/:id/friend-requests", () => {
-	let req: Request;
-	let res: Response;
-	const next = jest.fn();
-
-	let num = 0;
-	let requestingUserId: string;
-
-	beforeEach(() => {
-		const nextUserIndex = num + 1 >= users.length ? 0 : num + 1;
-		requestingUserId = users[num]._id;
-		req = {
-			user: users[num],
-			params: { id: users[nextUserIndex]._id },
-		} as unknown as Request;
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-
-		num = nextUserIndex;
-	});
-
+describe("POST /users/me/friend-requests/:id", () => {
 	it("should respond with 200 if user successfully sends a friend request", async () => {
-		try {
-			await User.findByIdAndUpdate(requestingUserId, {
-				$pull: { friends: req.params.id },
-			});
-			await User.findByIdAndUpdate(req.params.id, {
-				$pull: { friends: requestingUserId },
-			});
-		} catch (error) {
-			console.log(error);
-		}
+		isRandomUser = true;
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${standardUser.id}`,
+		);
 
-		await sendFriendRequest[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Friend request sent successfully",
 			}),
 		);
+
+		isRandomUser = false;
 	});
 
 	it("should respond with 401 if user is not logged in", async () => {
-		req.user = undefined;
+		isUserUndefined = true;
 
-		await sendFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${standardUser.id}`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(401);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "You must be logged in to perform this action",
 			}),
 		);
+
+		isUserUndefined = false;
 	});
 
 	it("should respond with 400 if user tries to send a friend request to self", async () => {
-		req.params = { id: requestingUserId };
+		isAdminUser = false;
 
-		await sendFriendRequest[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith(
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${standardUser.id}`,
+		);
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "You cannot send a friend request to yourself",
 			}),
@@ -951,12 +971,12 @@ describe("POST /users/:id/friend-requests", () => {
 	});
 
 	it("should respond with 404 if user to follow does not exist", async () => {
-		req.params.id = String(new ObjectId());
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${new ObjectId()}`,
+		);
 
-		await sendFriendRequest[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User not found",
 			}),
@@ -964,12 +984,12 @@ describe("POST /users/:id/friend-requests", () => {
 	});
 
 	it("should respond with 404 if user to follow has been deleted", async () => {
-		req.params.id = deletedUser._id;
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${deletedUser._id}`,
+		);
 
-		await sendFriendRequest[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User not found",
 			}),
@@ -977,20 +997,28 @@ describe("POST /users/:id/friend-requests", () => {
 	});
 
 	it("should respond with 400 if user is already a friend", async () => {
-		req.params.id = users[num]._id;
+		isRandomUser = true;
 
+		// add users[0] as a friend to randomUser and send friend request from randomUser to users[0]
+		const user = standardUser;
 		try {
-			await User.findByIdAndUpdate(users[num]._id, {
-				$push: { friends: users[num - 1]._id },
+			await User.findByIdAndUpdate(user._id, {
+				$push: { friends: randomUser._id },
 			});
+			await User.findByIdAndUpdate(randomUser._id, {
+				$push: { friends: user._id },
+			});
+			log("Added friend");
 		} catch (error) {
-			console.log(error);
+			throw new Error(error);
 		}
 
-		await sendFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${user.id}`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Already friends with user",
 			}),
@@ -1002,21 +1030,12 @@ describe("POST /users/:id/friend-requests", () => {
 			throw new Error("Database error");
 		});
 
-		try {
-			await User.findByIdAndUpdate(users[num]._id, {
-				$pull: { friends: users[num - 1]._id },
-			});
-			await User.findByIdAndUpdate(users[num - 1]._id, {
-				$pull: { friends: users[num]._id },
-			});
-		} catch (error) {
-			console.log(error);
-		}
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${adminUser.id}`,
+		);
 
-		await sendFriendRequest[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(500);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Database error",
 			}),
@@ -1024,82 +1043,62 @@ describe("POST /users/:id/friend-requests", () => {
 	});
 });
 
-describe("DELETE /users/:id/friends/:friendId", () => {
-	let req: Request;
-	let res: Response;
-	const next = jest.fn();
-
-	let num = 0;
-
-	beforeEach(() => {
-		const nextUserIndex = num + 1 >= users.length ? 0 : num + 1;
-		req = {
-			user: users[num],
-			params: { id: users[num]._id, friendId: users[nextUserIndex]._id },
-		} as unknown as Request;
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-
-		num = nextUserIndex;
+describe("DELETE /users/me/friends/:friendId", () => {
+	let userToRemove: IUser;
+	beforeAll(async () => {
+		userToRemove = standardUser;
+		try {
+			await User.findByIdAndUpdate(adminUser.id, {
+				$addToSet: { friends: userToRemove.id },
+			});
+			await User.findByIdAndUpdate(userToRemove.id, {
+				$push: { friends: adminUser.id },
+			});
+		} catch (error) {
+			throw new Error(error);
+		}
 	});
 
 	it("should respond with 200 if user successfully unfriends another user", async () => {
-		try {
-			await User.findByIdAndUpdate(req.params.id, {
-				$push: { friends: req.params.friendId },
-			});
-			await User.findByIdAndUpdate(req.params.friendId, {
-				$push: { friends: req.params.id },
-			});
-		} catch (error) {
-			console.log(error);
-		}
+		const res = await request(app).delete(
+			`${apiPath}/users/me/friends/${userToRemove.id}`,
+		);
 
-		await unfriendUser[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Friend removed successfully",
+				updatedFriendsList: expect.not.arrayContaining([
+					userToRemove.id.toString(),
+				]),
 			}),
 		);
 	});
 
 	it("should respond with 401 if user is not logged in", async () => {
-		req.user = undefined;
+		isUserUndefined = true;
 
-		await unfriendUser[1](req, res, next);
+		const res = await request(app).delete(
+			`${apiPath}/users/me/friends/${userToRemove.id}`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(401);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "You must be logged in to perform this action",
 			}),
 		);
-	});
 
-	it("should respond with 401 if user logged in is not the same as the :id provided", async () => {
-		req.user = users[num + 1];
-
-		await unfriendUser[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith(
-			expect.objectContaining({
-				message: "You cannot perform this action",
-			}),
-		);
+		isUserUndefined = false;
 	});
 
 	it("should respond with 400 if user tries to unfriend themselves", async () => {
-		req.params.friendId = req.params.id;
+		const res = await request(app).delete(
+			`${apiPath}/users/me/friends/${randomUser.id}`,
+		);
 
-		await unfriendUser[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Cannot remove self as friend",
 			}),
@@ -1107,12 +1106,12 @@ describe("DELETE /users/:id/friends/:friendId", () => {
 	});
 
 	it("should respond with 404 if user to unfriend is not found", async () => {
-		req.params.friendId = new ObjectId().toString();
+		const res = await request(app).delete(
+			`${apiPath}/users/me/friends/${new ObjectId()}`,
+		);
 
-		await unfriendUser[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User not found",
 			}),
@@ -1121,22 +1120,24 @@ describe("DELETE /users/:id/friends/:friendId", () => {
 
 	it("should respond with 400 if user is not friends with the user they are trying to unfollow", async () => {
 		try {
-			await User.findByIdAndUpdate(req.params.id, {
-				$pull: { friends: req.params.friendId },
+			await User.findByIdAndUpdate(randomUser.id, {
+				$pull: { friends: userToRemove.id },
 			});
-			await User.findByIdAndUpdate(req.params.friendId, {
-				$pull: { friends: req.params.id },
+			await User.findByIdAndUpdate(userToRemove.id, {
+				$pull: { friends: randomUser.id },
 			});
 		} catch (error) {
 			console.log(error);
 		}
 
-		await unfriendUser[1](req, res, next);
+		const res = await request(app).delete(
+			`${apiPath}/users/me/friends/${userToRemove.id}`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
 			expect.objectContaining({
-				message: "User already removed",
+				message: "Already not friends with user",
 			}),
 		);
 	});
@@ -1146,10 +1147,12 @@ describe("DELETE /users/:id/friends/:friendId", () => {
 			throw new Error("error");
 		});
 
-		await unfriendUser[1](req, res, next);
+		const res = await request(app).delete(
+			`${apiPath}/users/me/friends/${userToRemove.id}`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(500);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "error",
 			}),
@@ -1157,107 +1160,149 @@ describe("DELETE /users/:id/friends/:friendId", () => {
 	});
 });
 
-describe("POST /users/:id/friend-requests/:requestId/accept", () => {
-	let req: Request;
-	let res: Response;
-	const next = jest.fn();
+describe("POST /users/me/friend-requests/:requestId/accept", () => {
+	let userToAccept: IUser;
+	let num = -1;
 
-	let num = 0;
+	beforeEach(async () => {
+		num = getNextIndexArray(num, users.length);
+		if (users[num].id === randomUser.id)
+			num = getNextIndexArray(num, users.length);
+		userToAccept = users[num];
+		const userToAcceptId = userToAccept._id;
 
-	beforeEach(() => {
-		const nextUserIndex = num + 1 >= users.length ? 0 : num + 1;
-		req = {
-			user: users[num],
-			params: { id: users[num]._id, requestId: users[nextUserIndex]._id },
-		} as unknown as Request;
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-
-		num = nextUserIndex;
+		try {
+			randomUser = (await User.findByIdAndUpdate(
+				randomUser._id,
+				{
+					$addToSet: { friendRequestsReceived: userToAcceptId },
+				},
+				{ new: true },
+			)) as IUser;
+			await User.findByIdAndUpdate(userToAcceptId, {
+				$addToSet: { friendRequestsSent: randomUser._id },
+			});
+		} catch (error) {
+			log(error);
+		}
 	});
 
 	it("should respond with 200 if user successfully accepts a friend request", async () => {
-		try {
-			await User.findByIdAndUpdate(users[num]._id, {
-				$push: { friendRequestsReceived: req.params.requestId },
-			});
-			await User.findByIdAndUpdate(users[num - 1]._id, {
-				$push: { friendRequestsSent: req.params.id },
-			});
-		} catch (error) {
-			console.log(error);
-		}
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${userToAccept.id}/accept`,
+		);
 
-		await acceptFriendRequest[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith(
+		log(res.body);
+		log(res.status);
+		log(randomUser.friends);
+		log(userToAccept.friends);
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Friend request accepted successfully",
+				myUpdatedFriendsList: expect.arrayContaining([
+					userToAccept.id.toString(),
+				]),
+				myUpdatedFriendRequestsReceived: expect.not.arrayContaining([
+					userToAccept.id.toString(),
+				]),
+				otherUserUpdatedFriendsList: expect.arrayContaining([
+					randomUser.id.toString(),
+				]),
+				otherUserUpdatedFriendRequestsSent: expect.not.arrayContaining([
+					randomUser.id.toString(),
+				]),
 			}),
 		);
 	});
 
 	it("should respond with 401 if user is not logged in", async () => {
-		req.user = undefined;
+		isUserUndefined = true;
 
-		await acceptFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${userToAccept.id}/accept`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(401);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "You must be logged in to perform this action",
 			}),
 		);
-	});
 
-	it("should respond with 401 if logged in user is not the user trying to accept the friend request", async () => {
-		req.params.id = new ObjectId().toString();
-
-		await acceptFriendRequest[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith(
-			expect.objectContaining({
-				message: "You cannot perform this action",
-			}),
-		);
+		isUserUndefined = false;
 	});
 
 	it("should respond with 404 if user to accept is not found", async () => {
-		req.params.requestId = new ObjectId().toString();
-		await acceptFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${new ObjectId()}/accept`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User not found",
 			}),
 		);
 	});
 
-	it("should respond with 404 if user to accept is deleted", async () => {
-		req.params.requestId = deletedUser._id;
+	it("should respond with 404 and remove request if user to accept is deleted", async () => {
+		try {
+			await User.findByIdAndUpdate(randomUser._id, {
+				$addToSet: { friendRequestsReceived: deletedUser._id },
+			});
+			await User.findByIdAndUpdate(deletedUser._id, {
+				$addToSet: { friendRequestsSent: randomUser._id },
+			});
+		} catch (error) {
+			throw new Error(error);
+		}
 
-		await acceptFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${deletedUser._id}/accept`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User not found",
+			}),
+		);
+	});
+
+	it("should respond with 400 if user is already a friend", async () => {
+		try {
+			await User.findByIdAndUpdate(randomUser._id, {
+				$addToSet: { friends: userToAccept._id },
+			});
+			await User.findByIdAndUpdate(userToAccept._id, {
+				$addToSet: { friends: randomUser._id },
+			});
+		} catch (error) {
+			throw new Error(error);
+		}
+
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${userToAccept.id}/accept`,
+		);
+
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
+			expect.objectContaining({
+				message: "Already friends with user",
 			}),
 		);
 	});
 
 	it("should respond with 404 if friend request is not found", async () => {
-		req.params.requestId = users[num]._id;
+		const user = await createRandomUser();
 
-		await acceptFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${user.id}/accept`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Friend request not found",
 			}),
@@ -1269,10 +1314,12 @@ describe("POST /users/:id/friend-requests/:requestId/accept", () => {
 			throw new Error("error");
 		});
 
-		await acceptFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${userToAccept.id}/accept`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(500);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "error",
 			}),
@@ -1280,91 +1327,132 @@ describe("POST /users/:id/friend-requests/:requestId/accept", () => {
 	});
 });
 
-describe("POST /users/:id/friend-requests/:requestId/reject", () => {
-	let req: Request;
-	let res: Response;
-	const next = jest.fn();
+describe("POST /users/me/friend-requests/:requestId/reject", () => {
+	let userToAccept: IUser;
+	let num = -1;
 
-	let num = 0;
+	beforeEach(async () => {
+		num = getNextIndexArray(num, users.length);
+		if (users[num].id === randomUser.id)
+			num = getNextIndexArray(num, users.length);
+		userToAccept = users[num];
+		const userToAcceptId = userToAccept._id;
 
-	beforeEach(() => {
-		const nextUserIndex = num + 1 >= users.length ? 0 : num + 1;
-		req = {
-			user: users[num],
-			params: { id: users[num]._id, requestId: users[nextUserIndex]._id },
-		} as unknown as Request;
-		res = {
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-
-		num = nextUserIndex;
+		try {
+			randomUser = (await User.findByIdAndUpdate(
+				randomUser._id,
+				{
+					$addToSet: { friendRequestsReceived: userToAcceptId },
+					$pull: { friends: userToAcceptId },
+				},
+				{ new: true },
+			)) as IUser;
+			await User.findByIdAndUpdate(userToAcceptId, {
+				$addToSet: { friendRequestsSent: randomUser._id },
+				$pull: { friends: randomUser._id },
+			});
+		} catch (error) {
+			log(error);
+		}
 	});
 
 	it("should respond with 200 if user successfully declines a friend request", async () => {
-		try {
-			await User.findByIdAndUpdate(users[num]._id, {
-				$push: { friendRequestsReceived: req.params.requestId },
-			});
-			await User.findByIdAndUpdate(users[num - 1]._id, {
-				$push: { friendRequestsSent: req.params.id },
-			});
-		} catch (error) {
-			console.log(error);
-		}
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${userToAccept.id}/reject`,
+		);
 
-		await rejectFriendRequest[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(200);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Friend request rejected successfully",
+				myUpdatedFriendsList: expect.not.arrayContaining([
+					userToAccept.id.toString(),
+				]),
+				myUpdatedFriendRequestsReceived: expect.not.arrayContaining([
+					userToAccept.id.toString(),
+				]),
+				otherUserUpdatedFriendsList: expect.not.arrayContaining([
+					randomUser.id.toString(),
+				]),
+				otherUserUpdatedFriendRequestsSent: expect.not.arrayContaining([
+					randomUser.id.toString(),
+				]),
 			}),
 		);
 	});
 
 	it("should respond with 401 if user is not logged in", async () => {
-		req.user = undefined;
+		isUserUndefined = true;
 
-		await rejectFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${userToAccept.id}/reject`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(401);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "You must be logged in to perform this action",
 			}),
 		);
+
+		isUserUndefined = false;
 	});
 
-	it("should respond with 401 if user is not the same as the user to reject", async () => {
-		req.params.id = new ObjectId().toString();
+	it("should respond with 404 if user to reject is deleted", async () => {
+		try {
+			await User.findByIdAndUpdate(randomUser._id, {
+				$addToSet: { friendRequestsReceived: deletedUser._id },
+			});
+			await User.findByIdAndUpdate(deletedUser._id, {
+				$addToSet: { friendRequestsSent: randomUser._id },
+			});
+		} catch (error) {
+			throw new Error(error);
+		}
 
-		await rejectFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${deletedUser._id}/reject`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
-				message: "You cannot perform this action",
+				message: "User not found",
 			}),
 		);
 	});
 
-	it("should respond with 404 if user to reject is deleted", async () => {
-		req.params.requestId = deletedUser._id;
+	it("should respond with 400 if user is already a friend", async () => {
+		try {
+			await User.findByIdAndUpdate(randomUser._id, {
+				$addToSet: { friends: userToAccept._id },
+			});
+			await User.findByIdAndUpdate(userToAccept._id, {
+				$addToSet: { friends: randomUser._id },
+			});
+		} catch (error) {
+			throw new Error(error);
+		}
 
-		await rejectFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${userToAccept.id}/reject`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(expect.objectContaining({}));
+		expect(res.status).toBe(400);
+		expect(res.body).toEqual(
+			expect.objectContaining({
+				message: "Already friends with user",
+			}),
+		);
 	});
 
 	it("should respond with 404 if user to reject is not found", async () => {
-		req.params.requestId = new ObjectId().toString();
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${new ObjectId()}/reject`,
+		);
 
-		await rejectFriendRequest[1](req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User not found",
 			}),
@@ -1372,12 +1460,14 @@ describe("POST /users/:id/friend-requests/:requestId/reject", () => {
 	});
 
 	it("should respond with 404 if friend request is not found", async () => {
-		req.params.requestId = users[num]._id;
+		const user = await createRandomUser();
 
-		await rejectFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${user.id}/reject`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(404);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(404);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Friend request not found",
 			}),
@@ -1389,10 +1479,12 @@ describe("POST /users/:id/friend-requests/:requestId/reject", () => {
 			throw new Error("error");
 		});
 
-		await rejectFriendRequest[1](req, res, next);
+		const res = await request(app).post(
+			`${apiPath}/users/me/friend-requests/${userToAccept.id}/reject`,
+		);
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith(
+		expect(res.status).toBe(500);
+		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "error",
 			}),
@@ -1401,6 +1493,4 @@ describe("POST /users/:id/friend-requests/:requestId/reject", () => {
 });
 
 afterEach(() => jest.restoreAllMocks());
-afterAll(async () => {
-	await disconnectFromDatabase();
-});
+afterAll(async () => await disconnectFromDatabase());

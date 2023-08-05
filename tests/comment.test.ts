@@ -5,7 +5,7 @@ import { Schema } from "mongoose";
 import debug from "debug";
 
 import { configDb, disconnectFromDatabase } from "../src/config/database";
-import User, { IUser } from "../src/models/user-model/user.model";
+import { IUser } from "../src/models/user-model/user.model";
 import Post, { IPost } from "../src/models/post.model";
 import Reaction from "../src/models/reaction.model";
 import Comment, { IComment } from "../src/models/comment.model";
@@ -22,10 +22,31 @@ import {
 import { apiPath } from "../src/config/envVariables";
 import { addRepliesToComment } from "../tools/populateDbs/posts/utils/addRepliesToComment";
 import IRequestWithUser from "../types/IRequestWithUser";
+import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
 
 const log = debug("log:comment:test");
 
 const app = express();
+
+const users: IUser[] = [];
+const posts: IPost[] = [];
+
+let postNoComments: IPost;
+const numUsers = 5;
+beforeAll(async () => {
+	await configDb();
+
+	await clearDatabase();
+
+	users.push(...((await createUsers(numUsers)) as IUser[]));
+	posts.push(...((await createPosts(numUsers + 1)) as IPost[]));
+	const randomPost = await createRandomPost({ includeComments: false });
+	if (!randomPost) throw new Error("randomPost is undefined");
+	postNoComments = randomPost;
+
+	configOtherMiddleware(app);
+	configRoutes(app);
+}, 10000);
 
 // Mock Passport Authentication
 let userUndefined = false;
@@ -41,25 +62,6 @@ jest.mock("passport", () => ({
 		};
 	}),
 }));
-
-let users: IUser[] = [];
-let posts: IPost[] = [];
-
-let postNoComments: IPost;
-const numUsers = 5;
-beforeAll(async () => {
-	await configDb();
-
-	await User.deleteMany({});
-	await Post.deleteMany({});
-	await Comment.deleteMany({});
-	users = (await createUsers(numUsers)) as IUser[];
-	posts = await createPosts(numUsers + 1);
-	postNoComments = await createRandomPost({ includeComments: false });
-
-	configOtherMiddleware(app);
-	configRoutes(app);
-}, 10000);
 
 describe("GET /posts/:post/comments", () => {
 	it("should return 200 and an array of comments", async () => {
@@ -226,9 +228,10 @@ describe("GET /posts/:post/comments/:id/replies", () => {
 	beforeAll(async () => {
 		post = posts[0];
 		comment = post.comments[0];
+		const userIds = users.map((user) => user._id);
 		replies = (await addRepliesToComment(
 			comment,
-			users,
+			userIds,
 			numReplies,
 		)) as IComment[];
 	});

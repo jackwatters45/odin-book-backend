@@ -15,6 +15,7 @@ import Reaction, { reactionTypes } from "../models/reaction.model";
 // import resizeImages from "../utils/resizeImages";
 
 const log = debug("log:post:controller");
+const errorLog = debug("error:post:controller");
 
 // TODO specific populate options
 
@@ -42,7 +43,7 @@ export const getPosts = expressAsyncHandler(
 			const posts = await postsQuery.exec();
 			res.status(200).json({ posts, meta: { total: postsCount } });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -69,7 +70,7 @@ export const getPostById = expressAsyncHandler(
 
 			res.status(200).json({ post });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -128,7 +129,7 @@ export const createPost = [
 			await post.save();
 			res.status(201).json({ post });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message, post });
 		}
 	}),
@@ -170,8 +171,6 @@ export const updatePost = [
 				return;
 			}
 
-			log(post);
-			log(user);
 			if (
 				post.author.toString() !== user._id.toString() &&
 				user.userType !== "admin"
@@ -194,7 +193,7 @@ export const updatePost = [
 
 			res.status(200).json({ post: updatedPost, message: "Post updated" });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -228,7 +227,7 @@ export const deletePost = [
 
 			res.status(200).json({ message: "Post deleted", post });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -286,7 +285,7 @@ export const reactToPost = [
 
 			res.status(201).json({ message: "Reaction added", post });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -333,7 +332,7 @@ export const unreactToPost = [
 
 			res.status(200).json({ message: "Reaction removed", post });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -351,15 +350,13 @@ export const getPostReactions = expressAsyncHandler(
 				return;
 			}
 
-			log(post);
-
 			const reactions = await Reaction.find({ parent: post._id })
 				.populate("user", "firstName lastName isDeleted avatarUrl")
 				.sort({ createdAt: -1 });
 
 			res.status(200).json({ reactions });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},

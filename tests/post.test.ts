@@ -9,7 +9,6 @@ import configRoutes from "../src/routes";
 import configOtherMiddleware from "../src/middleware/otherConfig";
 import User, { IUser } from "../src/models/user-model/user.model";
 import Post, { IPost } from "../src/models/post.model";
-import Comment from "../src/models/comment.model";
 import { apiPath } from "../src/config/envVariables";
 import {
 	createRandomPost,
@@ -22,12 +21,31 @@ import {
 import Reaction, { reactionTypes } from "../src/models/reaction.model";
 import { getRandValueFromArray } from "../tools/populateDbs/utils/populateHelperFunctions";
 import IRequestWithUser from "../types/IRequestWithUser";
+import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
 
-// Initialize Debug Log
 const log = debug("log:post:test");
 
-// Initialize Express App
 const app = express();
+
+const numUsers = 3;
+const users: IUser[] = [];
+
+const numPosts = 5;
+const posts: IPost[] = [];
+
+beforeAll(async () => {
+	await configDb();
+	await clearDatabase();
+
+	const sampleUsers = (await createUsers(numUsers)) as IUser[];
+	users.push(...sampleUsers);
+
+	posts.push(...(await createPosts(numPosts, { allPublished: true })));
+	posts.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+	configOtherMiddleware(app);
+	configRoutes(app);
+}, 20000);
 
 // Mock Passport Authentication
 let userUndefined = false;
@@ -47,40 +65,6 @@ jest.mock("passport", () => ({
 	}),
 }));
 
-// Initialize Test Data Variables
-const numUsers = 3;
-const users: IUser[] = [];
-
-const numPosts = 5;
-const posts: IPost[] = [];
-
-// Before All Test Setup
-beforeAll(async () => {
-	// Configure Database
-	await configDb();
-
-	// Delete Existing Data
-	await User.deleteMany({});
-	await Post.deleteMany({});
-	await Comment.deleteMany({});
-
-	// Create Test Users
-	const sampleUsers = (await createUsers(numUsers)) as IUser[];
-	users.push(...sampleUsers);
-
-	// Create Test Posts
-	const createdPosts = await createPosts(numPosts, { allPublished: true });
-	posts.push(...createdPosts);
-
-	// Sort posts by date
-	posts.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-	// Configure Middleware and Routes
-	configOtherMiddleware(app);
-	configRoutes(app);
-}, 20000);
-
-// Test Suites
 describe("GET /posts", () => {
 	it("should return an array of all posts and status 200", async () => {
 		const res = await request(app).get(`${apiPath}/posts`);
@@ -338,6 +322,8 @@ describe("DELETE /posts/:id", () => {
 	});
 
 	it("should return an error message and 403 status code if the user is not the author of the post or an admin", async () => {
+		randomUser = true;
+
 		const res = await request(app).delete(
 			`${apiPath}/posts/${posts[1]._id.toString()}`,
 		);
@@ -512,7 +498,9 @@ describe("DELETE /posts/:id/unreact", () => {
 describe("GET /posts/:id/reactions", () => {
 	let post: IPost;
 	beforeAll(async () => {
-		post = await createRandomPost({ includeReactions: true });
+		const newPost = await createRandomPost({ includeReactions: true });
+		if (!newPost) throw new Error("Error creating post");
+		post = newPost;
 	});
 
 	it("should return an array of all reactions for a post and status 200", async () => {

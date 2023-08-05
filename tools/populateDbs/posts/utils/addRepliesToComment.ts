@@ -3,13 +3,12 @@ import debug from "debug";
 import { ObjectId } from "mongoose";
 
 import Comment from "../../../../src/models/comment.model";
-import { IUser } from "../../../../src/models/user-model/user.model";
 
 const log = debug("log:populateDbs:posts:utils:addRepliesToComment");
 
 export const addReplyToComment = async (
 	parentId: ObjectId,
-	authorArr: IUser[],
+	authorIds: ObjectId[],
 ) => {
 	try {
 		const parentComment = await Comment.findById(parentId);
@@ -20,7 +19,7 @@ export const addReplyToComment = async (
 
 		const reply = new Comment({
 			content: faker.lorem.paragraph(),
-			author: authorArr[Math.floor(Math.random() * authorArr.length)]._id,
+			author: authorIds[Math.floor(Math.random() * authorIds.length)],
 			parentComment: parentId,
 			post: parentComment.post,
 		});
@@ -34,25 +33,27 @@ export const addReplyToComment = async (
 		log("Reply has been added successfully");
 		return reply;
 	} catch (error) {
-		console.error("An error occurred while adding a reply: ", error);
+		throw new Error(error);
 	}
 };
 
 export const addRepliesToComment = async (
 	commentId: ObjectId,
-	authorArr: IUser[],
+	authorIds: ObjectId[],
 	repliesCount = 2,
 ) => {
 	try {
 		for (let i = 0; i < repliesCount; i++) {
-			await addReplyToComment(commentId, authorArr);
+			await addReplyToComment(commentId, authorIds);
 		}
 
 		log("Replies have been added successfully");
 
 		return await Comment.find({ parentComment: commentId })
-			.sort({ updatedAt: -1 })
-			.exec();
+			.sort({
+				updatedAt: -1,
+			})
+			.select("_id post parentComment");
 	} catch (error) {
 		console.error("An error occurred while adding replies: ", error);
 	}
@@ -60,14 +61,14 @@ export const addRepliesToComment = async (
 
 export const addRepliesToComments = async (
 	comments: ObjectId[],
-	authorArr: IUser[],
+	authorIds: ObjectId[],
 	repliesCount = 2,
 ) => {
 	try {
 		for (let i = 0; i < comments.length; i++) {
-			await addRepliesToComment(comments[i], authorArr, repliesCount);
+			await addRepliesToComment(comments[i], authorIds, repliesCount);
 		}
 	} catch (error) {
-		console.error("An error occurred while adding replies: ", error);
+		throw new Error(error);
 	}
 };

@@ -10,7 +10,8 @@ import Reaction, { reactionTypes } from "../models/reaction.model";
 import { IUser } from "../models/user-model/user.model";
 import Post from "../models/post.model";
 
-const log = debug("log:commentController");
+const log = debug("log:comment:controller");
+const errorLog = debug("error:comment:controller");
 
 // @desc    Get all comments from post
 // @route   GET /posts/:post/comments
@@ -68,7 +69,7 @@ export const getComments = expressAsyncHandler(
 				meta: { total: commentsCount, totalParent: parentCommentsCount },
 			});
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -106,7 +107,7 @@ export const getReplies = expressAsyncHandler(
 
 			res.status(200).json({ replies });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -138,7 +139,7 @@ export const getCommentById = expressAsyncHandler(
 
 			res.status(200).json({ comment, message: "Comment found" });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	},
@@ -219,7 +220,7 @@ export const createComment = [
 		} catch (error) {
 			await session.abortTransaction();
 
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		} finally {
 			session.endSession();
@@ -274,7 +275,7 @@ export const updateComment = [
 
 			res.status(201).json({ message: "Comment updated", comment });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -323,7 +324,7 @@ export const deleteComment = [
 				comment: updatedComment,
 			});
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -392,7 +393,7 @@ export const createCommentReply = [
 		} catch (error) {
 			await session.abortTransaction();
 
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		} finally {
 			session.endSession();
@@ -461,7 +462,7 @@ export const reactToComment = [
 
 			res.status(201).json({ message: "Reaction added", comment });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),
@@ -517,7 +518,7 @@ export const unreactToComment = [
 
 			res.status(201).json({ message: "Reaction removed", comment });
 		} catch (error) {
-			log(error);
+			errorLog(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),

@@ -2,10 +2,9 @@ import mongoose from "mongoose";
 import debug from "debug";
 import { configDb } from "../../src/config/database";
 
-import { createUsers } from "./users/populateUsers";
-import { createPosts } from "./posts/populatePosts";
+import createUsersAndSavedPosts from "./createUsersAndPosts";
 
-const log = debug("log");
+const log = debug("log:populateDbs");
 
 const dropCollections = async () => {
 	log("Dropping collections");
@@ -23,8 +22,7 @@ const dropCollections = async () => {
 
 const createData = async () => {
 	log("Populating DBs");
-	await createUsers(20);
-	await createPosts(20);
+	await createUsersAndSavedPosts(20);
 	log("Done populating DBs");
 };
 

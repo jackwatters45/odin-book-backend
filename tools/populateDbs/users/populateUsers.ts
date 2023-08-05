@@ -1,6 +1,7 @@
 import { faker } from "@faker-js/faker";
 import User, {
 	IUser,
+	IUserWithId,
 	UserActivityData,
 	UserSystemData,
 } from "../../../src/models/user-model/user.model";
@@ -22,9 +23,18 @@ import { getLifeEvents } from "./utils/life-events";
 import {
 	convertToSlug,
 	getRandValueFromArray,
-	getRandValuesFromArrayObjs,
+	getRandValuesFromArrayOfObjs,
 	getRandomInt,
 } from "../utils/populateHelperFunctions";
+import { IPost } from "../../../src/models/post.model";
+import debug from "debug";
+import {
+	addSavedPosts,
+	addSavedPostsToUser,
+} from "../posts/utils/addSavedPosts";
+import { ObjectId } from "mongoose";
+
+const log = debug("log:populateUsers");
 
 const createRandomBasicInfo = () => {
 	const firstName = faker.person.firstName();
@@ -61,6 +71,7 @@ const createRandomSystemData = ({
 		userType,
 		isDeleted,
 		deletedData,
+		createdAt: faker.date.past(),
 	};
 };
 
@@ -147,6 +158,7 @@ const createRandomSocialLinksData = (
 	lastName: string,
 ): SocialLinksData => {
 	const { name, url } = getRandValueFromArray(socialMediaSites);
+
 	const username = faker.internet.userName({ firstName, lastName });
 	return {
 		platform: name,
@@ -191,7 +203,10 @@ const createRandomUserAboutData = (
 interface Options
 	extends Partial<UserSystemData>,
 		Partial<UserActivityData>,
-		Partial<UserAboutData> {}
+		Partial<UserAboutData> {
+	posts?: IPost[];
+	noFriends?: boolean;
+}
 
 export const createRandomUser = async ({
 	userType = "user",
@@ -206,6 +221,7 @@ export const createRandomUser = async ({
 }: Options = {}) => {
 	const basicInfo = createRandomBasicInfo();
 	const { firstName, lastName } = basicInfo;
+
 	const userData = {
 		...basicInfo,
 		...createRandomUserAboutData(firstName, lastName),
@@ -230,42 +246,64 @@ export const createRandomUser = async ({
 	return newUser;
 };
 
-export const addFriends = async (users: IUser[]) => {
-	for (const user of users) {
-		if (!user) continue;
+export const addFriendsToUser = async (user: IUser, users: IUser[]) => {
+	const numValues = getRandomInt(users.length) || 2;
+	const friendsToAdd: ObjectId[] = getRandValuesFromArrayOfObjs(
+		users as IUserWithId[],
+		numValues,
+	);
 
-		const friendsToAdd = getRandValuesFromArrayObjs(
-			users.filter((u) => u._id.toString() !== user._id.toString()),
-			getRandomInt(users.length),
-		);
-
-		await User.findByIdAndUpdate(user._id, {
-			$push: { friends: { $each: friendsToAdd.map((friend) => friend._id) } },
-		});
-
+	try {
 		for (const friend of friendsToAdd) {
-			await User.findByIdAndUpdate(friend._id, {
-				$push: { friends: user._id },
+			await User.findByIdAndUpdate(friend, {
+				$addToSet: { friends: user._id },
 			});
 		}
+
+		return (await User.findByIdAndUpdate(
+			user._id,
+			{
+				$addToSet: { friends: { $each: friendsToAdd } },
+			},
+			{ new: true },
+		)) as IUser;
+	} catch (error) {
+		throw new Error(error);
 	}
-
-	const updatedUsers = await User.find({
-		_id: { $in: users.map((user) => user._id) },
-	});
-
-	return updatedUsers;
 };
 
-export const createUsers = async (quantity = 1) => {
-	const users: IUser[] = [];
-	for (let i = 0; i < quantity; i++) {
-		const user = await createRandomUser();
-		if (!user) return;
-		users.push(user);
+export const addFriends = async (users: IUser[]) => {
+	return await Promise.all(
+		users.map(async (user) => (await addFriendsToUser(user, users)) as IUser),
+	);
+};
+
+export const createUser = async (
+	users: IUser[],
+	posts: ObjectId[],
+	options: Options,
+) => {
+	try {
+		const user = await createRandomUser(options);
+		const userWithSavedPosts = await addSavedPostsToUser(user, posts);
+
+		if (options.noFriends) return userWithSavedPosts;
+		return (await addFriendsToUser(userWithSavedPosts, users)) as IUser;
+	} catch (error) {
+		log(error);
 	}
+};
+
+export const createUsers = async (quantity = 1, postIds?: ObjectId[]) => {
+	const usersPromises: Promise<IUser>[] = [];
+	for (let i = 0; i < quantity; i++) {
+		usersPromises.push(createRandomUser());
+	}
+	const users = await Promise.all(usersPromises);
 
 	const usersWithFriends = await addFriends(users);
+
+	if (postIds) return await addSavedPosts(usersWithFriends, postIds);
 
 	return usersWithFriends;
 };

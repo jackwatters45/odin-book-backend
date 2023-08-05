@@ -20,7 +20,7 @@ import { VerifyCallback } from "passport-oauth2";
 
 import debug from "debug";
 
-const log = debug("log");
+const log = debug("log:authConfig");
 
 const LocalStrategy = passportLocal.Strategy;
 const JwtStrategy = passportJwt.Strategy;

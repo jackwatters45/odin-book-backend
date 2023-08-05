@@ -10,6 +10,7 @@ import { jwtSecret, nodeEnv, refreshTokenSecret } from "../config/envVariables";
 import generateAndSendToken from "../utils/generateAndSendToken";
 
 const log = debug("log:auth:controller");
+const errorLog = debug("error:auth:controller");
 
 // TODO cookie options
 export const handleUserLogin = async (res: Response, user: IUser) => {
@@ -93,7 +94,7 @@ export const postLogin = [
 					},
 				)(req, res, next);
 			} catch (err) {
-				log(err);
+				errorLog(err);
 				res.status(500).json({ message: "Server error" });
 			}
 		},
@@ -116,7 +117,7 @@ export const postLoginGuest = expressAsyncHandler(
 			);
 			handleUserLogin(res, user);
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res.status(500).json({ message: "Server error" });
 		}
 	},
@@ -201,7 +202,7 @@ export const postSignUp = [
 
 			handleUserLogin(res, user);
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res.status(500).json({ message: "An unexpected error occurred." });
 		}
 	}),
@@ -285,7 +286,7 @@ export const getCurrentUser = expressAsyncHandler(
 
 			res.status(200).json({ user, isAuthenticated: true });
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res.status(401).json({ isAuthenticated: false, message: err.message });
 		}
 	},
@@ -345,7 +346,7 @@ export const postRefreshToken = expressAsyncHandler(
 
 			res.status(200).json({ message: "Refreshed token successfully." });
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res.status(500).json({
 				message: "An unexpected error occurred while refreshing jwt token.",
 				error: err.message,
@@ -445,7 +446,7 @@ export const postVerifyCode = [
 				await user.save();
 				res.status(200).json({ message: "Verification successful." });
 			} catch (error) {
-				log(error);
+				errorLog(error);
 				res
 					.status(500)
 					.json({ message: "An error occurred while verifying your account." });
@@ -494,7 +495,7 @@ export const getVerifyLink = expressAsyncHandler(
 
 			res.redirect("/login");
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res
 				.status(500)
 				.json({ message: "An error occurred while verifying your account." });
@@ -530,7 +531,7 @@ export const postResendVerificationCode = [
 				message: `Verification code sent to user's ${type}: ${destination}.`,
 			});
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res.status(500).json({
 				message:
 					err.message || "An error occurred while sending verification code.",
@@ -572,7 +573,7 @@ export const postForgotPassword = [
 				message: "If the account exists, a reset password link was sent.",
 			});
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res.status(500).json({
 				message: err.message || "Could not send reset password email.",
 			});
@@ -642,7 +643,7 @@ export const postResetPassword = [
 
 			res.status(200).json({ message: "Password reset successfully." });
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res
 				.status(500)
 				.json({ message: "An error occurred while resetting your password." });
@@ -710,7 +711,7 @@ export const postChangePassword = [
 
 			res.status(200).json({ message: "Password changed successfully." });
 		} catch (err) {
-			log(err);
+			errorLog(err);
 			res
 				.status(500)
 				.json({ message: "An error occurred while changing your password." });

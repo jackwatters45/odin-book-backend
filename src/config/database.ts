@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import debug from "debug";
 import { mongoDbUri } from "./envVariables";
 
-const log = debug("log");
+const log = debug("log:configDb");
 
 export const configDb = async () => {
 	try {

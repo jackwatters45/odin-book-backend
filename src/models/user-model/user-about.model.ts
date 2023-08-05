@@ -96,7 +96,7 @@ export const UserAboutDataSchema = new Schema<UserAboutData>({
 				required: true,
 				trim: true,
 				minlength: 3,
-				maxlength: 30,
+				maxlength: 40,
 			},
 			url: { type: String, trim: true, maxlength: 200 },
 		},
