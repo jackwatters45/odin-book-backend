@@ -13,8 +13,7 @@ export const addReplyToComment = async (
 	try {
 		const parentComment = await Comment.findById(parentId);
 		if (!parentComment) {
-			log("Parent comment not found");
-			return;
+			throw new Error("Parent comment does not exist");
 		}
 
 		const reply = new Comment({

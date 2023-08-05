@@ -826,7 +826,7 @@ describe("POST /reset-password:resetToken", () => {
 			newPassword = generatePassword();
 			confirmPassword = newPassword;
 		} catch (err) {
-			log(err);
+			throw new Error(err);
 		}
 	});
 

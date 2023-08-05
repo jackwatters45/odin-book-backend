@@ -1127,7 +1127,7 @@ describe("DELETE /users/me/friends/:friendId", () => {
 				$pull: { friends: randomUser.id },
 			});
 		} catch (error) {
-			console.log(error);
+			throw new Error(error);
 		}
 
 		const res = await request(app).delete(
@@ -1183,7 +1183,7 @@ describe("POST /users/me/friend-requests/:requestId/accept", () => {
 				$addToSet: { friendRequestsSent: randomUser._id },
 			});
 		} catch (error) {
-			log(error);
+			throw new Error(error);
 		}
 	});
 
@@ -1192,10 +1192,6 @@ describe("POST /users/me/friend-requests/:requestId/accept", () => {
 			`${apiPath}/users/me/friend-requests/${userToAccept.id}/accept`,
 		);
 
-		log(res.body);
-		log(res.status);
-		log(randomUser.friends);
-		log(userToAccept.friends);
 		expect(res.status).toBe(200);
 		expect(res.body).toEqual(
 			expect.objectContaining({
@@ -1352,7 +1348,7 @@ describe("POST /users/me/friend-requests/:requestId/reject", () => {
 				$pull: { friends: randomUser._id },
 			});
 		} catch (error) {
-			log(error);
+			throw new Error(error);
 		}
 	});
 

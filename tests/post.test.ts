@@ -175,7 +175,6 @@ describe("POST /posts", () => {
 			.post(`${apiPath}/posts`)
 			.send({ content: "Test post", published: faker.datatype.boolean() });
 
-		log(res.body);
 		expect(res.statusCode).toEqual(201);
 		expect(res.body.post.content).toEqual("Test post");
 	});
@@ -328,7 +327,6 @@ describe("DELETE /posts/:id", () => {
 			`${apiPath}/posts/${posts[1]._id.toString()}`,
 		);
 
-		log(res.body);
 		expect(res.statusCode).toEqual(403);
 		expect(res.body.message).toEqual("Unauthorized");
 
@@ -630,8 +628,6 @@ describe("POST /posts/:id/share", () => {
 		);
 
 		expect(res.statusCode).toEqual(201);
-		log(res.body.sharedPost);
-		log(posts[0]);
 		expect(res.body.sharedPost.sharedFrom).toEqual(posts[0]._id.toString());
 		expect(res.body.sharedPost._id.toString()).not.toEqual(
 			posts[0]._id.toString(),

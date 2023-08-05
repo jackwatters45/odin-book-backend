@@ -2,8 +2,8 @@
 
 ## Next
 
+- git branch crap
 - auth
-- remove logs
 
 - posts - file uploads
 

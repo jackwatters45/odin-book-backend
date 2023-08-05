@@ -290,7 +290,7 @@ export const createUser = async (
 		if (options.noFriends) return userWithSavedPosts;
 		return (await addFriendsToUser(userWithSavedPosts, users)) as IUser;
 	} catch (error) {
-		log(error);
+		throw new Error(error);
 	}
 };
 

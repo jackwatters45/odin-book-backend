@@ -43,7 +43,6 @@ export const createRandomPost = async (options?: ICreatePostOptions) => {
 		log(`Post ${savedPost._id} created!`);
 		return (await savedPost.save()) as IPost;
 	} catch (err) {
-		log(err);
 		throw new Error("Error creating post");
 	}
 };

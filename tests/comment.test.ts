@@ -840,7 +840,6 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	});
 
 	it("should return 201 and a comment", async () => {
-		log(post.comments[0]);
 		const res = await request(app).delete(
 			`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`,
 		);
