@@ -1,6 +1,9 @@
 import { Schema, model, ObjectId, Document } from "mongoose";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+
 import { UserAboutData, UserAboutDataSchema } from "./user-about.model";
+import { jwtSecret } from "../../config/envVariables";
 
 // Basic User Info
 export interface BasicUserInfo {
@@ -73,6 +76,7 @@ export interface IUser
 	verification: UserVerificationData;
 	resetPassword: UserResetPasswordData;
 	comparePassword: (password: string) => Promise<boolean>;
+	generateJwtToken: () => string;
 }
 
 export interface IUserWithId extends IUser {
@@ -169,6 +173,10 @@ UserSchema.pre("save", async function (this: IUser, next) {
 
 UserSchema.methods.comparePassword = async function (password: string) {
 	return await bcrypt.compare(password, this.password);
+};
+
+UserSchema.methods.generateJwtToken = function () {
+	return jwt.sign({ _id: this._id }, jwtSecret, { expiresIn: "1h" });
 };
 
 // TODO Indexes

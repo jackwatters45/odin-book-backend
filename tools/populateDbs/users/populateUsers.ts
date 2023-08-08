@@ -206,6 +206,7 @@ interface Options
 		Partial<UserAboutData> {
 	posts?: IPost[];
 	noFriends?: boolean;
+	noSavedPosts?: boolean;
 }
 
 export const createRandomUser = async ({
@@ -284,11 +285,12 @@ export const createUser = async (
 	options: Options,
 ) => {
 	try {
-		const user = await createRandomUser(options);
-		const userWithSavedPosts = await addSavedPostsToUser(user, posts);
+		let user = (await createRandomUser(options)) as IUser;
+		if (!options.noSavedPosts) user = await addSavedPostsToUser(user, posts);
 
-		if (options.noFriends) return userWithSavedPosts;
-		return (await addFriendsToUser(userWithSavedPosts, users)) as IUser;
+		if (!options.noFriends) user = await addFriendsToUser(user, users);
+
+		return user;
 	} catch (error) {
 		throw new Error(error);
 	}

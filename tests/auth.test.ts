@@ -1,32 +1,31 @@
-import express, { NextFunction, Request, Response } from "express";
-import User, { IUser } from "../src/models/user-model/user.model";
-import { refreshTokenSecret } from "../src/config/envVariables";
+import express, { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import debug from "debug";
-import {
-	getCurrentUser,
-	postChangePassword,
-	postLogout,
-	postRefreshToken,
-	postResendVerificationCode,
-	postVerifyCode,
-} from "../src/controllers/auth.controller";
 import { faker } from "@faker-js/faker";
+import passport from "passport";
+import request from "supertest";
+
+import User, { IUser } from "../src/models/user-model/user.model";
+import {
+	apiPath,
+	jwtSecret,
+	refreshTokenSecret,
+} from "../src/config/envVariables";
 import generateUser, { TestUser } from "./utils/generateUser";
 import { configDb, disconnectFromDatabase } from "../src/config/database";
 import configOtherMiddleware from "../src/middleware/otherConfig";
 import configRoutes from "../src/routes";
 import configAuthMiddleware from "../src/middleware/authConfig";
-import request from "supertest";
 import {
 	generateInvalidPassword,
 	generatePassword,
 } from "./utils/generatePassword";
 import generateAndSendToken from "../src/utils/generateAndSendToken";
 import generateRandomTokenEmailOrSms from "./utils/generateRandomTokenEmailOrSms";
-import passport from "passport";
 import { userSignupFunctionGenerator } from "./utils/userSignupFunctionGenerator";
 import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
+import { parseCookies } from "./utils/parseCookie";
+import getUserWithoutPassword from "./utils/getUserWithoutPassword";
 
 const log = debug("log:auth:test");
 
@@ -40,9 +39,6 @@ beforeAll(async () => {
 	configRoutes(app);
 });
 
-// TODO fix ones with todo
-// TODO clean up mock bs
-
 const signUpUser = userSignupFunctionGenerator();
 
 describe("POST /signup", () => {
@@ -51,14 +47,16 @@ describe("POST /signup", () => {
 	it("should create a new user", async () => {
 		existingUser = generateUser();
 		const res = await request(app)
-			.post("/api/v1/auth/signup")
-			.send(existingUser);
+			.post(`${apiPath}/auth/signup`)
+			.send(existingUser)
+			.expect(200);
 
-		expect(res.statusCode).toEqual(200);
-		expect(res.body).toHaveProperty("message");
-
-		expect(res.body).toHaveProperty("user");
-		expect(res.body.user).toHaveProperty("_id");
+		expect(res.body).toEqual({
+			message: "Logged in successfully.",
+			user: expect.objectContaining({
+				_id: expect.any(String),
+			}),
+		});
 
 		expect(res.headers).toHaveProperty("set-cookie");
 		expect(res.headers["set-cookie"][0]).toMatch(/jwt=.+/);
@@ -67,51 +65,62 @@ describe("POST /signup", () => {
 
 	it("should fail when the user already exists", async () => {
 		const res = await request(app)
-			.post("/api/v1/auth/signup")
-			.send(existingUser);
+			.post(`${apiPath}/auth/signup`)
+			.send(existingUser)
+			.expect(400);
 
-		expect(res.statusCode).toEqual(400);
-
-		expect(res.body).toHaveProperty("message");
-		expect(res.body.message).toEqual(
-			"User with this email/phone already exists",
-		);
+		expect(res.body.message).toBe("User with this email/phone already exists");
 	});
 
 	it("should fail when password is not min 8 chars and does not contain an uppercase, lowercase, number, special character ", async () => {
 		const { password: _, ...userWithoutPassword } = generateUser();
 		const res = await request(app)
-			.post("/api/v1/auth/signup")
+			.post(`${apiPath}/auth/signup`)
 			.send({
 				...userWithoutPassword,
 				password: generateInvalidPassword(),
-			});
+			})
+			.expect(400);
 
-		expect(res.statusCode).toEqual(400);
-		expect(res.body).toHaveProperty("errors");
+		expect(res.body.errors).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					msg: "Password must contain at least one uppercase letter, one lowercase letter, one special character, one number, and be at least 8 characters long",
+				}),
+			]),
+		);
 	});
 
 	it("should fail when required fields are not provided", async () => {
 		const { firstName: _, ...userWithoutFirstName } = generateUser();
 		const res = await request(app)
-			.post("/api/v1/auth/signup")
-			.send(userWithoutFirstName);
+			.post(`${apiPath}/auth/signup`)
+			.send(userWithoutFirstName)
+			.expect(400);
 
-		expect(res.statusCode).toEqual(400);
-		expect(res.body).toHaveProperty("errors");
+		expect(res.body).toEqual({
+			errors: expect.arrayContaining([
+				expect.objectContaining({
+					msg: "First name is required and should not be empty",
+				}),
+			]),
+			reqBody: expect.any(Object),
+		});
 	});
 
 	it("should not fail when no pronouns provided", async () => {
 		const { pronouns: _, ...userWithoutPronouns } = generateUser();
 		const res = await request(app)
-			.post("/api/v1/auth/signup")
-			.send(userWithoutPronouns);
+			.post(`${apiPath}/auth/signup`)
+			.send(userWithoutPronouns)
+			.expect(200);
 
-		expect(res.statusCode).toEqual(200);
-		expect(res.body).toHaveProperty("message");
-
-		expect(res.body).toHaveProperty("user");
-		expect(res.body.user).toHaveProperty("_id");
+		expect(res.body).toEqual({
+			message: "Logged in successfully.",
+			user: expect.objectContaining({
+				_id: expect.any(String),
+			}),
+		});
 
 		expect(res.headers).toHaveProperty("set-cookie");
 		expect(res.headers["set-cookie"][0]).toMatch(/jwt=.+/);
@@ -130,13 +139,17 @@ describe("POST /login", () => {
 	});
 
 	it("should login a user", async () => {
-		const res = await request(app).post("/api/v1/auth/login").send(validUser);
+		const res = await request(app)
+			.post(`${apiPath}/auth/login`)
+			.send(validUser)
+			.expect(200);
 
-		expect(res.statusCode).toEqual(200);
-		expect(res.body).toHaveProperty("message");
-
-		expect(res.body).toHaveProperty("user");
-		expect(res.body.user).toHaveProperty("_id");
+		expect(res.body).toEqual({
+			message: "Logged in successfully.",
+			user: expect.objectContaining({
+				_id: expect.any(String),
+			}),
+		});
 
 		expect(res.headers).toHaveProperty("set-cookie");
 		expect(res.headers["set-cookie"][0]).toMatch(/jwt=.+/);
@@ -144,25 +157,25 @@ describe("POST /login", () => {
 
 	it("should fail when the user does not exist", async () => {
 		const { password } = validUser;
-		const res = await request(app).post("/api/v1/auth/login").send({
-			username: faker.internet.email(),
-			password,
-		});
+		const res = await request(app)
+			.post(`${apiPath}/auth/login`)
+			.send({
+				username: faker.internet.email(),
+				password,
+			})
+			.expect(401);
 
-		expect(res.statusCode).toEqual(401);
-		expect(res.body).toHaveProperty("message");
-		expect(res.body.message).toEqual("User with this email/phone not found");
+		expect(res.body.message).toBe("User with this email/phone not found");
 	});
 
 	it("should fail when the password is incorrect", async () => {
 		const { username } = validUser;
 		const res = await request(app)
-			.post("/api/v1/auth/login")
-			.send({ username, password: generateInvalidPassword() });
+			.post(`${apiPath}/auth/login`)
+			.send({ username, password: generateInvalidPassword() })
+			.expect(401);
 
-		expect(res.statusCode).toEqual(401);
-		expect(res.body).toHaveProperty("message");
-		expect(res.body.message).toEqual("Incorrect password");
+		expect(res.body.message).toBe("Incorrect password");
 	});
 
 	it("should fail when user should be logging in with non-local strategy", async () => {
@@ -172,14 +185,13 @@ describe("POST /login", () => {
 		});
 
 		const res = await request(app)
-			.post("/api/v1/auth/login")
+			.post(`${apiPath}/auth/login`)
 			.send({
 				username: user.email || user.phoneNumber,
 				password: generatePassword(),
-			});
+			})
+			.expect(401);
 
-		expect(res.statusCode).toEqual(401);
-		expect(res.body).toHaveProperty("message");
 		expect(res.body.message).toEqual(
 			"User should be logging in with non-local strategy",
 		);
@@ -187,225 +199,194 @@ describe("POST /login", () => {
 });
 
 describe("POST /login-guest", () => {
-	afterEach(() => jest.restoreAllMocks());
-
 	it("should login a guest", async () => {
-		const res = await request(app).post("/api/v1/auth/login-guest");
+		const res = await request(app)
+			.post(`${apiPath}/auth/login-guest`)
+			.expect(200);
 
-		expect(res.statusCode).toEqual(200);
-		expect(res.body).toHaveProperty("message");
-
-		expect(res.body).toHaveProperty("user");
-		expect(res.body.user).toHaveProperty("_id");
+		expect(res.body).toEqual({
+			message: "Logged in successfully.",
+			user: expect.objectContaining({
+				_id: expect.any(String),
+			}),
+		});
 	});
 });
 
-// TODO
 describe("POST /logout", () => {
-	let res: Response;
-	const req = { cookies: {} } as Request;
-	const next = jest.fn() as NextFunction;
-
 	let user: IUser;
+	let jwtToken: string;
 	let refreshToken: string;
 
 	beforeEach(async () => {
-		res = {
-			clearCookie: jest.fn(),
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
+		try {
+			user = (await signUpUser()).user;
 
-		user = (await signUpUser()).user;
+			const payload = { id: user._id };
+			jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
+			refreshToken = jwt.sign(payload, refreshTokenSecret, { expiresIn: "7d" });
 
-		const expires = { expiresIn: "7d" };
-		refreshToken = jwt.sign({ id: user._id }, refreshTokenSecret, expires);
-
-		req.cookies.refreshToken = refreshToken;
-		user.refreshTokens.push(refreshToken);
-
-		await user.save();
+			user.refreshTokens.push(refreshToken);
+			await user.save();
+		} catch (err) {
+			throw new Error(err);
+		}
 	});
 
 	it("should clear the jwt cookie and return a successful response", async () => {
-		await postLogout(req, res, next);
+		const res = await request(app)
+			.post(`${apiPath}/auth/logout`)
+			.set("Cookie", [`jwt=${jwtToken}`, `refreshToken=${refreshToken}`])
+			.expect(200);
 
-		expect(res.clearCookie).toHaveBeenCalledWith("jwt", {
-			httpOnly: true,
-			// secure: true,
-			// sameSite: 'none',
-		});
+		const cookies = parseCookies(res.headers["set-cookie"]);
 
-		expect(res.clearCookie).toHaveBeenCalledWith("refreshToken", {
-			httpOnly: true,
-			// secure: true,
-			// sameSite: 'none',
-		});
+		const jwtCookie = cookies[0];
+		expect(jwtCookie).toHaveProperty("jwt", "");
+		expect(jwtCookie["Expires"].getTime()).toBeLessThan(Date.now());
 
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith({
-			message: "User logged out successfully",
-		});
+		const refreshTokenCookie = cookies[1];
+		expect(refreshTokenCookie).toHaveProperty("refreshToken", "");
+		expect(refreshTokenCookie["Expires"].getTime()).toBeLessThan(Date.now());
+
+		expect(res.body).toEqual({ message: "User logged out successfully" });
 
 		const updatedUser = (await User.findById(user._id)) as IUser;
 		expect(updatedUser.refreshTokens).not.toContain(refreshToken);
 	});
 
 	it("should return 401 if no refresh token is provided", async () => {
-		req.cookies.refreshToken = undefined;
-		await postLogout(req, res, next);
+		const res = await request(app)
+			.post(`${apiPath}/auth/logout`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(401);
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
-			message: "Refresh token not found",
-		});
+		expect(res.body).toEqual({ message: "Refresh token not found" });
 
 		const updatedUser = (await User.findById(user._id)) as IUser;
 		expect(updatedUser.refreshTokens).toContain(refreshToken);
 	});
 
 	it("should return 401 if the refresh token is invalid/is not found", async () => {
-		req.cookies.refreshToken = faker.string.uuid();
-		await postLogout(req, res, next);
+		const res = await request(app)
+			.post(`${apiPath}/auth/logout`)
+			.set("Cookie", [`jwt=${jwtToken}`, `refreshToken=${faker.string.uuid()}`])
+			.expect(401);
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
-			message: "Invalid or expired token",
-		});
+		expect(res.body).toEqual({ message: "Invalid or expired token" });
 
 		const updatedUser = (await User.findById(user._id)) as IUser;
 		expect(updatedUser.refreshTokens).toContain(refreshToken);
 	});
 });
 
-// TODO
 describe("GET /currentUser", () => {
-	jest.mock("jsonwebtoken");
+	let user: IUser;
+	let jwtToken: string;
 
-	let res: Response;
-	const req = { cookies: {} } as Request;
-	const next = jest.fn() as NextFunction;
+	beforeEach(async () => {
+		try {
+			user = (await signUpUser()).user;
 
-	beforeEach(() => {
-		res = {
-			clearCookie: jest.fn(),
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
+			const payload = { id: user._id };
+			jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
+		} catch (err) {
+			throw new Error(err);
+		}
 	});
 
 	it("should return isAuthenticated as false if no JWT is provided", async () => {
-		req.cookies = {};
+		const res = await request(app)
+			.get(`${apiPath}/auth/current-user`)
+			.expect(200);
 
-		await getCurrentUser(req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			isAuthenticated: false,
-			message: "No user logged in",
+			message: "You must be logged in to perform this action",
 		});
 	});
 
 	it("should return isAuthenticated as false if the user is not found", async () => {
-		req.cookies = { jwt: "someJwt" };
-		const mockVerify = jest.fn().mockReturnValue({ id: "someUserId" });
-		jest
-			.spyOn(jwt, "verify")
-			.mockImplementation((...args) => mockVerify(...args));
-		jest.spyOn(User, "findById").mockResolvedValue(null);
-		await getCurrentUser(req, res, next);
+		user.isDeleted = true;
+		await user.save();
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
+		const res = await request(app)
+			.get(`${apiPath}/auth/current-user`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(401);
+
+		expect(res.body).toEqual({
 			isAuthenticated: false,
 			message: "User not found",
 		});
 	});
 
 	it("should return the user and isAuthenticated as true if the user is found", async () => {
-		req.cookies = { jwt: "someJwt" };
-		const mockVerify = jest.fn().mockReturnValue({ id: "someUserId" });
-		jest
-			.spyOn(jwt, "verify")
-			.mockImplementation((...args) => mockVerify(...args));
-		const user = { _id: "someUserId", email: "test@example.com" };
-		jest.spyOn(User, "findById").mockResolvedValue(user);
+		user.isDeleted = false;
+		await user.save();
 
-		await getCurrentUser(req, res, next);
+		const res = await request(app)
+			.get(`${apiPath}/auth/current-user`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(200);
 
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith({
-			user,
+		expect(res.body).toEqual({
+			user: expect.objectContaining({
+				_id: user._id.toString(),
+			}),
 			isAuthenticated: true,
 		});
 	});
 
 	it("should return an error if the JWT verification fails", async () => {
-		req.cookies = { jwt: "someJwt" };
-		jest.spyOn(jwt, "verify").mockImplementation(() => {
-			throw new Error("JWT verification failed");
-		});
+		const res = await request(app)
+			.get(`${apiPath}/auth/current-user`)
+			.set("Cookie", [`jwt=${faker.string.uuid()}`])
+			.expect(401);
 
-		await getCurrentUser(req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			isAuthenticated: false,
-			message: "JWT verification failed",
+			message: expect.any(String),
 		});
 	});
 });
 
-// TODO
 describe("POST /refresh-token", () => {
-	let res: Response;
-	const req = { cookies: {} } as Request;
-	const next = jest.fn() as NextFunction;
-
 	let user: IUser;
 	let refreshToken: string;
 
 	beforeEach(async () => {
 		user = (await signUpUser()).user;
 
-		res = {
-			clearCookie: jest.fn(),
-			cookie: jest.fn(),
-			status: jest.fn().mockReturnThis(),
-			json: jest.fn(),
-		} as unknown as Response;
-
 		const payload = { id: user._id };
 		refreshToken = jwt.sign(payload, refreshTokenSecret, {
 			expiresIn: "7d",
 		});
-
-		req.cookies.refreshToken = refreshToken;
 
 		user.refreshTokens.push(refreshToken);
 		await user.save();
 	});
 
 	it("should refresh the tokens and return a successful response", async () => {
-		await postRefreshToken(req, res, next);
+		const res = await request(app)
+			.post(`${apiPath}/auth/refresh-token`)
+			.set("Cookie", [`refreshToken=${refreshToken}`])
+			.expect(200);
 
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith({
-			message: "Refreshed token successfully.",
-		});
+		expect(res.body).toEqual({ message: "Refreshed token successfully." });
 
-		expect(res.cookie).toHaveBeenCalledWith("jwt", expect.any(String), {
-			maxAge: 3600000,
-			httpOnly: true,
-		});
-		expect(res.cookie).toHaveBeenCalledWith(
+		const cookies = parseCookies(res.headers["set-cookie"]);
+
+		const jwtCookie = cookies[0];
+		expect(jwtCookie).toHaveProperty("jwt", expect.any(String));
+		expect(jwtCookie["Expires"].getTime()).toBeGreaterThan(Date.now());
+
+		const refreshTokenCookie = cookies[1];
+		expect(refreshTokenCookie).toHaveProperty(
 			"refreshToken",
 			expect.any(String),
-			{
-				maxAge: 604800000,
-				httpOnly: true,
-			},
 		);
+		expect(refreshTokenCookie["Expires"].getTime()).toBeGreaterThan(Date.now());
 
 		const updatedUser = (await User.findById(user._id)) as IUser;
 		expect(updatedUser.refreshTokens).not.toContain(refreshToken);
@@ -413,156 +394,161 @@ describe("POST /refresh-token", () => {
 	});
 
 	it("should return 401 if no refresh token is provided", async () => {
-		req.cookies = {};
+		const res = await request(app)
+			.post(`${apiPath}/auth/refresh-token`)
+			.expect(401);
 
-		await postRefreshToken(req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "Refresh token not found",
 		});
 	});
 
 	it("should return 401 if the refresh token is invalid or the user does not exist", async () => {
-		req.cookies.refreshToken = faker.string.uuid();
+		const res = await request(app)
+			.post(`${apiPath}/auth/refresh-token`)
+			.set("Cookie", [`refreshToken=${faker.string.uuid()}`])
+			.expect(401);
 
-		await postRefreshToken(req, res, next);
-
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "Invalid or expired token",
 		});
 	});
 
 	it("should return 401 if user associated with token does not exist", async () => {
-		jest.spyOn(User, "findOne").mockImplementation(() => {
-			throw new Error();
-		});
+		user.isDeleted = true;
+		await user.save();
 
-		await postRefreshToken(req, res, next);
+		const res = await request(app)
+			.post(`${apiPath}/auth/refresh-token`)
+			.set("Cookie", [`refreshToken=${refreshToken}`])
+			.expect(401);
 
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
-			message: "Invalid or expired token",
+		expect(res.body).toEqual({
+			message: "User not found or refresh token invalid",
 		});
 	});
 
 	it("should return 500 if there is an error saving the user", async () => {
-		jest
-			.spyOn(User.prototype, "save")
-			.mockRejectedValue(new Error("Test error saving user"));
+		user.isDeleted = false;
+		await user.save();
 
-		await postRefreshToken(req, res, next);
+		jest.spyOn(User.prototype, "save").mockImplementationOnce(() => {
+			throw new Error("Test error saving user");
+		});
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith({
+		const res = await request(app)
+			.post(`${apiPath}/auth/refresh-token`)
+			.set("Cookie", [`refreshToken=${refreshToken}`])
+			.expect(500);
+
+		expect(res.body).toEqual({
 			error: "Test error saving user",
 			message: "An unexpected error occurred while refreshing jwt token.",
 		});
 	});
 });
 
-// TODO
 describe("POST /verify/code/:verificationToken", () => {
-	it("returns 200 and verifies the user if verification code is valid and not expired", async () => {
+	let user: IUser;
+	let jwtToken: string;
+
+	beforeEach(async () => {
 		const { token, tokenExpires, type } = generateRandomTokenEmailOrSms();
-		const req = {
-			user: {
-				verification: { token, tokenExpires, type, isVerified: false },
-				save: jest.fn(),
-			},
-			params: { verificationToken: token },
-		};
-		const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
 
-		await postVerifyCode[1](req, res);
+		try {
+			user = (await signUpUser(undefined, type)).user;
 
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith({
+			user.verification.token = token;
+			user.verification.tokenExpires = tokenExpires;
+			user.verification.type = type;
+			user.verification.isVerified = false;
+			await user.save();
+		} catch (error) {
+			throw new Error(error);
+		}
+
+		const payload = { id: user._id };
+		jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
+	});
+
+	it("returns 200 and verifies the user if verification code is valid and not expired", async () => {
+		const res = await request(app)
+			.post(`${apiPath}/auth/verify/code/${user.verification.token}`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(200);
+
+		expect(res.body).toEqual({
 			message: "Verification successful.",
 		});
-		expect(req.user.save).toHaveBeenCalled();
-		expect(req.user.verification.isVerified).toBe(true);
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(true);
+		expect(updatedUser.verification.token).toBeUndefined();
+		expect(updatedUser.verification.tokenExpires).toBeUndefined();
 	});
 
 	it("returns 400 if verification code is expired.", async () => {
-		const { token, type } = generateRandomTokenEmailOrSms();
-		const tokenExpires = Date.now() - 1000;
-		const req = {
-			user: {
-				verification: { token, tokenExpires, type, isVerified: false },
-				save: jest.fn(),
-			},
-			params: { verificationToken: token },
-		};
-		const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+		user.verification.tokenExpires = Date.now() - 1000;
+		await user.save();
 
-		await postVerifyCode[1](req, res);
+		const res = await request(app)
+			.post(`${apiPath}/auth/verify/code/${user.verification.token}`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(400);
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "Verification code has expired. Please request a new one.",
 		});
-		expect(req.user.verification.isVerified).toBe(false);
-		expect(req.user.save).not.toHaveBeenCalled();
-		expect(req.user.verification.token).not.toBe(token);
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(false);
+		expect(updatedUser.verification.token).toBeUndefined();
+		expect(updatedUser.verification.tokenExpires).toBeUndefined();
 	});
 
 	it("returns 400 if verification code is invalid", async () => {
-		const { token, tokenExpires, type } = generateRandomTokenEmailOrSms();
-		const req = {
-			user: {
-				verification: { token, tokenExpires, type, isVerified: false },
-				save: jest.fn(),
-			},
-			params: { verificationToken: faker.string.uuid() },
-		};
-		const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+		const res = await request(app)
+			.post(`${apiPath}/auth/verify/code/${faker.string.uuid()}`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(400);
 
-		await postVerifyCode[1](req, res);
-
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "Invalid verification code.",
 		});
-		expect(req.user.verification.isVerified).toBe(false);
-		expect(req.user.save).not.toHaveBeenCalled();
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(false);
+		expect(updatedUser.verification.token).toBe(user.verification.token);
+		expect(updatedUser.verification.tokenExpires).not.toBeUndefined();
 	});
 
 	it("returns 401 if user is not logged in", async () => {
-		const req = {
-			user: null,
-			params: { verificationToken: faker.string.uuid() },
-		};
-		const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+		const res = await request(app)
+			.post(`${apiPath}/auth/verify/code/${user.verification.token}`)
+			.expect(401);
 
-		await postVerifyCode[1](req, res);
-
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
-			message: "User not logged in.",
+		expect(res.body).toEqual({
+			message: "You must be logged in to perform this action",
 		});
 	});
 
 	it("returns 401 if user is already verified", async () => {
-		const { token, type, tokenExpires } = generateRandomTokenEmailOrSms();
-		const req = {
-			user: {
-				verification: { token, tokenExpires, type, isVerified: true },
-				save: jest.fn(),
-			},
-			params: { verificationToken: token },
-		};
-		const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+		user.verification.isVerified = true;
+		await user.save();
 
-		await postVerifyCode[1](req, res);
+		const res = await request(app)
+			.post(`${apiPath}/auth/verify/code/${user.verification.token}`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(400);
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "User is already verified.",
 		});
-		expect(req.user.verification.isVerified).toBe(true);
-		expect(req.user.save).not.toHaveBeenCalled();
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(true);
+		expect(updatedUser.verification.token).toBeUndefined();
+		expect(updatedUser.verification.tokenExpires).toBeUndefined();
 	});
 });
 
@@ -571,107 +557,160 @@ describe("POST /verify/link/:verificationToken", () => {
 
 	beforeEach(async () => {
 		const { token, tokenExpires, type } = generateRandomTokenEmailOrSms();
-		const baseUser = generateUser();
-		user = new User({
-			...baseUser,
+		const userData = new User({
+			...generateUser(),
 			verification: { token, tokenExpires, type, isVerified: false },
 		});
+
+		try {
+			user = await userData.save();
+		} catch (error) {
+			console.error(error);
+		}
 	});
 
-	it("returns 200 and verifies the user if verification link is valid and not expired", async () => {
-		await User.create(user);
-		const res = await request(app).get(
-			`/api/v1/auth/verify/link/${user.verification.token}`,
-		);
+	it("returns 302 and verifies the user if verification link is valid and not expired", async () => {
+		const res = await request(app)
+			.get(`${apiPath}/auth/verify/link/${user.verification.token}`)
+			.expect(302);
 
-		expect(res.status).toBe(302);
 		expect(res.header.location).toBe("/login");
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(true);
+		expect(updatedUser.verification.token).toBeUndefined();
+		expect(updatedUser.verification.tokenExpires).toBeUndefined();
 	});
 
 	it("returns 400 if verification link is expired", async () => {
 		user.verification.tokenExpires = Date.now() - 1000;
-		await User.create(user);
+		await user.save();
 
-		const res = await request(app).get(
-			`/api/v1/auth/verify/link/${user.verification.token}`,
-		);
+		const res = await request(app)
+			.get(`${apiPath}/auth/verify/link/${user.verification.token}`)
+			.expect(400);
 
-		expect(res.status).toBe(400);
 		expect(res.body.message).toBe(
 			"Verification link has expired. Please request a new one.",
 		);
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(false);
+		expect(updatedUser.verification.token).toBeUndefined();
+		expect(updatedUser.verification.tokenExpires).toBeUndefined();
 	});
 
 	it("returns 401 if verification link is invalid", async () => {
-		await User.create(user);
+		const res = await request(app)
+			.get(`${apiPath}/auth/verify/link/${faker.string.uuid()}`)
+			.expect(401);
 
-		const res = await request(app).get(
-			`/api/v1/auth/verify/link/${faker.string.uuid()}`,
-		);
-
-		expect(res.status).toBe(401);
 		expect(res.body.message).toBe("Invalid verification link.");
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(false);
+		expect(updatedUser.verification.token).toBe(user.verification.token);
+		expect(updatedUser.verification.tokenExpires).not.toBeUndefined();
 	});
 
 	it("returns 400 if user is already verified", async () => {
 		user.verification.isVerified = true;
-		await User.create(user);
+		await user.save();
 
-		const res = await request(app).get(
-			`/api/v1/auth/verify/link/${user.verification.token}`,
-		);
+		const res = await request(app)
+			.get(`${apiPath}/auth/verify/link/${user.verification.token}`)
+			.expect(400);
 
-		expect(res.status).toBe(400);
 		expect(res.body.message).toBe("User is already verified.");
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(true);
+		expect(updatedUser.verification.token).toBeUndefined();
+		expect(updatedUser.verification.tokenExpires).toBeUndefined();
 	});
 
-	it("returns 401 if user does not exist", async () => {
-		const res = await request(app).get(
-			`/api/v1/auth/verify/link/${user.verification.token}`,
-		);
+	it("returns 401 if user does not exist or is deleted", async () => {
+		user.isDeleted = true;
+		await user.save();
 
-		expect(res.status).toBe(401);
+		const res = await request(app)
+			.get(`${apiPath}/auth/verify/link/${user.verification.token}`)
+			.expect(401);
+
 		expect(res.body.message).toBe("Invalid verification link.");
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(false);
+		expect(updatedUser.verification.token).toBe(user.verification.token);
+		expect(updatedUser.verification.tokenExpires).not.toBeUndefined();
+	});
+
+	it("returns 500 if an error occurs while saving the user", async () => {
+		jest.spyOn(User.prototype, "save").mockImplementationOnce(() => {
+			throw new Error("Test error saving user");
+		});
+
+		const res = await request(app)
+			.get(`${apiPath}/auth/verify/link/${user.verification.token}`)
+			.expect(500);
+
+		expect(res.body).toEqual({
+			message: "Test error saving user",
+		});
+
+		const updatedUser = (await User.findById(user._id)) as IUser;
+		expect(updatedUser.verification.isVerified).toBe(false);
+		expect(updatedUser.verification.token).toBe(user.verification.token);
+		expect(updatedUser.verification.tokenExpires).not.toBeUndefined();
 	});
 });
 
-// TODO
 jest.mock("../src/utils/generateAndSendToken", () => jest.fn());
 describe("POST /verify/resend", () => {
 	let user: IUser;
 	let userIdType: "email" | "phoneNumber";
+	let jwtToken: string;
+
 	beforeEach(async () => {
-		const baseUser = generateUser();
-		const { username } = baseUser;
-		userIdType = username.includes("@") ? "email" : "phoneNumber";
-		const { token, tokenExpires } = generateRandomTokenEmailOrSms(userIdType);
-		user = new User({
+		const { token, tokenExpires, type } = generateRandomTokenEmailOrSms();
+		const baseUser = generateUser(type);
+
+		userIdType = baseUser.username.includes("@") ? "email" : "phoneNumber";
+		const userData = new User({
 			...baseUser,
-			[userIdType]: username,
+			[userIdType]: baseUser.username,
 			verification: {
 				token,
 				tokenExpires,
-				type: userIdType,
+				type,
 				isVerified: false,
 			},
 		});
+
+		try {
+			user = await userData.save();
+		} catch (error) {
+			throw new Error(error);
+		}
+
+		const payload = { id: user._id };
+		jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
 	});
 
 	it("returns 200 and sends a new verification code to the user's email if user is logged in and not verified", async () => {
-		await User.create(user);
+		const res = await request(app)
+			.post(`${apiPath}/auth/verify/resend`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(200);
 
-		const req = { user };
-		const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-
-		await postResendVerificationCode[1](req, res);
-
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith({
-			message: `Verification code sent to user's ${userIdType}: ${user[userIdType]}.`,
+		expect(res.body).toEqual({
+			message: `Verification code sent to user's ${userIdType}: ${
+				user.email || user.phoneNumber
+			}.`,
 		});
 
 		expect(generateAndSendToken).toHaveBeenCalledWith(
-			user,
+			getUserWithoutPassword(user),
 			"verification",
 			userIdType,
 		);
@@ -680,54 +719,46 @@ describe("POST /verify/resend", () => {
 
 	it("returns 400 if user is already verified", async () => {
 		user.verification.isVerified = true;
-		await User.create(user);
+		await user.save();
 
-		const req = { user };
-		const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+		const res = await request(app)
+			.post(`${apiPath}/auth/verify/resend`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(400);
 
-		await postResendVerificationCode[1](req, res);
-
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "User is already verified.",
 		});
 		expect(generateAndSendToken).toHaveBeenCalledTimes(0);
 	});
 
 	it("returns 401 if user is not logged in", async () => {
-		await User.create(user);
+		const res = await request(app)
+			.post(`${apiPath}/auth/verify/resend`)
+			.expect(401);
 
-		const req = { user: undefined };
-		const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-
-		await postResendVerificationCode[1](req, res);
-
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({
-			message: "User is not logged in.",
+		expect(res.body).toEqual({
+			message: "You must be logged in to perform this action",
 		});
 		expect(generateAndSendToken).toHaveBeenCalledTimes(0);
 	});
 
 	it("returns 500 if an error occurs while generating and sending the token", async () => {
-		await User.create(user);
-
-		const req = { user };
-		const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
-
 		(generateAndSendToken as jest.Mock).mockRejectedValueOnce(
 			new Error("Something went wrong."),
 		);
 
-		await postResendVerificationCode[1](req, res);
+		const res = await request(app)
+			.post(`${apiPath}/auth/verify/resend`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.expect(500);
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "Something went wrong.",
 		});
 
 		expect(generateAndSendToken).toHaveBeenCalledWith(
-			user,
+			getUserWithoutPassword(user),
 			"verification",
 			userIdType,
 		);
@@ -737,18 +768,16 @@ describe("POST /verify/resend", () => {
 
 jest.mock("../src/utils/generateAndSendToken", () => jest.fn());
 describe("POST /forgot-password", () => {
-	afterEach(() => jest.restoreAllMocks());
-
 	it("returns 200 and sends a reset password link to the user's email if user exists", async () => {
 		const { user } = await signUpUser();
 
 		const res = await request(app)
-			.post("/api/v1/auth/forgot-password")
+			.post(`${apiPath}/auth/forgot-password`)
 			.send({
 				userId: user.email || user.phoneNumber,
-			});
+			})
+			.expect(200);
 
-		expect(res.status).toBe(200);
 		expect(res.body.message).toBe(
 			"If the account exists, a reset password link was sent.",
 		);
@@ -758,10 +787,10 @@ describe("POST /forgot-password", () => {
 
 	it("returns 400 if no userId is provided", async () => {
 		const res = await request(app)
-			.post("/api/v1/auth/forgot-password")
-			.send({});
+			.post(`${apiPath}/auth/forgot-password`)
+			.send({})
+			.expect(400);
 
-		expect(res.status).toBe(400);
 		expect(res.body.errors).toEqual([
 			{
 				location: "body",
@@ -774,11 +803,12 @@ describe("POST /forgot-password", () => {
 	});
 
 	it("returns 200 but doesn't send token if user does not exist", async () => {
-		const res = await request(app).post("/api/v1/auth/forgot-password").send({
-			userId: faker.internet.email(),
-		});
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.post(`${apiPath}/auth/forgot-password`)
+			.send({
+				userId: faker.internet.email(),
+			})
+			.expect(200);
 		expect(res.body.message).toBe(
 			"If the account exists, a reset password link was sent.",
 		);
@@ -794,12 +824,12 @@ describe("POST /forgot-password", () => {
 		);
 
 		const res = await request(app)
-			.post("/api/v1/auth/forgot-password")
+			.post(`${apiPath}/auth/forgot-password`)
 			.send({
 				userId: user.email || user.phoneNumber,
-			});
+			})
+			.expect(500);
 
-		expect(res.status).toBe(500);
 		expect(res.body.message).toBe("Something went wrong.");
 
 		expect(generateAndSendToken).toHaveBeenCalledTimes(1);
@@ -810,7 +840,6 @@ describe("POST /reset-password:resetToken", () => {
 	let user: IUser;
 	let newPassword: string;
 	let confirmPassword: string;
-	let resetToken: string;
 
 	beforeEach(async () => {
 		const { token, tokenExpires, type } = generateRandomTokenEmailOrSms();
@@ -821,8 +850,6 @@ describe("POST /reset-password:resetToken", () => {
 				type,
 			);
 			user = newUser;
-
-			resetToken = token;
 			newPassword = generatePassword();
 			confirmPassword = newPassword;
 		} catch (err) {
@@ -832,10 +859,10 @@ describe("POST /reset-password:resetToken", () => {
 
 	it("returns 200 and resets the user's password if the reset password token is valid", async () => {
 		const res = await request(app)
-			.post(`/api/v1/auth/reset-password/${resetToken}`)
-			.send({ newPassword, confirmPassword });
+			.post(`${apiPath}/auth/reset-password/${user.resetPassword.token}`)
+			.send({ newPassword, confirmPassword })
+			.expect(200);
 
-		expect(res.status).toBe(200);
 		expect(res.body.message).toBe("Password reset successfully.");
 
 		const updatedUser = await User.findOne({ _id: user._id });
@@ -847,10 +874,10 @@ describe("POST /reset-password:resetToken", () => {
 
 	it("returns 400 if the reset password token is invalid ", async () => {
 		const res = await request(app)
-			.post(`/api/v1/auth/reset-password/${faker.string.uuid()}`)
-			.send({ newPassword, confirmPassword });
+			.post(`${apiPath}/auth/reset-password/${faker.string.uuid()}`)
+			.send({ newPassword, confirmPassword })
+			.expect(400);
 
-		expect(res.status).toBe(400);
 		expect(res.body.message).toBe("Invalid reset password link.");
 
 		const updatedUser = await User.findOne({ _id: user._id });
@@ -875,11 +902,11 @@ describe("POST /reset-password:resetToken", () => {
 
 		const res = await request(app)
 			.post(
-				`/api/v1/auth/reset-password/${userWithExpiredToken.resetPassword.token}`,
+				`${apiPath}/auth/reset-password/${userWithExpiredToken.resetPassword.token}`,
 			)
-			.send({ newPassword, confirmPassword });
+			.send({ newPassword, confirmPassword })
+			.expect(400);
 
-		expect(res.status).toBe(400);
 		expect(res.body.message).toBe(
 			"Reset password link has expired. Please request a new one.",
 		);
@@ -893,10 +920,10 @@ describe("POST /reset-password:resetToken", () => {
 
 	it("returns 400 if the new password does not match the confirm password", async () => {
 		const res = await request(app)
-			.post(`/api/v1/auth/reset-password/${resetToken}`)
-			.send({ newPassword, confirmPassword: newPassword + "1" });
+			.post(`${apiPath}/auth/reset-password/${user.resetPassword.token}`)
+			.send({ newPassword, confirmPassword: newPassword + "1" })
+			.expect(400);
 
-		expect(res.status).toBe(400);
 		expect(res.body.errors).toEqual([
 			{
 				location: "body",
@@ -917,13 +944,13 @@ describe("POST /reset-password:resetToken", () => {
 	it("returns 400 if the new password is not valid", async () => {
 		const invalidPassword = generateInvalidPassword();
 		const res = await request(app)
-			.post(`/api/v1/auth/reset-password/${resetToken}`)
+			.post(`${apiPath}/auth/reset-password/${user.resetPassword.token}`)
 			.send({
 				newPassword: invalidPassword,
 				confirmPassword: invalidPassword,
-			});
+			})
 
-		expect(res.status).toBe(400);
+			.expect(400);
 		expect(res.body.errors).toEqual([
 			{
 				location: "body",
@@ -947,10 +974,10 @@ describe("POST /reset-password:resetToken", () => {
 			.mockRejectedValueOnce(new Error("Something went wrong."));
 
 		const res = await request(app)
-			.post(`/api/v1/auth/reset-password/${resetToken}`)
-			.send({ newPassword, confirmPassword });
+			.post(`${apiPath}/auth/reset-password/${user.resetPassword.token}`)
+			.send({ newPassword, confirmPassword })
 
-		expect(res.status).toBe(500);
+			.expect(500);
 		expect(res.body.message).toBe(
 			"An error occurred while resetting your password.",
 		);
@@ -963,16 +990,13 @@ describe("POST /reset-password:resetToken", () => {
 	});
 });
 
-// TODO
 describe("POST /change-password", () => {
 	let userId: string;
+	let jwtToken: string;
+
+	let oldPassword: string;
 	let newPassword: string;
-	let req: {
-		user: IUser | undefined;
-		body: { oldPassword: string; newPassword: string; confirmPassword: string };
-	};
-	let res: { status: typeof jest.fn; json: typeof jest.fn };
-	const next = jest.fn();
+	let confirmPassword: string;
 
 	beforeEach(async () => {
 		const {
@@ -980,25 +1004,27 @@ describe("POST /change-password", () => {
 			password,
 		} = await signUpUser();
 		userId = _id;
-		const user = (await User.findOne({ _id })) as IUser;
 
+		oldPassword = password;
 		newPassword = generatePassword();
-		req = {
-			user,
-			body: {
-				oldPassword: password,
-				newPassword,
-				confirmPassword: newPassword,
-			},
-		};
-		res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+		confirmPassword = newPassword;
+
+		const payload = { id: userId };
+		jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
 	});
 
 	it("returns 200 and changes the user's password if the current password is valid", async () => {
-		await postChangePassword[4](req, res);
+		const res = await request(app)
+			.post(`${apiPath}/auth/change-password`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.send({
+				oldPassword,
+				newPassword,
+				confirmPassword,
+			})
+			.expect(200);
 
-		expect(res.status).toHaveBeenCalledWith(200);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "Password changed successfully.",
 		});
 
@@ -1009,15 +1035,18 @@ describe("POST /change-password", () => {
 		expect(isMatch).toBe(true);
 	});
 
-	it("returns 400 if the current password is not valid", async () => {
-		req.body.oldPassword = req.body.oldPassword + "1";
+	it("returns 400 if the old password is not correct", async () => {
+		const res = await request(app)
+			.post(`${apiPath}/auth/change-password`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.send({
+				oldPassword: oldPassword + "1",
+				newPassword,
+				confirmPassword,
+			})
+			.expect(400);
 
-		for (let i = 1; i <= 4; i++) {
-			await postChangePassword[i](req, res, next);
-		}
-
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({ message: "Incorrect password." });
+		expect(res.body).toEqual({ message: "Incorrect password." });
 
 		const updatedUser = await User.findOne({ _id: userId });
 		if (!updatedUser) throw new Error("User not found.");
@@ -1027,20 +1056,23 @@ describe("POST /change-password", () => {
 	});
 
 	it("returns 400 if the new password does not match the confirm password", async () => {
-		req.body.confirmPassword = req.body.confirmPassword + "1";
+		const res = await request(app)
+			.post(`${apiPath}/auth/change-password`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.send({
+				oldPassword,
+				newPassword,
+				confirmPassword: newPassword + "1",
+			})
+			.expect(400);
 
-		for (let i = 1; i <= 4; i++) {
-			await postChangePassword[i](req, res, next);
-		}
-
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			errors: [
 				{
 					location: "body",
 					msg: "Passwords do not match",
 					path: "confirmPassword",
-					value: req.body.confirmPassword,
+					value: newPassword + "1",
 					type: "field",
 				},
 			],
@@ -1055,15 +1087,18 @@ describe("POST /change-password", () => {
 
 	it("returns 400 if the new password is not valid", async () => {
 		const invalidPassword = generateInvalidPassword();
-		req.body.newPassword = invalidPassword;
-		req.body.confirmPassword = invalidPassword;
 
-		for (let i = 1; i <= 4; i++) {
-			await postChangePassword[i](req, res, next);
-		}
+		const res = await request(app)
+			.post(`${apiPath}/auth/change-password`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.send({
+				oldPassword,
+				newPassword: invalidPassword,
+				confirmPassword: invalidPassword,
+			})
+			.expect(400);
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			errors: [
 				{
 					location: "body",
@@ -1087,12 +1122,17 @@ describe("POST /change-password", () => {
 			.spyOn(User.prototype, "save")
 			.mockRejectedValueOnce(new Error("Something went wrong."));
 
-		for (let i = 1; i <= 4; i++) {
-			await postChangePassword[i](req, res, next);
-		}
+		const res = await request(app)
+			.post(`${apiPath}/auth/change-password`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.send({
+				oldPassword,
+				newPassword,
+				confirmPassword,
+			})
+			.expect(500);
 
-		expect(res.status).toHaveBeenCalledWith(500);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "An error occurred while changing your password.",
 		});
 
@@ -1104,45 +1144,56 @@ describe("POST /change-password", () => {
 	});
 
 	it("returns 401 if the user is not logged in", async () => {
-		req.user = undefined;
+		const res = await request(app)
+			.post(`${apiPath}/auth/change-password`)
+			.send({
+				oldPassword,
+				newPassword,
+				confirmPassword,
+			})
+			.expect(401);
 
-		for (let i = 1; i <= 4; i++) {
-			await postChangePassword[i](req, res, next);
-		}
-
-		expect(res.status).toHaveBeenCalledWith(401);
-		expect(res.json).toHaveBeenCalledWith({ message: "User not logged in" });
+		expect(res.body).toEqual({
+			message: "You must be logged in to perform this action",
+		});
 	});
 
 	it("returns 400 if the user uses an alternative log in method", async () => {
-		if (!req.user) throw new Error("User not found.");
-		req.user.password = undefined;
+		await User.findOneAndUpdate({ _id: userId }, { $set: { password: "" } });
 
-		for (let i = 1; i <= 4; i++) {
-			await postChangePassword[i](req, res, next);
-		}
+		const res = await request(app)
+			.post(`${apiPath}/auth/change-password`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.send({
+				oldPassword,
+				newPassword,
+				confirmPassword,
+			})
+			.expect(400);
 
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			message: "User uses an alternative log in method.",
 		});
 	});
 
 	it("returns 400 if the old password is empty", async () => {
-		req.body.oldPassword = "";
+		const res = await request(app)
+			.post(`${apiPath}/auth/change-password`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.send({
+				oldPassword: "",
+				newPassword,
+				confirmPassword,
+			})
+			.expect(400);
 
-		for (let i = 1; i <= 4; i++) {
-			await postChangePassword[i](req, res, next);
-		}
-
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			errors: [
 				{
 					location: "body",
 					msg: "Invalid value",
 					path: "oldPassword",
-					value: req.body.oldPassword,
+					value: "",
 					type: "field",
 				},
 			],
@@ -1150,15 +1201,17 @@ describe("POST /change-password", () => {
 	});
 
 	it("returns 400 if the new password is empty", async () => {
-		req.body.newPassword = "";
-		req.body.confirmPassword = "";
+		const res = await request(app)
+			.post(`${apiPath}/auth/change-password`)
+			.set("Cookie", [`jwt=${jwtToken}`])
+			.send({
+				oldPassword,
+				newPassword: "",
+				confirmPassword: "",
+			})
+			.expect(400);
 
-		for (let i = 1; i <= 4; i++) {
-			await postChangePassword[i](req, res, next);
-		}
-
-		expect(res.status).toHaveBeenCalledWith(400);
-		expect(res.json).toHaveBeenCalledWith({
+		expect(res.body).toEqual({
 			errors: [
 				{
 					location: "body",
@@ -1194,19 +1247,18 @@ describe("POST /change-password", () => {
 });
 
 describe("GET /login/facebook", () => {
-	afterEach(() => jest.clearAllMocks());
-
 	it("should return 302 and redirect to Facebook", async () => {
 		jest
 			.spyOn(passport, "authenticate")
-			.mockImplementation(() => (req: Request, res: Response) => {
+			.mockImplementationOnce(() => (req: Request, res: Response) => {
 				res.redirect("https://www.facebook.com");
 			});
 
-		const response = await request(app).get("/api/v1/auth/login/facebook");
+		const res = await request(app)
+			.get(`${apiPath}/auth/login/facebook`)
+			.expect(302);
 
-		expect(response.status).toBe(302);
-		expect(response.headers.location).toContain("https://www.facebook.com");
+		expect(res.headers.location).toContain("https://www.facebook.com");
 	});
 });
 
@@ -1214,14 +1266,15 @@ describe("GET /login/google", () => {
 	it("should return 200 and redirect to Google", async () => {
 		jest
 			.spyOn(passport, "authenticate")
-			.mockImplementation(() => (req: Request, res: Response) => {
+			.mockImplementationOnce(() => (req: Request, res: Response) => {
 				res.redirect("https://www.google.com");
 			});
 
-		const response = await request(app).get("/api/v1/auth/login/google");
+		const res = await request(app)
+			.get(`${apiPath}/auth/login/google`)
+			.expect(302);
 
-		expect(response.status).toBe(302);
-		expect(response.headers.location).toContain(
+		expect(res.headers.location).toContain(
 			"https://accounts.google.com/o/oauth2/",
 		);
 	});
@@ -1231,15 +1284,15 @@ describe("GET /login/github", () => {
 	it("should return 200 and redirect to Github", async () => {
 		jest
 			.spyOn(passport, "authenticate")
-
-			.mockImplementation(() => (req: Request, res: Response) => {
+			.mockImplementationOnce(() => (req: Request, res: Response) => {
 				res.redirect("https://www.github.com");
 			});
 
-		const response = await request(app).get("/api/v1/auth/login/github");
+		const res = await request(app)
+			.get(`${apiPath}/auth/login/github`)
+			.expect(302);
 
-		expect(response.status).toBe(302);
-		expect(response.headers.location).toContain(
+		expect(res.headers.location).toContain(
 			"https://github.com/login/oauth/authorize",
 		);
 	});

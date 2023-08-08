@@ -35,9 +35,9 @@
 					</div>
 
 					<div class="fl pad1y space-right2">
-						<span class="strong">100% </span>
+						<span class="strong">91.66% </span>
 						<span class="quiet">Branches</span>
-						<span class="fraction">12/12</span>
+						<span class="fraction">11/12</span>
 					</div>
 
 					<div class="fl pad1y space-right2">
@@ -221,7 +221,7 @@ const getPostData = (users: ObjectId[], options?: ICreatePostOptions) =&gt; ({
 	feeling: faker.datatype.boolean(0.2) ? getRandValueFromArray(feelings) : null,
 	media: faker.datatype.boolean(0.25) ? faker.image.urlLoremFlickr() : null,
 	checkIn: faker.datatype.boolean(0.1)
-		? {
+		? <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
 				longitude: faker.location.longitude(),
 				latitude: faker.location.latitude(),
 		  }
@@ -253,7 +253,7 @@ export default getPostData;
 				rel="noopener noreferrer"
 				>istanbul</a
 			>
-			at 2023-08-05T03:32:23.340Z
+			at 2023-08-07T23:38:55.454Z
 		</div>
 		<script src="../../../../prettify.js"></script>
 		<script>

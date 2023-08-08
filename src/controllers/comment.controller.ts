@@ -2,13 +2,13 @@ import { body, validationResult } from "express-validator";
 import { Request, Response } from "express";
 import debug from "debug";
 import expressAsyncHandler from "express-async-handler";
-import passport from "passport";
 import { ObjectId, startSession } from "mongoose";
 
 import Comment from "../models/comment.model";
 import Reaction, { reactionTypes } from "../models/reaction.model";
 import { IUser } from "../models/user-model/user.model";
 import Post from "../models/post.model";
+import { authenticateJwt } from "../middleware/authConfig";
 
 const log = debug("log:comment:controller");
 const errorLog = debug("error:comment:controller");
@@ -149,7 +149,7 @@ export const getCommentById = expressAsyncHandler(
 // @route   POST /posts/:post/comments
 // @access  Private
 export const createComment = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	body("content").trim().notEmpty().withMessage("Comment content is required"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -159,10 +159,6 @@ export const createComment = [
 		}
 
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		const authorId = user._id;
 		const { post } = req.params;
@@ -229,10 +225,10 @@ export const createComment = [
 ];
 
 // @desc    Update comment
-// @route   PUT posts/:post/comments/:id
+// @route   PATCH posts/:post/comments/:id
 // @access  Private
 export const updateComment = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	body("content").trim().notEmpty().withMessage("Comment content is required"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -242,10 +238,6 @@ export const updateComment = [
 		}
 
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		try {
 			const [post, comment] = await Promise.all([
@@ -285,14 +277,9 @@ export const updateComment = [
 // @route   DELETE posts/:post/comments/:id
 // @access  Private
 export const deleteComment = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		try {
 			const [post, comment] = await Promise.all([
@@ -334,7 +321,7 @@ export const deleteComment = [
 // @route   POST posts/:post/comments/:id/reply
 // @access  Private
 export const createCommentReply = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	body("content")
 		.trim()
 		.isLength({ min: 1, max: 500 })
@@ -347,10 +334,6 @@ export const createCommentReply = [
 		}
 
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		const session = await startSession();
 		session.startTransaction();
@@ -405,7 +388,7 @@ export const createCommentReply = [
 // @route   POST posts/:post/comments/:id/react
 // @access  Private
 export const reactToComment = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -415,10 +398,6 @@ export const reactToComment = [
 		}
 
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		const { type } = req.body;
 
@@ -472,13 +451,9 @@ export const reactToComment = [
 // @route   DELETE posts/:post/comments/:id/unreact
 // @access  Private
 export const unreactToComment = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		try {
 			const [post, comment] = await Promise.all([

@@ -2,7 +2,7 @@ import passport from "passport";
 import passportLocal from "passport-local";
 import User, { IUser } from "../models/user-model/user.model";
 import passportJwt from "passport-jwt";
-import { Request, Application } from "express";
+import { Request, Application, NextFunction, Response } from "express";
 import {
 	appUrl,
 	facebookAppId,
@@ -32,40 +32,38 @@ const cookieExtractor = (req: Request): string | null => {
 	return req && req.cookies ? req.cookies["jwt"] : null;
 };
 
-const configAuth = (app: Application) => {
-	app.use(async function checkUserRoleAndValidity(req, res, next) {
-		const user = req.user as IUser;
-
-		if (!user || user.userType !== "guest") next();
-		else {
-			if (user?.validUntil && user.validUntil < Date.now()) {
-				try {
-					await User.findByIdAndDelete(user._id);
-
-					res.clearCookie("jwt", {
-						httpOnly: true,
-						// secure: true,
-						// sameSite: "none",
-					});
-
-					res.status(403).json({ message: "Guest session has expired." });
-				} catch (err) {
-					log(err);
-					res.status(500).json({ message: "Error deleting guest user." });
-					return;
-				}
-				return;
-			} else {
-				next();
+export const authenticateJwt = (
+	req: Request,
+	res: Response,
+	next: NextFunction,
+) => {
+	passport.authenticate(
+		"jwt",
+		{ session: false },
+		(err: Error, user: IUser) => {
+			if (err) {
+				log(err);
+				return next(err);
 			}
-		}
-	});
 
+			if (!user) {
+				res
+					.status(401)
+					.json({ message: "You must be logged in to perform this action" });
+				return;
+			}
+			req.user = user;
+			next();
+		},
+	)(req, res, next);
+};
+
+const configAuth = (app: Application) => {
 	passport.use(
 		new LocalStrategy(async (username, password, done) => {
 			try {
 				const loginType = username.includes("@") ? "email" : "phoneNumber";
-				const user = await User.findOne({ [loginType]: username }).exec();
+				const user = await User.findOne({ [loginType]: username });
 				if (!user)
 					return done(null, false, {
 						message: "User with this email/phone not found",
@@ -94,8 +92,8 @@ const configAuth = (app: Application) => {
 			},
 			async (jwtPayload, done) => {
 				try {
-					const user = await User.findById(jwtPayload.id);
-					if (!user) return done(null, false, { message: "Incorrect email" });
+					const user = await User.findById(jwtPayload?._id);
+					if (!user) return done(null, false);
 
 					const { password: _, ...userWithoutPassword } = user.toObject();
 
@@ -117,7 +115,7 @@ const configAuth = (app: Application) => {
 			},
 			async (accessToken, refreshToken, profile, done) => {
 				try {
-					let user = await User.findOne({ facebookId: profile.id }).exec();
+					let user = await User.findOne({ facebookId: profile.id });
 
 					if (!user) {
 						const email = profile.emails && profile.emails[0].value;
@@ -221,6 +219,34 @@ const configAuth = (app: Application) => {
 			},
 		),
 	);
+
+	app.use(async function checkUserRoleAndValidity(req, res, next) {
+		const user = req.user as IUser;
+
+		if (!user || user.userType !== "guest") next();
+		else {
+			if (user?.validUntil && user.validUntil < Date.now()) {
+				try {
+					await User.findByIdAndDelete(user._id);
+
+					res.clearCookie("jwt", {
+						httpOnly: true,
+						// secure: true,
+						// sameSite: "none",
+					});
+
+					res.status(403).json({ message: "Guest session has expired." });
+				} catch (err) {
+					log(err);
+					res.status(500).json({ message: "Error deleting guest user." });
+					return;
+				}
+				return;
+			} else {
+				next();
+			}
+		}
+	});
 
 	app.use(passport.initialize());
 };

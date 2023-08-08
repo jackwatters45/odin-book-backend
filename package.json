@@ -19,7 +19,8 @@
 	"scripts": {
 		"test": "NODE_ENV=test jest -i --coverage",
 		"test:dev": "DEBUG=log* NODE_ENV=test jest -i --detectOpenHandles",
-		"test:file": "DEBUG=log* NODE_ENV=test jest --detectOpenHandles -- /tests/post.test.ts",
+		"test:file": "DEBUG=log* NODE_ENV=test jest --detectOpenHandles -- /tests/user.test.ts",
+		"test:file:error": "DEBUG=error* NODE_ENV=test jest --detectOpenHandles -- /tests/auth.test.ts",
 		"build": "rimraf dist && tsc",
 		"start": "node dist/index.js",
 		"dev": "nodemon src/index.ts",

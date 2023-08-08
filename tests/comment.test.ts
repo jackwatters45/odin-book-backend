@@ -1,16 +1,19 @@
-import express, { NextFunction, Response } from "express";
+import express from "express";
 import request from "supertest";
 import { ObjectId } from "mongodb";
 import { Schema } from "mongoose";
 import debug from "debug";
+import jwt from "jsonwebtoken";
 
+import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
+import configRoutes from "../src/routes";
+import configAuth from "../src/middleware/authConfig";
+import configOtherMiddleware from "../src/middleware/otherConfig";
 import { configDb, disconnectFromDatabase } from "../src/config/database";
+import Reaction from "../src/models/reaction.model";
 import { IUser } from "../src/models/user-model/user.model";
 import Post, { IPost } from "../src/models/post.model";
-import Reaction from "../src/models/reaction.model";
 import Comment, { IComment } from "../src/models/comment.model";
-import configRoutes from "../src/routes";
-import configOtherMiddleware from "../src/middleware/otherConfig";
 import {
 	createRandomUser,
 	createUsers,
@@ -19,10 +22,8 @@ import {
 	createRandomPost,
 	createPosts,
 } from "../tools/populateDbs/posts/populatePosts";
-import { apiPath } from "../src/config/envVariables";
+import { apiPath, jwtSecret } from "../src/config/envVariables";
 import { addRepliesToComment } from "../tools/populateDbs/posts/utils/addRepliesToComment";
-import IRequestWithUser from "../types/IRequestWithUser";
-import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
 
 const log = debug("log:comment:test");
 
@@ -31,14 +32,28 @@ const app = express();
 const users: IUser[] = [];
 const posts: IPost[] = [];
 
+let standardUser: IUser;
+let standardUserJwt: string | undefined;
+let randomJwt: string | undefined;
+
 let postNoComments: IPost;
-const numUsers = 5;
+const numUsers = 3;
 beforeAll(async () => {
 	await configDb();
-
 	await clearDatabase();
+	await configAuth(app);
 
 	users.push(...((await createUsers(numUsers)) as IUser[]));
+
+	standardUser = await createRandomUser();
+	standardUserJwt = jwt.sign({ id: standardUser._id }, jwtSecret, {
+		expiresIn: "1h",
+	});
+
+	randomJwt = jwt.sign({ id: users[0]._id }, jwtSecret, {
+		expiresIn: "1h",
+	});
+
 	posts.push(...((await createPosts(numUsers + 1)) as IPost[]));
 	const randomPost = await createRandomPost({ includeComments: false });
 	if (!randomPost) throw new Error("randomPost is undefined");
@@ -48,27 +63,12 @@ beforeAll(async () => {
 	configRoutes(app);
 }, 10000);
 
-// Mock Passport Authentication
-let userUndefined = false;
-let randomUser = false;
-
-jest.mock("passport", () => ({
-	authenticate: jest.fn((strategy, options) => {
-		return async (req: IRequestWithUser, res: Response, next: NextFunction) => {
-			if (userUndefined) req.user = undefined;
-			else if (randomUser) req.user = (await createRandomUser()) as IUser;
-			else (req.user = users[0]) as IUser;
-			next();
-		};
-	}),
-}));
-
 describe("GET /posts/:post/comments", () => {
 	it("should return 200 and an array of comments", async () => {
 		const post = posts[0];
-		const res = await request(app).get(`${apiPath}/posts/${post._id}/comments`);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments`)
+			.expect(200);
 
 		expect(res.body.comments).toHaveLength(post.comments.length);
 		expect(res.body.comments).toEqual(
@@ -89,11 +89,9 @@ describe("GET /posts/:post/comments", () => {
 
 	it("should return 200 and an array of comments with limit", async () => {
 		const post = posts[0];
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments?limit=1`,
-		);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments?limit=1`)
+			.expect(200);
 
 		expect(res.body.comments).toHaveLength(1);
 		expect(res.body.comments).toEqual(
@@ -115,11 +113,9 @@ describe("GET /posts/:post/comments", () => {
 	it("should return 200 and an array of comments with offset", async () => {
 		const post = posts[0];
 		const firstCommentId = post.comments[0];
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments?offset=1`,
-		);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments?offset=1`)
+			.expect(200);
 
 		expect(res.body.comments).toHaveLength(post.comments.length - 1);
 		expect(res.body.comments).toEqual(
@@ -149,11 +145,9 @@ describe("GET /posts/:post/comments", () => {
 	it("should return 200 and an array of comments with limit and offset", async () => {
 		const post = posts[0];
 		const firstCommentId = post.comments[0];
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments?limit=1&offset=1`,
-		);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments?limit=1&offset=1`)
+			.expect(200);
 
 		expect(res.body.comments).toHaveLength(1);
 		expect(res.body.comments).toEqual(
@@ -182,9 +176,9 @@ describe("GET /posts/:post/comments", () => {
 
 	it("should return 200 and an empty array of comments if post has no comments", async () => {
 		const post = postNoComments;
-		const res = await request(app).get(`${apiPath}/posts/${post._id}/comments`);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments`)
+			.expect(200);
 
 		expect(res.body.comments).toHaveLength(0);
 		expect(res.body.meta).toEqual(
@@ -196,11 +190,9 @@ describe("GET /posts/:post/comments", () => {
 	});
 
 	it("should return 404 if post does not exist", async () => {
-		const res = await request(app).get(
-			`${apiPath}/posts/${new ObjectId()}/comments`,
-		);
-
-		expect(res.status).toBe(404);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${new ObjectId()}/comments`)
+			.expect(404);
 		expect(res.body.message).toBe("Post not found");
 	});
 
@@ -209,11 +201,9 @@ describe("GET /posts/:post/comments", () => {
 			throw new Error("error");
 		});
 
-		const res = await request(app).get(
-			`${apiPath}/posts/${new ObjectId()}/comments`,
-		);
-
-		expect(res.status).toBe(500);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${new ObjectId()}/comments`)
+			.expect(500);
 		expect(res.body).toHaveProperty("message");
 	});
 });
@@ -237,11 +227,9 @@ describe("GET /posts/:post/comments/:id/replies", () => {
 	});
 
 	it("should return 200 and an array of replies", async () => {
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${comment}/replies`,
-		);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments/${comment}/replies`)
+			.expect(200);
 
 		expect(res.body.replies).toHaveLength(numReplies);
 		expect(res.body.replies).toEqual(
@@ -255,11 +243,9 @@ describe("GET /posts/:post/comments/:id/replies", () => {
 	});
 
 	it("should return 200 and an array of replies with limit", async () => {
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${comment}/replies?limit=1`,
-		);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments/${comment}/replies?limit=1`)
+			.expect(200);
 
 		expect(res.body.replies).toHaveLength(1);
 		expect(res.body.replies).toEqual(
@@ -274,11 +260,9 @@ describe("GET /posts/:post/comments/:id/replies", () => {
 	});
 
 	it("should return 200 and an array of replies with offset", async () => {
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${comment}/replies?offset=1`,
-		);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments/${comment}/replies?offset=1`)
+			.expect(200);
 
 		expect(res.body.replies).toHaveLength(numReplies - 1);
 		expect(res.body.replies).toEqual(
@@ -292,11 +276,11 @@ describe("GET /posts/:post/comments/:id/replies", () => {
 	});
 
 	it("should return 200 and an array of replies with limit and offset", async () => {
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${comment}/replies?limit=1&offset=1`,
-		);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(
+				`${apiPath}/posts/${post._id}/comments/${comment}/replies?limit=1&offset=1`,
+			)
+			.expect(200);
 
 		expect(res.body.replies).toHaveLength(1);
 		expect(res.body.replies).toEqual(
@@ -313,29 +297,25 @@ describe("GET /posts/:post/comments/:id/replies", () => {
 	it("should return 200 and an empty array of replies if comment has no replies", async () => {
 		const post = posts[1];
 		const comment = post.comments[0];
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${comment}/replies`,
-		);
-
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments/${comment}/replies`)
+			.expect(200);
 		expect(res.body.replies).toHaveLength(0);
 	});
 
 	it("should return 404 if post does not exist", async () => {
-		const res = await request(app).get(
-			`${apiPath}/posts/${new ObjectId()}/comments/${new ObjectId()}/replies`,
-		);
-
-		expect(res.status).toBe(404);
+		const res = await request(app)
+			.get(
+				`${apiPath}/posts/${new ObjectId()}/comments/${new ObjectId()}/replies`,
+			)
+			.expect(404);
 		expect(res.body.message).toBe("Post not found");
 	});
 
 	it("should return 404 if comment does not exist", async () => {
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${new ObjectId()}/replies`,
-		);
-
-		expect(res.status).toBe(404);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments/${new ObjectId()}/replies`)
+			.expect(404);
 		expect(res.body.message).toBe("Comment not found");
 	});
 
@@ -344,11 +324,9 @@ describe("GET /posts/:post/comments/:id/replies", () => {
 			throw new Error("error");
 		});
 
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${comment}/replies`,
-		);
-
-		expect(res.status).toBe(500);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments/${comment}/replies`)
+			.expect(500);
 		expect(res.body).toHaveProperty("message");
 	});
 });
@@ -357,11 +335,10 @@ describe("GET /posts/:post/comments/:id", () => {
 	it("should return 200 and a comment", async () => {
 		const post = posts[0];
 		const comment = post.comments[0];
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${comment}`,
-		);
 
-		expect(res.status).toBe(200);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments/${comment}`)
+			.expect(200);
 
 		expect(res.body).toEqual(
 			expect.objectContaining({
@@ -375,21 +352,17 @@ describe("GET /posts/:post/comments/:id", () => {
 	});
 
 	it("should return 404 if post does not exist", async () => {
-		const res = await request(app).get(
-			`${apiPath}/posts/${new ObjectId()}/comments/${new ObjectId()}`,
-		);
-
-		expect(res.status).toBe(404);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${new ObjectId()}/comments/${new ObjectId()}`)
+			.expect(404);
 		expect(res.body.message).toBe("Post not found");
 	});
 
 	it("should return 404 if comment does not exist", async () => {
 		const post = posts[0];
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${new ObjectId()}`,
-		);
-
-		expect(res.status).toBe(404);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments/${new ObjectId()}`)
+			.expect(404);
 		expect(res.body.message).toBe("Comment not found");
 	});
 
@@ -400,25 +373,24 @@ describe("GET /posts/:post/comments/:id", () => {
 
 		const post = posts[0];
 		const comment = post.comments[0];
-		const res = await request(app).get(
-			`${apiPath}/posts/${post._id}/comments/${comment}`,
-		);
-
-		expect(res.status).toBe(500);
+		const res = await request(app)
+			.get(`${apiPath}/posts/${post._id}/comments/${comment}`)
+			.expect(500);
 		expect(res.body).toHaveProperty("message");
 	});
 });
 
 describe("POST /posts/:post/comments", () => {
 	let post: IPost;
-	beforeEach(() => (post = posts[0]));
+	beforeAll(() => (post = posts[0]));
 
 	it("should return 201 and a comment", async () => {
 		const res = await request(app)
 			.post(`${apiPath}/posts/${post._id}/comments`)
-			.send({ content: "test comment" });
+			.send({ content: "test comment" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(201);
 
-		expect(res.status).toBe(201);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Comment created",
@@ -426,7 +398,7 @@ describe("POST /posts/:post/comments", () => {
 					post: post._id.toString(),
 					content: "test comment",
 					author: expect.objectContaining({
-						_id: users[0]._id.toString(),
+						_id: standardUser._id.toString(),
 					}),
 				}),
 			}),
@@ -436,9 +408,9 @@ describe("POST /posts/:post/comments", () => {
 	it("should return 400 if content is empty", async () => {
 		const res = await request(app)
 			.post(`${apiPath}/posts/${post._id}/comments`)
-			.send({ content: "" });
-
-		expect(res.status).toBe(400);
+			.send({ content: "" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(400);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				errors: expect.arrayContaining([
@@ -451,20 +423,16 @@ describe("POST /posts/:post/comments", () => {
 	});
 
 	it("should return 401 if no user is logged in", async () => {
-		userUndefined = true;
-
 		const res = await request(app)
 			.post(`${apiPath}/posts/${post._id}/comments`)
-			.send({ content: "test comment" });
+			.send({ content: "test comment" })
+			.expect(401);
 
-		expect(res.status).toBe(401);
 		expect(res.body).toEqual(
 			expect.objectContaining({
-				message: "No user logged in",
+				message: "You must be logged in to perform this action",
 			}),
 		);
-
-		userUndefined = false;
 	});
 
 	it("should return 500 if error occurs", async () => {
@@ -474,9 +442,9 @@ describe("POST /posts/:post/comments", () => {
 
 		const res = await request(app)
 			.post(`${apiPath}/posts/${post._id}/comments`)
-			.send({ content: "test comment" });
-
-		expect(res.status).toBe(500);
+			.send({ content: "test comment" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(500);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "error",
@@ -485,24 +453,23 @@ describe("POST /posts/:post/comments", () => {
 	});
 });
 
-describe("PUT /posts/:post/comments/:id", () => {
+describe("PATCH /posts/:post/comments/:id", () => {
 	let post: IPost;
 	let comment: IComment;
-	let user: IUser;
 
-	beforeAll(() => (user = users[0]));
-	beforeEach(async () => {
-		comment = (await Comment.findOne({ author: user._id })) as IComment;
+	beforeAll(async () => {
+		comment = (await Comment.findOne({ author: standardUser._id })) as IComment;
 		post = posts.find((post) => post.comments.includes(comment._id)) as IPost;
 	});
 
 	it("should return 201 and a comment", async () => {
 		const content = "edited test comment";
 		const res = await request(app)
-			.put(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
-			.send({ content });
+			.patch(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
+			.send({ content })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(201);
 
-		expect(res.status).toBe(201);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Comment updated",
@@ -516,10 +483,11 @@ describe("PUT /posts/:post/comments/:id", () => {
 
 	it("should return 400 if content is empty", async () => {
 		const res = await request(app)
-			.put(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
-			.send({ content: "" });
+			.patch(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
+			.send({ content: "" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(400);
 
-		expect(res.status).toBe(400);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				errors: expect.arrayContaining([
@@ -532,45 +500,38 @@ describe("PUT /posts/:post/comments/:id", () => {
 	});
 
 	it("should return 401 if no user is logged in", async () => {
-		userUndefined = true;
-
 		const res = await request(app)
-			.put(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
-			.send({ content: "test comment" });
+			.patch(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
+			.send({ content: "test comment" })
+			.expect(401);
 
-		expect(res.status).toBe(401);
 		expect(res.body).toEqual(
 			expect.objectContaining({
-				message: "No user logged in",
+				message: "You must be logged in to perform this action",
 			}),
 		);
-
-		userUndefined = false;
 	});
 
 	it("should return 403 if user is not the original commenter", async () => {
-		randomUser = true;
-
 		const res = await request(app)
-			.put(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
-			.send({ content: "test comment" });
-
-		expect(res.status).toBe(403);
+			.patch(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
+			.send({ content: "test comment" })
+			.set("Cookie", [`jwt=${randomJwt}`])
+			.expect(403);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "You must be the original commenter to edit a comment",
 			}),
 		);
-
-		randomUser = false;
 	});
 
 	it("should return 404 if post does not exist", async () => {
 		const res = await request(app)
-			.put(`${apiPath}/posts/${new ObjectId()}/comments/${comment._id}`)
-			.send({ content: "test comment" });
+			.patch(`${apiPath}/posts/${new ObjectId()}/comments/${comment._id}`)
+			.send({ content: "test comment" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(404);
 
-		expect(res.status).toBe(404);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Post not found",
@@ -580,10 +541,11 @@ describe("PUT /posts/:post/comments/:id", () => {
 
 	it("should return 404 if comment does not exist", async () => {
 		const res = await request(app)
-			.put(`${apiPath}/posts/${post._id}/comments/${new ObjectId()}`)
-			.send({ content: "test comment" });
+			.patch(`${apiPath}/posts/${post._id}/comments/${new ObjectId()}`)
+			.send({ content: "test comment" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(404);
 
-		expect(res.status).toBe(404);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Comment not found",
@@ -597,10 +559,11 @@ describe("PUT /posts/:post/comments/:id", () => {
 		});
 
 		const res = await request(app)
-			.put(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
-			.send({ content: "test comment" });
+			.patch(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
+			.send({ content: "test comment" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(500);
 
-		expect(res.status).toBe(500);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "error",
@@ -612,72 +575,61 @@ describe("PUT /posts/:post/comments/:id", () => {
 describe("DELETE /posts/:post/comments/:id", () => {
 	let post: IPost;
 	let comment: IComment;
-	let user: IUser;
 
-	beforeAll(() => (user = users[0]));
-	beforeEach(async () => {
-		comment = (await Comment.findOne({ author: user._id })) as IComment;
+	beforeAll(async () => {
+		comment = (await Comment.findOne({ author: standardUser._id })) as IComment;
 		post = posts.find((post) => post.comments.includes(comment._id)) as IPost;
 	});
 
 	it("should return 200 and a comment", async () => {
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${comment._id}`,
-		);
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(200);
 
-		expect(res.status).toBe(200);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Comment deleted successfully",
 				comment: expect.objectContaining({
 					content: "[deleted]",
 					post: post._id.toString(),
-					author: user._id.toString(),
+					author: standardUser._id.toString(),
 				}),
 			}),
 		);
 	});
 
 	it("should return 401 if no user is logged in", async () => {
-		userUndefined = true;
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
+			.expect(401);
 
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${comment._id}`,
-		);
-
-		expect(res.status).toBe(401);
 		expect(res.body).toEqual(
 			expect.objectContaining({
-				message: "No user logged in",
+				message: "You must be logged in to perform this action",
 			}),
 		);
-
-		userUndefined = false;
 	});
 
 	it("should return 403 if user is not the original commenter", async () => {
-		randomUser = true;
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
+			.set("Cookie", [`jwt=${randomJwt}`])
+			.expect(403);
 
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${comment._id}`,
-		);
-
-		expect(res.status).toBe(403);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Not authorized",
 			}),
 		);
-
-		randomUser = false;
 	});
 
 	it("should return 404 if post does not exist", async () => {
-		const res = await request(app).delete(
-			`${apiPath}/posts/${new ObjectId()}/comments/${comment._id}`,
-		);
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${new ObjectId()}/comments/${comment._id}`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(404);
 
-		expect(res.status).toBe(404);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Post not found",
@@ -686,11 +638,11 @@ describe("DELETE /posts/:post/comments/:id", () => {
 	});
 
 	it("should return 404 if comment does not exist", async () => {
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${new ObjectId()}`,
-		);
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${new ObjectId()}`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(404);
 
-		expect(res.status).toBe(404);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Comment not found",
@@ -703,11 +655,11 @@ describe("DELETE /posts/:post/comments/:id", () => {
 			throw new Error("error");
 		});
 
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${comment._id}`,
-		);
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${comment._id}`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(500);
 
-		expect(res.status).toBe(500);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "error",
@@ -718,14 +670,20 @@ describe("DELETE /posts/:post/comments/:id", () => {
 
 describe("POST /posts/:post/comments/:id/react", () => {
 	let post: IPost;
-	beforeEach(async () => (post = posts[0]));
+	let comment: IComment;
+
+	beforeAll(async () => {
+		post = posts[0];
+		comment = (await Comment.findById(post.comments[0])) as IComment;
+	});
 
 	it("should return 201 and a comment", async () => {
 		const res = await request(app)
-			.post(`${apiPath}/posts/${post._id}/comments/${post.comments[0]}/react`)
-			.send({ type: "like" });
+			.post(`${apiPath}/posts/${post._id}/comments/${comment._id}/react`)
+			.send({ type: "like" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(201);
 
-		expect(res.status).toBe(201);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Reaction added",
@@ -739,10 +697,11 @@ describe("POST /posts/:post/comments/:id/react", () => {
 
 	it("should return 400 if type is invalid", async () => {
 		const res = await request(app)
-			.post(`${apiPath}/posts/${post._id}/comments/${post.comments[0]}/react`)
-			.send({ type: "invalid" });
+			.post(`${apiPath}/posts/${post._id}/comments/${comment._id}/react`)
+			.send({ type: "invalid" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(400);
 
-		expect(res.status).toBe(400);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				errors: expect.arrayContaining([
@@ -755,30 +714,25 @@ describe("POST /posts/:post/comments/:id/react", () => {
 	});
 
 	it("should return 401 if no user is logged in", async () => {
-		userUndefined = true;
-
 		const res = await request(app)
-			.post(`${apiPath}/posts/${post._id}/comments/${post.comments[0]}/react`)
-			.send({ type: "like" });
+			.post(`${apiPath}/posts/${post._id}/comments/${comment._id}/react`)
+			.send({ type: "like" })
+			.expect(401);
 
-		expect(res.status).toBe(401);
 		expect(res.body).toEqual(
 			expect.objectContaining({
-				message: "No user logged in",
+				message: "You must be logged in to perform this action",
 			}),
 		);
-
-		userUndefined = false;
 	});
 
 	it("should return 404 if post does not exist", async () => {
 		const res = await request(app)
-			.post(
-				`${apiPath}/posts/${new ObjectId()}/comments/${post.comments[0]}/react`,
-			)
-			.send({ type: "like" });
+			.post(`${apiPath}/posts/${new ObjectId()}/comments/${comment._id}/react`)
+			.send({ type: "like" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(404);
 
-		expect(res.status).toBe(404);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Post not found",
@@ -789,9 +743,10 @@ describe("POST /posts/:post/comments/:id/react", () => {
 	it("should return 404 if comment does not exist", async () => {
 		const res = await request(app)
 			.post(`${apiPath}/posts/${post._id}/comments/${new ObjectId()}/react`)
-			.send({ type: "like" });
+			.send({ type: "like" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(404);
 
-		expect(res.status).toBe(404);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Comment not found",
@@ -805,10 +760,11 @@ describe("POST /posts/:post/comments/:id/react", () => {
 		});
 
 		const res = await request(app)
-			.post(`${apiPath}/posts/${post._id}/comments/${post.comments[0]}/react`)
-			.send({ type: "like" });
+			.post(`${apiPath}/posts/${post._id}/comments/${comment._id}/react`)
+			.send({ type: "like" })
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(500);
 
-		expect(res.status).toBe(500);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "error",
@@ -817,7 +773,7 @@ describe("POST /posts/:post/comments/:id/react", () => {
 	});
 });
 
-describe("POST /posts/:post/comments/:id/unreact", () => {
+describe("DELETE /posts/:post/comments/:id/unreact", () => {
 	let post: IPost;
 	let comment: IComment;
 
@@ -826,13 +782,12 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 			path: "comments",
 			populate: { path: "reactions" },
 		})) as IPost;
-
 		comment = post.comments[0] as unknown as IComment;
 	});
 	beforeEach(async () => {
 		const reaction = new Reaction({
 			type: "like",
-			user: users[0]._id,
+			user: standardUser._id,
 			parent: comment._id,
 		});
 
@@ -840,11 +795,11 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	});
 
 	it("should return 201 and a comment", async () => {
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`,
-		);
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(201);
 
-		expect(res.status).toBe(201);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Reaction removed",
@@ -852,7 +807,7 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 					post: post._id.toString(),
 					reactions: expect.not.arrayContaining([
 						expect.objectContaining({
-							user: users[0]._id.toString(),
+							user: standardUser._id.toString(),
 						}),
 					]),
 				}),
@@ -861,27 +816,25 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	});
 
 	it("should return 401 if no user is logged in", async () => {
-		userUndefined = true;
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`,
-		);
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`)
+			.expect(401);
 
-		expect(res.status).toBe(401);
 		expect(res.body).toEqual(
 			expect.objectContaining({
-				message: "No user logged in",
+				message: "You must be logged in to perform this action",
 			}),
 		);
-
-		userUndefined = false;
 	});
 
 	it("should return 404 if post does not exist", async () => {
-		const res = await request(app).delete(
-			`${apiPath}/posts/${new ObjectId()}/comments/${comment._id}/unreact`,
-		);
+		const res = await request(app)
+			.delete(
+				`${apiPath}/posts/${new ObjectId()}/comments/${comment._id}/unreact`,
+			)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(404);
 
-		expect(res.status).toBe(404);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Post not found",
@@ -890,11 +843,11 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	});
 
 	it("should return 404 if comment does not exist", async () => {
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${new ObjectId()}/unreact`,
-		);
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${new ObjectId()}/unreact`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(404);
 
-		expect(res.status).toBe(404);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "Comment not found",
@@ -902,21 +855,22 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 		);
 	});
 
-	it("should return 404 if reaction does not exist", async () => {
-		randomUser = true;
+	it("should return 404 if user has not reacted", async () => {
+		await Reaction.deleteOne({ user: users[0]._id });
+		await Comment.findByIdAndUpdate(comment._id, {
+			$pull: { reactions: { user: users[0]._id } },
+		});
 
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`,
-		);
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`)
+			.set("Cookie", [`jwt=${randomJwt}`])
+			.expect(404);
 
-		expect(res.status).toBe(404);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "User has not reacted to this comment",
 			}),
 		);
-
-		randomUser = false;
 	});
 
 	it("should return 500 if error occurs", async () => {
@@ -924,11 +878,11 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 			throw new Error("error");
 		});
 
-		const res = await request(app).delete(
-			`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`,
-		);
+		const res = await request(app)
+			.delete(`${apiPath}/posts/${post._id}/comments/${comment._id}/unreact`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(500);
 
-		expect(res.status).toBe(500);
 		expect(res.body).toEqual(
 			expect.objectContaining({
 				message: "error",
@@ -937,5 +891,4 @@ describe("POST /posts/:post/comments/:id/unreact", () => {
 	});
 });
 
-afterEach(() => jest.restoreAllMocks());
 afterAll(async () => await disconnectFromDatabase());

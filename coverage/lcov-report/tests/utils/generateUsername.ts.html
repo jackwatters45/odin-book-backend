@@ -75,11 +75,11 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">48x</span>
-<span class="cline-any cline-yes">48x</span>
+<span class="cline-any cline-yes">58x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">58x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -87,10 +87,10 @@
 &nbsp;
 export type usernameType = "email" | "phoneNumber";
 &nbsp;
-// returns a valid email or phone number as username
 export const generateUsername = (usernameType?: usernameType): string =&gt; {
 	const type =
-		usernameType || faker.datatype.boolean(0.5) ? "email" : "phoneNumber";
+		usernameType || (faker.datatype.boolean(0.5) ? "email" : "phoneNumber");
+&nbsp;
 	return type === "email"
 		? faker.internet.email()
 		: faker.phone.number("+1##########");
@@ -109,7 +109,7 @@ export const generateUsername = (usernameType?: usernameType): string =&gt; {
 				rel="noopener noreferrer"
 				>istanbul</a
 			>
-			at 2023-08-05T03:32:23.340Z
+			at 2023-08-07T23:38:55.454Z
 		</div>
 		<script src="../../prettify.js"></script>
 		<script>

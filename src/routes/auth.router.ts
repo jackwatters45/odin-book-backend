@@ -40,24 +40,6 @@ router.get("/current-user", getCurrentUser);
 // /refresh-token
 router.post("/refresh-token", postRefreshToken);
 
-// /login/facebook
-router.get("/login/facebook", getLoginFacebook);
-
-// /login/facebook/callback
-router.get("/login/facebook/callback", getLoginFacebookCallback);
-
-// /login/google
-router.get("/login/google", getLoginGoogle);
-
-// /login/google/callback
-router.get("/login/google/callback", getLoginGoogleCallback);
-
-// /login/github
-router.get("/login/github", getLoginGithub);
-
-// /login/github/callback
-router.get("/login/github/callback", getLoginGithubCallback);
-
 // /verify/code/:verificationToken
 router.post("/verify/code/:verificationToken", postVerifyCode);
 
@@ -75,5 +57,23 @@ router.post("/reset-password/:resetToken", postResetPassword);
 
 // /change-password
 router.post("/change-password", postChangePassword);
+
+// /login/facebook
+router.get("/login/facebook", getLoginFacebook);
+
+// /login/facebook/callback
+router.get("/login/facebook/callback", getLoginFacebookCallback);
+
+// /login/google
+router.get("/login/google", getLoginGoogle);
+
+// /login/google/callback
+router.get("/login/google/callback", getLoginGoogleCallback);
+
+// /login/github
+router.get("/login/github", getLoginGithub);
+
+// /login/github/callback
+router.get("/login/github/callback", getLoginGithubCallback);
 
 export default router;

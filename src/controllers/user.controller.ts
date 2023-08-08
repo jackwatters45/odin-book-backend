@@ -1,5 +1,4 @@
 import expressAsyncHandler from "express-async-handler";
-import passport from "passport";
 import { Request, Response } from "express";
 import { body, validationResult } from "express-validator";
 import debug from "debug";
@@ -7,6 +6,7 @@ import debug from "debug";
 import User, { IUser } from "../models/user-model/user.model";
 import Post from "../models/post.model";
 import Comment from "../models/comment.model";
+import { authenticateJwt } from "../middleware/authConfig";
 
 const log = debug("log:user:controller");
 const errorLog = debug("error:user:controller");
@@ -63,13 +63,9 @@ export const getUserById = expressAsyncHandler(
 // @route   GET /users/:id/deleted
 // @access  Admin
 export const getDeletedUserById = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "User not logged in" });
-			return;
-		}
 
 		if (user.userType !== "admin") {
 			res.status(403).json({ message: "Unauthorized" });
@@ -107,7 +103,7 @@ export const getDeletedUserById = [
 // @route   POST /users
 // @access  Admin
 export const createUser = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	body("firstName")
 		.trim()
 		.notEmpty()
@@ -158,11 +154,6 @@ export const createUser = [
 		}
 
 		const reqUser = req.user as IUser;
-		if (!reqUser) {
-			res.status(401).json({ message: "User not logged in" });
-			return;
-		}
-
 		if (reqUser.userType !== "admin") {
 			res.status(403).json({ message: "Unauthorized" });
 			return;
@@ -210,7 +201,7 @@ export const createUser = [
 // @route   PATCH /users/:id/password
 // @access  Admin
 export const updateUserPassword = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	body("newPassword")
 		.notEmpty()
 		.trim()
@@ -240,10 +231,6 @@ export const updateUserPassword = [
 		}
 
 		const reqUser = req.user as IUser;
-		if (!reqUser) {
-			res.status(401).json({ message: "User not logged in" });
-			return;
-		}
 
 		if (reqUser.userType !== "admin") {
 			res.status(403).json({ message: "Unauthorized" });
@@ -252,7 +239,6 @@ export const updateUserPassword = [
 
 		try {
 			const user = await User.findById(req.params.id);
-
 			if (!user) {
 				res.status(404).json({ message: "User not found" });
 				return;
@@ -273,7 +259,7 @@ export const updateUserPassword = [
 // @route   PATCH /users/:id/basic
 // @access  Private
 export const updateUserBasicInfo = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	body("firstName")
 		.trim()
 		.notEmpty()
@@ -320,10 +306,6 @@ export const updateUserBasicInfo = [
 		}
 
 		const reqUser = req.user as IUser;
-		if (!reqUser) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		const userId = String(req.params.id);
 		if (String(reqUser._id) !== userId && reqUser.userType !== "admin") {
@@ -422,13 +404,9 @@ export const getUserFriends = expressAsyncHandler(
 // @route   GET /users/:id/saved-posts
 // @access  Private
 export const getUserSavedPosts = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "User not logged in" });
-			return;
-		}
 
 		const userId = String(req.params.id);
 		if (userId !== user.id && user.userType !== "admin") {
@@ -451,7 +429,8 @@ export const getUserSavedPosts = [
 					],
 				})
 				.select("savedPosts isDeleted")
-				.sort({ createdAt: -1 });
+				.sort({ createdAt: -1 })
+				.exec();
 
 			if (!userSavedPosts) {
 				res.status(404).json({ message: "User not found" });
@@ -487,15 +466,9 @@ export const getUserSavedPosts = [
 // @route   POST /users/:id/friend-requests
 // @access  Private
 export const sendFriendRequest = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
-		if (!reqUser) {
-			res
-				.status(401)
-				.json({ message: "You must be logged in to perform this action" });
-			return;
-		}
 
 		const userId = String(req.params.id);
 		if (String(reqUser._id) === userId) {
@@ -518,20 +491,20 @@ export const sendFriendRequest = [
 				return;
 			}
 
-			const reqUserData = reqUser.toObject() as IUser;
 			const userAlreadySentRequest =
 				userToFollow.friendRequestsReceived.includes(reqUser._id) ||
-				reqUserData.friendRequestsSent.includes(userToFollow._id);
+				reqUser.friendRequestsSent.includes(userToFollow._id);
 			if (userAlreadySentRequest) {
 				res.status(400).json({ message: "Friend request already sent" });
 				return;
 			}
 
 			userToFollow.friendRequestsReceived.push(reqUser._id);
-			reqUser.friendRequestsSent.push(userToFollow._id);
-
 			await userToFollow.save();
-			await reqUser.save();
+
+			await User.findByIdAndUpdate(reqUser._id, {
+				$addToSet: { friendRequestsSent: userToFollow._id },
+			});
 
 			res.status(200).json({ message: "Friend request sent successfully" });
 		} catch (error) {
@@ -545,16 +518,10 @@ export const sendFriendRequest = [
 // @route   DELETE /users/me/friends/:friendId
 // @access  Private
 export const unfriendUser = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
 		const userToUnfriendId = String(req.params.friendId);
-		if (!reqUser) {
-			res
-				.status(401)
-				.json({ message: "You must be logged in to perform this action" });
-			return;
-		}
 
 		if (String(reqUser._id) === userToUnfriendId) {
 			res.status(400).json({ message: "Cannot remove self as friend" });
@@ -576,14 +543,16 @@ export const unfriendUser = [
 			}
 
 			const userToRemoveIndex = userToRemove.friends.indexOf(reqUser._id);
-			const reqUserIndex = reqUser.friends.indexOf(userToRemove._id);
-
 			userToRemove.friends.splice(userToRemoveIndex, 1);
-
-			const updatedFriendsList = reqUser.friends.splice(reqUserIndex, 1);
-
 			await userToRemove.save();
-			await reqUser.save();
+
+			const updatedFriendsList = await User.findByIdAndUpdate(
+				reqUser._id,
+				{
+					$pull: { friends: userToRemove._id },
+				},
+				{ new: true },
+			).select("friends");
 
 			res.status(200).json({
 				message: "Friend removed successfully",
@@ -600,15 +569,9 @@ export const unfriendUser = [
 // @route   POST /users/me/friend-requests/:requestId/accept
 // @access  Private
 export const acceptFriendRequest = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
-		if (!reqUser) {
-			res
-				.status(401)
-				.json({ message: "You must be logged in to perform this action" });
-			return;
-		}
 
 		const requestId = String(req.params.requestId);
 		try {
@@ -676,17 +639,10 @@ export const acceptFriendRequest = [
 // @route   POST /users/me/friend-requests/:requestId/reject
 // @access  Private
 export const rejectFriendRequest = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
 		const requestId = String(req.params.requestId);
-
-		if (!reqUser) {
-			res
-				.status(401)
-				.json({ message: "You must be logged in to perform this action" });
-			return;
-		}
 
 		try {
 			const userToReject = await User.findById(requestId, { password: 0 });

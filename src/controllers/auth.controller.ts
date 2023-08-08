@@ -8,6 +8,7 @@ import debug from "debug";
 import User, { IUser } from "../models/user-model/user.model";
 import { jwtSecret, nodeEnv, refreshTokenSecret } from "../config/envVariables";
 import generateAndSendToken from "../utils/generateAndSendToken";
+import { authenticateJwt } from "../middleware/authConfig";
 
 const log = debug("log:auth:controller");
 const errorLog = debug("error:auth:controller");
@@ -264,19 +265,21 @@ export const postLogout = expressAsyncHandler(
 export const getCurrentUser = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const token = req.cookies.jwt;
-
 		if (!token) {
-			res
-				.status(200)
-				.json({ isAuthenticated: false, message: "No user logged in" });
+			res.status(200).json({
+				isAuthenticated: false,
+				message: "You must be logged in to perform this action",
+			});
 			return;
 		}
 
 		try {
-			const decoded = jwt.verify(token, jwtSecret) as { id: string };
-			const userId = decoded.id;
+			const { id } = jwt.verify(token, jwtSecret) as { id: string };
 
-			const user = await User.findById(userId, { password: 0 });
+			const user = await User.findOne(
+				{ _id: id, isDeleted: false },
+				{ password: 0 },
+			);
 			if (!user) {
 				res
 					.status(401)
@@ -306,7 +309,7 @@ export const postRefreshToken = expressAsyncHandler(
 		let user: IUser | null = null;
 		try {
 			const { id } = jwt.verify(token, refreshTokenSecret) as { id: string };
-			user = await User.findById(id, { password: 0 });
+			user = await User.findOne({ _id: id, isDeleted: false }, { password: 0 });
 			if (!user || user.refreshTokens.indexOf(token) === -1) {
 				res
 					.status(401)
@@ -355,86 +358,50 @@ export const postRefreshToken = expressAsyncHandler(
 	},
 );
 
-// @desc    Login with Facebook
-// @route   GET /login/facebook
-// @access  Public
-export const getLoginFacebook = passport.authenticate("facebook", {
-	scope: ["email"],
-});
-
-export const getLoginFacebookCallback = [
-	passport.authenticate("facebook", {
-		successRedirect: "/",
-		failureRedirect: "/login",
-		session: false,
-	}),
-	(req: Request, res: Response) => {
-		handleUserLogin(res, req.user as IUser);
-	},
-];
-
-// @desc    Login with Google
-// @route   GET /login/google
-// @access  Public
-export const getLoginGoogle = passport.authenticate("google", {
-	scope: ["profile", "email"],
-});
-
-export const getLoginGoogleCallback = [
-	passport.authenticate("google", {
-		successRedirect: "/",
-		failureRedirect: "/login",
-		session: false,
-	}),
-	(req: Request, res: Response) => {
-		handleUserLogin(res, req.user as IUser);
-	},
-];
-
-// @desc    Login with Github
-// @route   GET /login/github
-// @access  Public
-export const getLoginGithub = passport.authenticate("github", {
-	scope: ["user:email"],
-});
-
-export const getLoginGithubCallback = [
-	passport.authenticate("github", {
-		failureRedirect: "/login",
-		session: false,
-	}),
-	(req: Request, res: Response) => {
-		handleUserLogin(res, req.user as IUser);
-	},
-];
-
 // @desc    Verify user using code
 // @route   POST /verify/code/:verificationToken
 // @access  Private
 export const postVerifyCode = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
-		const { verificationToken } = req.params;
-		const user = req.user as IUser;
-
-		if (!user) {
-			res.status(401).json({ message: "User not logged in." });
+		const loggedInUser = req.user as IUser;
+		if (!loggedInUser) {
+			res
+				.status(401)
+				.json({ message: "You must be logged in to perform this action" });
 			return;
 		}
 
-		if (user.verification.isVerified) {
-			res.status(400).json({ message: "User is already verified." });
-			return;
-		}
+		try {
+			const user = await User.findById(loggedInUser._id);
+			if (!user) {
+				res.status(404).json({ message: "User not found." });
+				return;
+			}
 
-		const { verification } = user;
-		if (verification && verification.token === verificationToken) {
+			if (user.verification.isVerified) {
+				res.status(400).json({ message: "User is already verified." });
+				// shouldn't be possible that user is verified but token is not undefined
+				user.verification.token = undefined;
+				user.verification.tokenExpires = undefined;
+				await user.save();
+				return;
+			}
+
+			const { verificationToken } = req.params;
+			const { verification } = user;
+			if (verification.token !== verificationToken) {
+				res.status(400).json({ message: "Invalid verification code." });
+				return;
+			}
+
 			if (verification.tokenExpires && verification.tokenExpires < Date.now()) {
 				res.status(400).json({
 					message: "Verification code has expired. Please request a new one.",
 				});
 				user.verification.token = undefined;
 				user.verification.tokenExpires = undefined;
+				await user.save();
 				return;
 			}
 
@@ -442,17 +409,14 @@ export const postVerifyCode = [
 			user.verification.token = undefined;
 			user.verification.tokenExpires = undefined;
 
-			try {
-				await user.save();
-				res.status(200).json({ message: "Verification successful." });
-			} catch (error) {
-				errorLog(error);
-				res
-					.status(500)
-					.json({ message: "An error occurred while verifying your account." });
-			}
-		} else {
-			res.status(400).json({ message: "Invalid verification code." });
+			await user.save();
+			res.status(200).json({ message: "Verification successful." });
+		} catch (error) {
+			errorLog(error);
+			res.status(500).json({
+				message:
+					error.message || "An error occurred while verifying your account.",
+			});
 		}
 	}),
 ];
@@ -467,6 +431,7 @@ export const getVerifyLink = expressAsyncHandler(
 		try {
 			const user = await User.findOne({
 				"verification.token": verificationToken,
+				isDeleted: false,
 			});
 
 			if (!user) {
@@ -475,19 +440,24 @@ export const getVerifyLink = expressAsyncHandler(
 			}
 
 			if (user.verification.isVerified) {
+				user.verification.token = undefined;
+				user.verification.tokenExpires = undefined;
+				await user.save();
 				res.status(400).json({ message: "User is already verified." });
 				return;
 			}
 
 			const { verification } = user;
 			if (verification.tokenExpires && verification.tokenExpires < Date.now()) {
+				user.verification.token = undefined;
+				user.verification.tokenExpires = undefined;
+				await user.save();
 				res.status(400).json({
 					message: "Verification link has expired. Please request a new one.",
 				});
 				return;
 			}
 
-			// Mark user as verified
 			user.verification.isVerified = true;
 			user.verification.token = undefined;
 			user.verification.tokenExpires = undefined;
@@ -498,7 +468,7 @@ export const getVerifyLink = expressAsyncHandler(
 			errorLog(err);
 			res
 				.status(500)
-				.json({ message: "An error occurred while verifying your account." });
+				.json({ message: err.message || "An error occurred while verifying." });
 		}
 	},
 );
@@ -507,16 +477,12 @@ export const getVerifyLink = expressAsyncHandler(
 // @route   POST /verify/resend
 // @access  Private
 export const postResendVerificationCode = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
-		if (!user) {
-			res.status(401).json({ message: "User is not logged in." });
-			return;
-		}
-
 		const { isVerified, type } = user.verification;
+
 		if (isVerified) {
 			res.status(400).json({
 				message: "User is already verified.",
@@ -655,7 +621,7 @@ export const postResetPassword = [
 // @route   POST /change-password
 // @access  Private
 export const postChangePassword = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	body("newPassword")
 		.notEmpty()
 		.trim()
@@ -685,9 +651,12 @@ export const postChangePassword = [
 			return;
 		}
 
-		const user = req.user as IUser;
+		const reqUser = req.user as IUser;
+		const user = await User.findById(reqUser?._id).select("password");
 		if (!user) {
-			res.status(401).json({ message: "User not logged in" });
+			res
+				.status(401)
+				.json({ message: "You must be logged in to perform this action" });
 			return;
 		}
 
@@ -717,4 +686,57 @@ export const postChangePassword = [
 				.json({ message: "An error occurred while changing your password." });
 		}
 	}),
+];
+
+// @desc    Login with Facebook
+// @route   GET /login/facebook
+// @access  Public
+export const getLoginFacebook = passport.authenticate("facebook", {
+	scope: ["email"],
+});
+
+export const getLoginFacebookCallback = [
+	passport.authenticate("facebook", {
+		successRedirect: "/",
+		failureRedirect: "/login",
+		session: false,
+	}),
+	(req: Request, res: Response) => {
+		handleUserLogin(res, req.user as IUser);
+	},
+];
+
+// @desc    Login with Google
+// @route   GET /login/google
+// @access  Public
+export const getLoginGoogle = passport.authenticate("google", {
+	scope: ["profile", "email"],
+});
+
+export const getLoginGoogleCallback = [
+	passport.authenticate("google", {
+		successRedirect: "/",
+		failureRedirect: "/login",
+		session: false,
+	}),
+	(req: Request, res: Response) => {
+		handleUserLogin(res, req.user as IUser);
+	},
+];
+
+// @desc    Login with Github
+// @route   GET /login/github
+// @access  Public
+export const getLoginGithub = passport.authenticate("github", {
+	scope: ["user:email"],
+});
+
+export const getLoginGithubCallback = [
+	passport.authenticate("github", {
+		failureRedirect: "/login",
+		session: false,
+	}),
+	(req: Request, res: Response) => {
+		handleUserLogin(res, req.user as IUser);
+	},
 ];

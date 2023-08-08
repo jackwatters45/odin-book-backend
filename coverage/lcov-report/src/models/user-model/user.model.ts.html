@@ -23,15 +23,15 @@
 				</h1>
 				<div class="clearfix">
 					<div class="fl pad1y space-right2">
-						<span class="strong">100% </span>
+						<span class="strong">95.23% </span>
 						<span class="quiet">Statements</span>
-						<span class="fraction">21/21</span>
+						<span class="fraction">20/21</span>
 					</div>
 
 					<div class="fl pad1y space-right2">
-						<span class="strong">100% </span>
+						<span class="strong">85.71% </span>
 						<span class="quiet">Branches</span>
-						<span class="fraction">7/7</span>
+						<span class="fraction">6/7</span>
 					</div>
 
 					<div class="fl pad1y space-right2">
@@ -392,16 +392,16 @@
 <span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">58x</span>
-<span class="cline-any cline-yes">56x</span>
+<span class="cline-any cline-yes">57x</span>
+<span class="cline-any cline-yes">57x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">100x</span>
-<span class="cline-any cline-yes">100x</span>
-<span class="cline-any cline-yes">71x</span>
+<span class="cline-any cline-yes">116x</span>
+<span class="cline-any cline-yes">116x</span>
+<span class="cline-any cline-yes">73x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-yes">116x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">4x</span>
@@ -568,7 +568,7 @@ UserSchema.path("friendRequestsReceived").default([]);
 UserSchema.path("refreshTokens").default([]);
 &nbsp;
 UserSchema.virtual("fullName").get(function (this: IUser) {
-	if (!this.firstName || !this.lastName) return "";
+	<span class="missing-if-branch" title="if path not taken" >I</span>if (!this.firstName || !this.lastName) <span class="cstat-no" title="statement not covered" >return "";</span>
 	return `${this.firstName} ${this.lastName}`;
 });
 &nbsp;
@@ -601,7 +601,7 @@ export default model&lt;IUser&gt;("User", UserSchema);
 				rel="noopener noreferrer"
 				>istanbul</a
 			>
-			at 2023-08-05T03:32:23.340Z
+			at 2023-08-07T23:38:55.454Z
 		</div>
 		<script src="../../../prettify.js"></script>
 		<script>

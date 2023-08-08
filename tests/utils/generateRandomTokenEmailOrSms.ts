@@ -6,7 +6,7 @@ type tokenType = "email" | "phoneNumber";
 
 const generateRandomTokenEmailOrSms = (tokenType?: tokenType) => {
 	const type: tokenType =
-		tokenType || faker.datatype.boolean(0.5) ? "email" : "phoneNumber";
+		tokenType || (faker.datatype.boolean(0.5) ? "email" : "phoneNumber");
 	const { token, tokenExpires } =
 		type === "email" ? generateTokenEmail() : generateTokenSMS();
 

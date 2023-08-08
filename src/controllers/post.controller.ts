@@ -3,7 +3,6 @@ import { Request, Response } from "express";
 // import { v2 as cloudinary } from "cloudinary";
 // import uploadToCloudinary from "../utils/uploadToCloudinary";
 import { ObjectId } from "mongoose";
-import passport from "passport";
 import debug from "debug";
 
 import Post from "../models/post.model";
@@ -12,6 +11,7 @@ import expressAsyncHandler from "express-async-handler";
 // import { calculateStartTime } from "../utils/calculateStartTime";
 import postValidation from "./utils/postValidation";
 import Reaction, { reactionTypes } from "../models/reaction.model";
+import { authenticateJwt } from "../middleware/authConfig";
 // import resizeImages from "../utils/resizeImages";
 
 const log = debug("log:post:controller");
@@ -84,7 +84,7 @@ export const getPostById = expressAsyncHandler(
 // @route   POST /posts
 // @access  Private
 export const createPost = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	...postValidation,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -94,10 +94,6 @@ export const createPost = [
 		}
 
 		const author = req.user as IUser;
-		if (!author) {
-			res.status(401).json({ message: "Author is required" });
-			return;
-		}
 
 		const {
 			published,
@@ -139,7 +135,7 @@ export const createPost = [
 // @route   PATCH /posts/:id
 // @access  Private
 export const updatePost = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	...postValidation,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -149,10 +145,6 @@ export const updatePost = [
 		}
 
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		const {
 			published,
@@ -203,14 +195,10 @@ export const updatePost = [
 // @route   DELETE /posts/:id
 // @access  Private
 export const deletePost = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		try {
 			const user = req.user as IUser;
-			if (!user) {
-				res.status(401).json({ message: "No user logged in" });
-				return;
-			}
 
 			const post = await Post.findById(req.params.id);
 			if (!post) {
@@ -237,7 +225,7 @@ export const deletePost = [
 // @route   PATCH /posts/:id/react
 // @access  Private
 export const reactToPost = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -247,10 +235,6 @@ export const reactToPost = [
 		}
 
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		const { type } = req.body;
 
@@ -295,13 +279,9 @@ export const reactToPost = [
 // @route   DELETE /posts/:id/unreact
 // @access  Private
 export const unreactToPost = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		try {
 			const post = await Post.findById(req.params.id);
@@ -366,13 +346,9 @@ export const getPostReactions = expressAsyncHandler(
 // @route   PATCH /posts/saved-posts/:id
 // @access  Private
 export const toggleSavedPost = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		try {
 			const post = await Post.findById(req.params.id);
@@ -406,13 +382,9 @@ export const toggleSavedPost = [
 // @route   GET /posts/saved-posts
 // @access  Private
 export const getSavedPosts = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		try {
 			const posts = await Post.find({ _id: { $in: user.savedPosts } })
@@ -430,13 +402,9 @@ export const getSavedPosts = [
 // @route   POST /posts/:id/share
 // @access  Private
 export const sharePost = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		try {
 			const post = await Post.findById(req.params.id);
@@ -465,13 +433,9 @@ export const sharePost = [
 // @route   GET /posts/friends
 // @access  Private
 export const getPostsByFriends = [
-	passport.authenticate("jwt", { session: false }),
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "No user logged in" });
-			return;
-		}
 
 		try {
 			const match = {
