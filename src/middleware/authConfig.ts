@@ -119,6 +119,13 @@ const configAuth = (app: Application) => {
 
 					if (!user) {
 						const email = profile.emails && profile.emails[0].value;
+						const alreadyExists = await User.findOne({ email });
+						if (alreadyExists) {
+							return done(null, false, {
+								message: "Email already registered using another method",
+							});
+						}
+
 						user = new User({
 							email: email,
 							firstName: profile.name?.givenName,
@@ -155,6 +162,13 @@ const configAuth = (app: Application) => {
 						const email = profile.emails && profile.emails[0].value;
 						const avatar =
 							(profile.photos && profile.photos[0].value) ?? undefined;
+
+						const alreadyExists = await User.findOne({ email });
+						if (alreadyExists) {
+							return done(null, false, {
+								message: "Email already registered using another method",
+							});
+						}
 
 						user = new User({
 							email: email,
@@ -194,6 +208,14 @@ const configAuth = (app: Application) => {
 
 					if (!user) {
 						const email = profile.emails && profile.emails[0].value;
+
+						const alreadyExists = await User.findOne({ email });
+						if (alreadyExists) {
+							return done(null, false, {
+								message: "Email already registered using another method",
+							});
+						}
+
 						const avatar =
 							(profile.photos && profile.photos[0].value) ?? undefined;
 						const displayName = profile?.displayName.split(" ");

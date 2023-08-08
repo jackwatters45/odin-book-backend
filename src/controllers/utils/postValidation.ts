@@ -34,7 +34,7 @@ const postValidation = [
 		.optional()
 		.isArray()
 		.withMessage("Tagged users must be an array")
-		.custom((value) => Types.ObjectId.isValid(value))
+		.custom((value) => value.every((id: string) => Types.ObjectId.isValid(id)))
 		.withMessage("Tagged users must be an array of valid user ids"),
 	body("sharedFrom")
 		.optional()

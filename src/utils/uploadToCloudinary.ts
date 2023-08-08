@@ -1,7 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
 import { Readable } from "stream";
 
-const uploadToCloudinary = (buffer: Buffer): Promise<string> => {
+export const uploadFileToCloudinary = (buffer: Buffer): Promise<string> => {
 	return new Promise((resolve, reject) => {
 		const readableStream = Readable.from(buffer);
 
@@ -17,4 +17,8 @@ const uploadToCloudinary = (buffer: Buffer): Promise<string> => {
 	});
 };
 
-export default uploadToCloudinary;
+export const uploadFilesToCloudinary = async (
+	files: Buffer[],
+): Promise<string[]> => {
+	return await Promise.all(files.map((file) => uploadFileToCloudinary(file)));
+};

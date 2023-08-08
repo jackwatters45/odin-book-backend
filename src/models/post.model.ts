@@ -10,7 +10,7 @@ export interface IPost extends Document {
 	reactions: ObjectId[];
 	comments: ObjectId[];
 	sharedFrom?: ObjectId; // shared from another post
-	media?: string;
+	media?: string[];
 	taggedUsers?: ObjectId[];
 	feeling?: string;
 	lifeEvent?: LifeEventData;
@@ -36,7 +36,7 @@ const postSchema = new Schema<IPost>(
 			default: [],
 		},
 		sharedFrom: { type: Schema.Types.ObjectId, ref: "Post" },
-		media: { type: String },
+		media: [{ type: String }],
 		feeling: { type: String },
 		lifeEvent: {
 			type: new Schema(

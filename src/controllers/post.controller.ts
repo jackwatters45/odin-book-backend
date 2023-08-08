@@ -1,7 +1,5 @@
 import { body, validationResult } from "express-validator";
 import { Request, Response } from "express";
-// import { v2 as cloudinary } from "cloudinary";
-// import uploadToCloudinary from "../utils/uploadToCloudinary";
 import { ObjectId } from "mongoose";
 import debug from "debug";
 
@@ -12,7 +10,8 @@ import expressAsyncHandler from "express-async-handler";
 import postValidation from "./utils/postValidation";
 import Reaction, { reactionTypes } from "../models/reaction.model";
 import { authenticateJwt } from "../middleware/authConfig";
-// import resizeImages from "../utils/resizeImages";
+import resizeImages from "../utils/resizeImages";
+import { uploadFilesToCloudinary } from "../utils/uploadToCloudinary";
 
 const log = debug("log:post:controller");
 const errorLog = debug("error:post:controller");
@@ -76,7 +75,6 @@ export const getPostById = expressAsyncHandler(
 	},
 );
 
-// TODO validation
 // TODO multer stuff
 // TODO other logics (check in, life event)
 
@@ -105,23 +103,25 @@ export const createPost = [
 			checkIn,
 		} = req.body;
 
-		// let media = "";
-		// const resizedImages = await resizeImages(req.files);
-		// if (resizedImages) media = await uploadToCloudinary(resizedImages);
-
 		const post = new Post({
 			author: author._id,
 			published,
-			taggedUsers,
-			sharedFrom,
-			content,
-			// media,
-			feeling,
-			lifeEvent,
-			checkIn,
+			taggedUsers, // ObjectId[]
+			sharedFrom, // ObjectId
+			content, // string
+			feeling, // string
+			lifeEvent, // object
+			checkIn, // object
 		});
 
 		try {
+			if (req.files) {
+				const files = req.files;
+				const resizedImages = await resizeImages(files);
+				const imageLinks = await uploadFilesToCloudinary(resizedImages);
+				post.media = imageLinks;
+			}
+
 			await post.save();
 			res.status(201).json({ post });
 		} catch (error) {
@@ -146,15 +146,8 @@ export const updatePost = [
 
 		const user = req.user as IUser;
 
-		const {
-			published,
-			taggedUsers,
-			content,
-			media,
-			feeling,
-			lifeEvent,
-			checkIn,
-		} = req.body;
+		const { published, taggedUsers, content, feeling, lifeEvent, checkIn } =
+			req.body;
 
 		try {
 			const post = await Post.findById(req.params.id);
@@ -176,10 +169,16 @@ export const updatePost = [
 			post.published = published;
 			post.taggedUsers = taggedUsers;
 			post.content = content;
-			post.media = media;
 			post.feeling = feeling;
 			post.lifeEvent = lifeEvent;
 			post.checkIn = checkIn;
+
+			if (req.files) {
+				const files = req.files;
+				const resizedImages = await resizeImages(files);
+				const imageLinks = await uploadFilesToCloudinary(resizedImages);
+				post.media = imageLinks;
+			}
 
 			const updatedPost = await post.save();
 
