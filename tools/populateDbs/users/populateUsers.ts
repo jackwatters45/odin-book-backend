@@ -170,14 +170,10 @@ const createRandomSocialLinksData = (
 const createRandomUserAboutData = (
 	firstName: string,
 	lastName: string,
+	birthday: Date,
 ): UserAboutData => {
-	const {
-		birthDate,
-		lifeEvents,
-		yearsStartJob,
-		yearsGraduateSchool,
-		placesLived,
-	} = getLifeEvents();
+	const { lifeEvents, yearsStartJob, yearsGraduateSchool, placesLived } =
+		getLifeEvents(birthday);
 	return {
 		work: Array.from({ length: yearsStartJob.length }, (_, i) =>
 			createRandomWorkData(yearsStartJob[i]),
@@ -197,7 +193,6 @@ const createRandomUserAboutData = (
 			faker.internet.userName(),
 		),
 		lifeEvents,
-		birthDate,
 	};
 };
 interface Options
@@ -221,11 +216,11 @@ export const createRandomUser = async ({
 	friendRequestsSent = [],
 }: Options = {}) => {
 	const basicInfo = createRandomBasicInfo();
-	const { firstName, lastName } = basicInfo;
+	const { firstName, lastName, birthday } = basicInfo;
 
 	const userData = {
 		...basicInfo,
-		...createRandomUserAboutData(firstName, lastName),
+		...createRandomUserAboutData(firstName, lastName, birthday),
 		...createRandomSystemData({
 			userType,
 			isDeleted,

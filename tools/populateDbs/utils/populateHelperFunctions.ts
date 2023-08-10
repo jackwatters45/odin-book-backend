@@ -93,15 +93,21 @@ export const getRandomDateFromYear = (year: number): Date => {
 	return faker.date.between({ from: startDate, to: endDate });
 };
 
-export const getRandomBirthYear = (
-	minAge = 13,
-	maxAge = 80,
-): [Date, number] => {
-	const currentYear = new Date().getFullYear();
-	const year = faker.number.int({
-		min: currentYear - maxAge,
-		max: currentYear - minAge,
-	});
-	const birthDate = getRandomDateFromYear(year);
-	return [birthDate, currentYear - year];
+// export const getRandomBirthYear = (
+// 	minAge = 13,
+// 	maxAge = 80,
+// ): [Date, number] => {
+// 	const currentYear = new Date().getFullYear();
+// 	const year = faker.number.int({
+// 		min: currentYear - maxAge,
+// 		max: currentYear - minAge,
+// 	});
+// 	const birthDate = getRandomDateFromYear(year);
+// 	return [birthDate, currentYear - year];
+// };
+
+export const getAgeFromBirthday = (birthday: Date) => {
+	const ageDifMs = Date.now() - birthday.getTime();
+	const ageDate = new Date(ageDifMs);
+	return Math.abs(ageDate.getUTCFullYear() - 1970);
 };

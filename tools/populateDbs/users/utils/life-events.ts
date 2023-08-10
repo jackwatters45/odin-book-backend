@@ -3,12 +3,13 @@ import { LifeEventData } from "../../../../src/models/user-model/user-about.mode
 import {
 	formatPlacesLived,
 	formatYears,
-	getRandomBirthYear,
 	getRandomDateFromYear,
+	getAgeFromBirthday,
 } from "../../utils/populateHelperFunctions";
 
-export const getLifeEvents = () => {
-	const [birthDate, age] = getRandomBirthYear();
+export const getLifeEvents = (birthday: Date) => {
+	const age = getAgeFromBirthday(birthday);
+	birthday;
 	const lifeEvents: LifeEventData[] = [];
 
 	let currentAge = 0;
@@ -31,12 +32,12 @@ export const getLifeEvents = () => {
 	const birthPlace = {
 		city: currentCity,
 		country: faker.location.country(),
-		dateMovedIn: birthDate,
+		dateMovedIn: birthday,
 	};
 	lifeEvents.push({
 		title: "Born",
 		description: `Born in ${birthPlace.city}, ${birthPlace.country}`,
-		date: birthDate,
+		date: birthday,
 	});
 	placesLived.push(birthPlace);
 
@@ -45,7 +46,7 @@ export const getLifeEvents = () => {
 			currentCity = faker.location.city();
 			const country = faker.location.country();
 			const dateMovedIn = getRandomDateFromYear(
-				birthDate.getFullYear() + currentAge,
+				birthday.getFullYear() + currentAge,
 			);
 			lifeEvents.push({
 				title: "Moved",
@@ -64,7 +65,7 @@ export const getLifeEvents = () => {
 			!graduatedHighSchool &&
 			faker.datatype.boolean(0.95)
 		) {
-			yearsGraduateSchool.push(birthDate.getFullYear() + currentAge);
+			yearsGraduateSchool.push(birthday.getFullYear() + currentAge);
 			graduatedHighSchool = true;
 			goingToCollege = faker.datatype.boolean(0.8);
 		}
@@ -75,7 +76,7 @@ export const getLifeEvents = () => {
 			goingToCollege &&
 			educationCounter === 0
 		) {
-			yearsGraduateSchool.push(birthDate.getFullYear() + currentAge);
+			yearsGraduateSchool.push(birthday.getFullYear() + currentAge);
 			educationCounter++;
 			goingToCollege = false;
 		}
@@ -85,7 +86,7 @@ export const getLifeEvents = () => {
 			faker.datatype.boolean(0.1) &&
 			educationCounter === 1
 		) {
-			yearsGraduateSchool.push(birthDate.getFullYear() + currentAge);
+			yearsGraduateSchool.push(birthday.getFullYear() + currentAge);
 			educationCounter++;
 			goingToCollege = false;
 		}
@@ -99,12 +100,12 @@ export const getLifeEvents = () => {
 			jobCounter === 0
 		) {
 			currentJob = true;
-			yearsStartJob.push(birthDate.getFullYear() + currentAge);
+			yearsStartJob.push(birthday.getFullYear() + currentAge);
 		}
 
 		if (currentAge >= 23 && currentJob && faker.datatype.boolean(0.1)) {
 			jobCounter++;
-			yearsStartJob.push(birthDate.getFullYear() + currentAge);
+			yearsStartJob.push(birthday.getFullYear() + currentAge);
 		}
 
 		// relationship events
@@ -116,7 +117,7 @@ export const getLifeEvents = () => {
 			lifeEvents.push({
 				title: "Married",
 				description: `Got married to ${faker.person.firstName()} ${faker.person.lastName()}`,
-				date: getRandomDateFromYear(birthDate.getFullYear() + currentAge),
+				date: getRandomDateFromYear(birthday.getFullYear() + currentAge),
 			});
 			currentRelationship = true;
 		}
@@ -124,7 +125,7 @@ export const getLifeEvents = () => {
 		const childEvent = {
 			title: "Had a child",
 			description: `Had a child named ${faker.person.firstName()}`,
-			date: getRandomDateFromYear(birthDate.getFullYear() + currentAge),
+			date: getRandomDateFromYear(birthday.getFullYear() + currentAge),
 		};
 		if (
 			currentAge >= 22 &&
@@ -146,7 +147,7 @@ export const getLifeEvents = () => {
 		const petEvent = {
 			title: "Adopted a pet",
 			description: `Adopted a pet named ${faker.animal.dog()}`,
-			date: getRandomDateFromYear(birthDate.getFullYear() + currentAge),
+			date: getRandomDateFromYear(birthday.getFullYear() + currentAge),
 		};
 		if (currentAge >= 20 && faker.datatype.boolean(0.075)) {
 			lifeEvents.push(petEvent);
@@ -164,7 +165,6 @@ export const getLifeEvents = () => {
 	const formattedPlacesLived = formatPlacesLived(placesLived);
 
 	return {
-		birthDate,
 		lifeEvents,
 		yearsStartJob: formattedYearsStartJob,
 		yearsGraduateSchool: formattedYearsGraduateSchool,

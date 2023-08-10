@@ -92,7 +92,7 @@ const configAuth = (app: Application) => {
 			},
 			async (jwtPayload, done) => {
 				try {
-					const user = await User.findById(jwtPayload?._id);
+					const user = await User.findById(jwtPayload._id);
 					if (!user) return done(null, false);
 
 					const { password: _, ...userWithoutPassword } = user.toObject();

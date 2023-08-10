@@ -2,7 +2,7 @@ import expressAsyncHandler from "express-async-handler";
 import { Request, Response, NextFunction } from "express";
 import { body, validationResult } from "express-validator";
 import passport from "passport";
-import jwt from "jsonwebtoken";
+import jwt, { JwtPayload } from "jsonwebtoken";
 import debug from "debug";
 
 import User, { IUser } from "../models/user-model/user.model";
@@ -135,17 +135,21 @@ export const postSignUp = [
 	body("lastName")
 		.notEmpty()
 		.trim()
-		.withMessage("Last name is required and should not be empty"),
+		.withMessage("Last name is required and should not be empty")
+		.isLength({ max: 50 })
+		.withMessage("Last name should be less than 50 characters"),
 	body("username")
 		.notEmpty()
 		.trim()
 		.withMessage(
 			"Username id is required and should be a valid email or phone number",
-		),
+		)
+		.isLength({ min: 5, max: 50 })
+		.withMessage("Username should be between 5 and 50 characters"),
 	body("password")
 		.notEmpty()
 		.trim()
-		.isLength({ min: 8 })
+		.isLength({ min: 8, max: 50 })
 		.withMessage("Password should be at least 8 characters long")
 		.matches(
 			/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*?()])[A-Za-z\d!@#$%^&*?()]{8,}$/,
@@ -160,21 +164,46 @@ export const postSignUp = [
 		.isISO8601()
 		.withMessage(
 			"Birthday is required and should be a valid date in ISO 8601 format",
-		),
+		)
+		.custom((birthday) => {
+			const birthDate = new Date(birthday);
+			const currentDate = new Date();
+			let age = currentDate.getFullYear() - birthDate.getFullYear();
+			const m = currentDate.getMonth() - birthDate.getMonth();
+
+			if (m < 0 || (m === 0 && currentDate.getDate() < birthDate.getDate())) {
+				age--;
+			}
+
+			if (age < 13) {
+				throw new Error("User must be at least 13 years old to register.");
+			}
+
+			return true;
+		}),
 	body("pronouns")
 		.optional()
-		.notEmpty()
 		.trim()
-		.withMessage("Pronouns should not be empty if provided"),
+		.notEmpty()
+		.withMessage("Pronouns should not be empty if provided")
+		.isIn(["they/them", "she/her", "he/him"])
+		.withMessage(
+			"Pronouns should be one of the following: they/them, she/her, he/him",
+		),
+	body("gender")
+		.optional()
+		.trim()
+		.notEmpty()
+		.withMessage("Gender should not be empty if provided"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		try {
 			const errors = validationResult(req);
 			if (!errors.isEmpty()) {
-				res.status(400).json({ errors: errors.array(), reqBody: req.body });
+				res.status(400).json({ errors: errors.array() });
 				return;
 			}
 
-			const { firstName, password, lastName, birthday, username } = req.body;
+			const { firstName, password, lastName, username, birthday } = req.body;
 
 			const idType = username.includes("@") ? "email" : "phoneNumber";
 
@@ -190,8 +219,9 @@ export const postSignUp = [
 				firstName,
 				lastName,
 				password,
-				birthday: new Date(birthday),
+				birthday,
 				pronouns: req.body?.pronouns ?? undefined,
+				gender: req.body?.gender ?? undefined,
 				[idType]: username,
 				verification: {
 					isVerified: false,
@@ -274,10 +304,9 @@ export const getCurrentUser = expressAsyncHandler(
 		}
 
 		try {
-			const { id } = jwt.verify(token, jwtSecret) as { id: string };
-
+			const { _id } = jwt.verify(token, jwtSecret) as JwtPayload;
 			const user = await User.findOne(
-				{ _id: id, isDeleted: false },
+				{ _id, isDeleted: false },
 				{ password: 0 },
 			);
 			if (!user) {
@@ -364,15 +393,8 @@ export const postRefreshToken = expressAsyncHandler(
 export const postVerifyCode = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
-		const loggedInUser = req.user as IUser;
-		if (!loggedInUser) {
-			res
-				.status(401)
-				.json({ message: "You must be logged in to perform this action" });
-			return;
-		}
-
 		try {
+			const loggedInUser = req.user as IUser;
 			const user = await User.findById(loggedInUser._id);
 			if (!user) {
 				res.status(404).json({ message: "User not found." });

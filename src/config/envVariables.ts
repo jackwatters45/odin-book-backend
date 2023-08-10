@@ -59,6 +59,7 @@ export const twilioPhoneNumber = checkEnvVariableString("TWILIO_PHONE_NUMBER");
 
 export const nodeEnv = checkEnvVariableString("NODE_ENV");
 
+// TODO: change this to be more dynamic
 export const appUrl =
 	nodeEnv === "production"
 		? checkEnvVariableString("PROD_APP_URL")
@@ -66,7 +67,6 @@ export const appUrl =
 
 export const apiPath = checkEnvVariableString("API_PATH");
 
-// TODO: formatting
 export const mongoDbUri =
 	nodeEnv === "production"
 		? checkEnvVariableString("PROD_DB_URI")

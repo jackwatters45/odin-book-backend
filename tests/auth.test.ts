@@ -6,11 +6,7 @@ import passport from "passport";
 import request from "supertest";
 
 import User, { IUser } from "../src/models/user-model/user.model";
-import {
-	apiPath,
-	jwtSecret,
-	refreshTokenSecret,
-} from "../src/config/envVariables";
+import { apiPath, refreshTokenSecret } from "../src/config/envVariables";
 import generateUser, { TestUser } from "./utils/generateUser";
 import { configDb, disconnectFromDatabase } from "../src/config/database";
 import configOtherMiddleware from "../src/middleware/otherConfig";
@@ -72,6 +68,25 @@ describe("POST /signup", () => {
 		expect(res.body.message).toBe("User with this email/phone already exists");
 	});
 
+	it("should fail when user is less than 13 years old", async () => {
+		const today = new Date();
+		const tenYearsAgo = new Date(today.setFullYear(today.getFullYear() - 10));
+		const user = generateUser({ birthdayRef: tenYearsAgo });
+
+		const res = await request(app)
+			.post(`${apiPath}/auth/signup`)
+			.send(user)
+			.expect(400);
+
+		expect(res.body.errors).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					msg: "User must be at least 13 years old to register.",
+				}),
+			]),
+		);
+	});
+
 	it("should fail when password is not min 8 chars and does not contain an uppercase, lowercase, number, special character ", async () => {
 		const { password: _, ...userWithoutPassword } = generateUser();
 		const res = await request(app)
@@ -104,7 +119,6 @@ describe("POST /signup", () => {
 					msg: "First name is required and should not be empty",
 				}),
 			]),
-			reqBody: expect.any(Object),
 		});
 	});
 
@@ -124,6 +138,38 @@ describe("POST /signup", () => {
 
 		expect(res.headers).toHaveProperty("set-cookie");
 		expect(res.headers["set-cookie"][0]).toMatch(/jwt=.+/);
+	});
+
+	it("should fail when invalid pronouns are provided", async () => {
+		const user = generateUser({ pronouns: "invalidPronoun" });
+		const res = await request(app)
+			.post(`${apiPath}/auth/signup`)
+			.send(user)
+			.expect(400);
+
+		expect(res.body.errors).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					msg: "Pronouns should be one of the following: they/them, she/her, he/him",
+				}),
+			]),
+		);
+	});
+
+	it("should not fail when gender is provided", async () => {
+		const user = generateUser({ gender: "other" });
+		const res = await request(app)
+			.post(`${apiPath}/auth/signup`)
+			.send(user)
+			.expect(200);
+
+		expect(res.body).toEqual({
+			message: "Logged in successfully.",
+			user: expect.objectContaining({
+				_id: expect.any(String),
+				gender: "other",
+			}),
+		});
 	});
 });
 
@@ -223,7 +269,7 @@ describe("POST /logout", () => {
 			user = (await signUpUser()).user;
 
 			const payload = { id: user._id };
-			jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
+			jwtToken = user.generateJwtToken();
 			refreshToken = jwt.sign(payload, refreshTokenSecret, { expiresIn: "7d" });
 
 			user.refreshTokens.push(refreshToken);
@@ -288,8 +334,7 @@ describe("GET /currentUser", () => {
 		try {
 			user = (await signUpUser()).user;
 
-			const payload = { id: user._id };
-			jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
+			jwtToken = user.generateJwtToken();
 		} catch (err) {
 			throw new Error(err);
 		}
@@ -307,8 +352,12 @@ describe("GET /currentUser", () => {
 	});
 
 	it("should return isAuthenticated as false if the user is not found", async () => {
-		user.isDeleted = true;
-		await user.save();
+		try {
+			user.isDeleted = true;
+			await user.save();
+		} catch (err) {
+			log(err);
+		}
 
 		const res = await request(app)
 			.get(`${apiPath}/auth/current-user`)
@@ -322,8 +371,12 @@ describe("GET /currentUser", () => {
 	});
 
 	it("should return the user and isAuthenticated as true if the user is found", async () => {
-		user.isDeleted = false;
-		await user.save();
+		try {
+			user.isDeleted = false;
+			await user.save();
+		} catch (err) {
+			log(err);
+		}
 
 		const res = await request(app)
 			.get(`${apiPath}/auth/current-user`)
@@ -467,8 +520,7 @@ describe("POST /verify/code/:verificationToken", () => {
 			throw new Error(error);
 		}
 
-		const payload = { id: user._id };
-		jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
+		jwtToken = user.generateJwtToken();
 	});
 
 	it("returns 200 and verifies the user if verification code is valid and not expired", async () => {
@@ -673,7 +725,7 @@ describe("POST /verify/resend", () => {
 
 	beforeEach(async () => {
 		const { token, tokenExpires, type } = generateRandomTokenEmailOrSms();
-		const baseUser = generateUser(type);
+		const baseUser = generateUser({ usernameType: type });
 
 		userIdType = baseUser.username.includes("@") ? "email" : "phoneNumber";
 		const userData = new User({
@@ -693,8 +745,7 @@ describe("POST /verify/resend", () => {
 			throw new Error(error);
 		}
 
-		const payload = { id: user._id };
-		jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
+		jwtToken = user.generateJwtToken();
 	});
 
 	it("returns 200 and sends a new verification code to the user's email if user is logged in and not verified", async () => {
@@ -999,18 +1050,14 @@ describe("POST /change-password", () => {
 	let confirmPassword: string;
 
 	beforeEach(async () => {
-		const {
-			user: { _id },
-			password,
-		} = await signUpUser();
-		userId = _id;
+		const { user, password } = await signUpUser();
+		userId = user._id;
 
 		oldPassword = password;
 		newPassword = generatePassword();
 		confirmPassword = newPassword;
 
-		const payload = { id: userId };
-		jwtToken = jwt.sign(payload, jwtSecret, { expiresIn: "1h" });
+		jwtToken = user.generateJwtToken();
 	});
 
 	it("returns 200 and changes the user's password if the current password is valid", async () => {

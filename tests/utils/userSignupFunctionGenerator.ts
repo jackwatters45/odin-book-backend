@@ -1,13 +1,17 @@
+import debug from "debug";
+
 import User, { IUser } from "../../src/models/user-model/user.model";
 import generateUser from "./generateUser";
 import { usernameType } from "./generateUsername";
+
+const log = debug("log:userSignupFunctionGenerator");
 
 export const userSignupFunctionGenerator = () => {
 	return async (
 		otherAttributes?: Partial<IUser>,
 		usernameType?: usernameType,
 	) => {
-		const { username, ...userData } = generateUser(usernameType);
+		const { username, ...userData } = generateUser({ usernameType });
 		const idType = username.includes("@") ? "email" : "phoneNumber";
 
 		try {

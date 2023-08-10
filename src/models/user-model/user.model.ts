@@ -11,11 +11,12 @@ export interface BasicUserInfo {
 	lastName: string;
 	fullName: string;
 	email: string;
-	pronouns?: string;
+	gender?: string;
+	birthday: Date;
+	pronouns?: "he/him" | "she/her" | "they/them";
 	avatarUrl?: string;
 	description?: string;
 	phoneNumber?: string;
-	birthday: Date;
 }
 
 export interface UserLoginData {
@@ -85,21 +86,35 @@ export interface IUserWithId extends IUser {
 
 const UserSchema = new Schema<IUser>(
 	{
-		firstName: { type: String, required: true, trim: true, maxlength: 25 },
-		lastName: { type: String, required: true, trim: true, maxlength: 25 },
-		email: { type: String, trim: true, unique: true, sparse: true },
+		firstName: { type: String, required: true, trim: true, maxlength: 50 },
+		lastName: { type: String, required: true, trim: true, maxlength: 50 },
+		email: {
+			type: String,
+			trim: true,
+			unique: true,
+			sparse: true,
+			minlength: 5,
+			maxlength: 50,
+		},
 		phoneNumber: {
 			type: String,
 			trim: true,
 			unique: true,
 			sparse: true,
+			minlength: 10,
+			maxlength: 15,
 		},
 		birthday: { type: Date },
-		password: { type: String, trim: true, minlength: 8 },
+		password: { type: String, trim: true, minlength: 8, maxlength: 100 },
 		facebookId: { type: String, trim: true, unique: true, sparse: true },
 		googleId: { type: String, trim: true, unique: true, sparse: true },
 		githubId: { type: String, trim: true, unique: true, sparse: true },
-		pronouns: { type: String, trim: true },
+		gender: { type: String, trim: true },
+		pronouns: {
+			type: String,
+			trim: true,
+			enum: ["he/him", "she/her", "they/them"],
+		},
 		friends: [{ type: Schema.Types.ObjectId, ref: "User" }],
 		description: { type: String, trim: true, default: "" },
 		avatarUrl: { type: String, trim: true, default: "" },

@@ -51,7 +51,6 @@ export interface UserAboutData {
 	aboutYou?: string;
 	nicknames?: string[];
 	lifeEvents?: LifeEventData[];
-	birthDate?: Date;
 }
 
 export const UserAboutDataSchema = new Schema<UserAboutData>({
