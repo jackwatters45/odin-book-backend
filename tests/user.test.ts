@@ -6,7 +6,8 @@ import debug from "debug";
 import { disconnectFromDatabase, configDb } from "../src/config/database";
 import configOtherMiddleware from "../src/middleware/otherConfig";
 import configRoutes from "../src/routes";
-import User, { IUser } from "../src/models/user-model/user.model";
+import User from "../src/models/user.model";
+import { IUser } from "../types/IUser";
 import Post, { IPost } from "../src/models/post.model";
 import {
 	createRandomUser,
@@ -1037,8 +1038,8 @@ describe("POST /users/me/friend-requests/:id", () => {
 
 		const res = await request(app)
 			.post(`${apiPath}/users/me/friend-requests/${randomUser.id}`)
-			.set("Cookie", [`jwt=${standardUserJwt}`]);
-		// .expect(500);
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.expect(500);
 
 		expect(res.body).toEqual(
 			expect.objectContaining({
@@ -1050,7 +1051,7 @@ describe("POST /users/me/friend-requests/:id", () => {
 
 describe("DELETE /users/me/friends/:friendId", () => {
 	let userToRemove: IUser;
-	beforeAll(async () => {
+	beforeEach(async () => {
 		userToRemove = standardUser;
 		try {
 			await User.findByIdAndUpdate(adminUser.id, {
@@ -1175,11 +1176,13 @@ describe("POST /users/me/friend-requests/:requestId/accept", () => {
 				randomUser._id,
 				{
 					$addToSet: { friendRequestsReceived: userToAcceptId },
+					$pull: { friends: userToAcceptId },
 				},
 				{ new: true },
 			)) as IUser;
 			await User.findByIdAndUpdate(userToAcceptId, {
 				$addToSet: { friendRequestsSent: randomUser._id },
+				$pull: { friends: randomUser._id },
 			});
 		} catch (error) {
 			throw new Error(error);

@@ -5,10 +5,11 @@ import passport from "passport";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import debug from "debug";
 
-import User, { IUser } from "../models/user-model/user.model";
+import User from "../models/user.model";
 import { jwtSecret, nodeEnv, refreshTokenSecret } from "../config/envVariables";
 import generateAndSendToken from "../utils/generateAndSendToken";
 import { authenticateJwt } from "../middleware/authConfig";
+import { IUser } from "../../types/IUser";
 
 const log = debug("log:auth:controller");
 const errorLog = debug("error:auth:controller");
@@ -54,7 +55,6 @@ export const handleUserLogin = async (res: Response, user: IUser) => {
 	try {
 		await generateAndSendToken(user, "verification", type);
 	} catch (err) {
-		console.error(err);
 		res.status(500).json({ message: err.message });
 		return;
 	}
@@ -402,11 +402,11 @@ export const postVerifyCode = [
 			}
 
 			if (user.verification.isVerified) {
-				res.status(400).json({ message: "User is already verified." });
 				// shouldn't be possible that user is verified but token is not undefined
 				user.verification.token = undefined;
 				user.verification.tokenExpires = undefined;
 				await user.save();
+				res.status(400).json({ message: "User is already verified." });
 				return;
 			}
 
@@ -418,12 +418,12 @@ export const postVerifyCode = [
 			}
 
 			if (verification.tokenExpires && verification.tokenExpires < Date.now()) {
-				res.status(400).json({
-					message: "Verification code has expired. Please request a new one.",
-				});
 				user.verification.token = undefined;
 				user.verification.tokenExpires = undefined;
 				await user.save();
+				res.status(400).json({
+					message: "Verification code has expired. Please request a new one.",
+				});
 				return;
 			}
 

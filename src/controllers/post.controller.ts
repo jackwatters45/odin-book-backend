@@ -4,7 +4,8 @@ import { ObjectId } from "mongoose";
 import debug from "debug";
 
 import Post from "../models/post.model";
-import User, { IUser } from "../models/user-model/user.model";
+import User from "../models/user.model";
+import { IUser } from "../../types/IUser";
 import expressAsyncHandler from "express-async-handler";
 // import { calculateStartTime } from "../utils/calculateStartTime";
 import postValidation from "./utils/postValidation";
@@ -457,7 +458,6 @@ export const getPostsByFriends = [
 
 			res.status(200).json({ posts, meta: { total: postsCount } });
 		} catch (error) {
-			console.error(error);
 			res.status(500).json({ message: error.message });
 		}
 	}),

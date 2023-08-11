@@ -6,7 +6,7 @@ import { ObjectId, startSession } from "mongoose";
 
 import Comment from "../models/comment.model";
 import Reaction, { reactionTypes } from "../models/reaction.model";
-import { IUser } from "../models/user-model/user.model";
+import { IUser } from "../../types/IUser";
 import Post from "../models/post.model";
 import { authenticateJwt } from "../middleware/authConfig";
 

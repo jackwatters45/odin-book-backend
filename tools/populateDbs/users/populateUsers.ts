@@ -1,16 +1,5 @@
 import { faker } from "@faker-js/faker";
-import User, {
-	IUser,
-	IUserWithId,
-	UserActivityData,
-	UserSystemData,
-} from "../../../src/models/user-model/user.model";
-import {
-	EducationData,
-	SocialLinksData,
-	UserAboutData,
-	WorkData,
-} from "../../../src/models/user-model/user-about.model";
+
 import {
 	universityDegreeTypes,
 	fieldsOfStudy,
@@ -19,6 +8,7 @@ import {
 	highSchoolActivities,
 	universityActivities,
 } from "./utils/userOptions";
+import User from "../../../src/models/user.model";
 import { getLifeEvents } from "./utils/life-events";
 import {
 	convertToSlug,
@@ -33,6 +23,16 @@ import {
 	addSavedPostsToUser,
 } from "../posts/utils/addSavedPosts";
 import { ObjectId } from "mongoose";
+import {
+	EducationData,
+	IUser,
+	IUserWithId,
+	SocialLinksData,
+	UserAboutData,
+	UserActivityData,
+	UserSystemData,
+	WorkData,
+} from "../../../types/IUser";
 
 const log = debug("log:populateUsers");
 
@@ -47,7 +47,7 @@ const createRandomBasicInfo = () => {
 	const password = faker.internet.password({ length: 10 });
 	const avatarUrl = faker.internet.avatar();
 	const description = faker.person.bio();
-	const phoneNumber = faker.phone.number();
+	const phoneNumber = faker.phone.number("+1##########");
 	const birthday = faker.date.past({ years: 50 });
 
 	return {

@@ -3,7 +3,7 @@ import { faker } from "@faker-js/faker";
 import { ObjectId } from "mongoose";
 
 import Post, { IPost } from "../../../src/models/post.model";
-import User from "../../../src/models/user-model/user.model";
+import User from "../../../src/models/user.model";
 import { getRandValueFromArrayOfObjs } from "../utils/populateHelperFunctions";
 import ICreatePostOptions from "../../../types/ICreatePostOptions";
 import getPostData from "./utils/getPostData";

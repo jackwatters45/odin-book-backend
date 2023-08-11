@@ -5,7 +5,8 @@ import { faker } from "@faker-js/faker";
 import passport from "passport";
 import request from "supertest";
 
-import User, { IUser } from "../src/models/user-model/user.model";
+import User from "../src/models/user.model";
+import { IUser } from "../types/IUser";
 import { apiPath, refreshTokenSecret } from "../src/config/envVariables";
 import generateUser, { TestUser } from "./utils/generateUser";
 import { configDb, disconnectFromDatabase } from "../src/config/database";
@@ -539,9 +540,17 @@ describe("POST /verify/code/:verificationToken", () => {
 		expect(updatedUser.verification.tokenExpires).toBeUndefined();
 	});
 
+	// TODO
 	it("returns 400 if verification code is expired.", async () => {
-		user.verification.tokenExpires = Date.now() - 1000;
-		await user.save();
+		try {
+			await User.findByIdAndUpdate(user._id, {
+				"verification.tokenExpires": Date.now() - 10000,
+			});
+			// user.verification.tokenExpires = Date.now() - 1000;
+			// await user.save();
+		} catch (error) {
+			throw new Error(error);
+		}
 
 		const res = await request(app)
 			.post(`${apiPath}/auth/verify/code/${user.verification.token}`)
@@ -584,9 +593,18 @@ describe("POST /verify/code/:verificationToken", () => {
 		});
 	});
 
+	// TODO
 	it("returns 401 if user is already verified", async () => {
-		user.verification.isVerified = true;
-		await user.save();
+		try {
+			await User.findByIdAndUpdate(user._id, {
+				"verification.isVerified": true,
+			});
+
+			// user.verification.isVerified = true;
+			// await user.save();
+		} catch (error) {
+			throw new Error(error);
+		}
 
 		const res = await request(app)
 			.post(`${apiPath}/auth/verify/code/${user.verification.token}`)

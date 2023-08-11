@@ -8,7 +8,7 @@ import {
 	sendResetPasswordSMS,
 	sendVerificationSMS,
 } from "../config/twilio";
-import { IUser } from "../models/user-model/user.model";
+import { IUser } from "../../types/IUser";
 
 const generateAndSendToken = async (
 	user: IUser,

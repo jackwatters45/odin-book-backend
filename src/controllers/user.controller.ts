@@ -3,7 +3,8 @@ import { Request, Response } from "express";
 import { body, validationResult } from "express-validator";
 import debug from "debug";
 
-import User, { IUser } from "../models/user-model/user.model";
+import User from "../models/user.model";
+import { IUser } from "../../types/IUser";
 import Post from "../models/post.model";
 import Comment from "../models/comment.model";
 import { authenticateJwt } from "../middleware/authConfig";

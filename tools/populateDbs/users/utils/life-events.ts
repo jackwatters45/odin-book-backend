@@ -1,11 +1,12 @@
 import { faker } from "@faker-js/faker";
-import { LifeEventData } from "../../../../src/models/user-model/user-about.model";
+
 import {
 	formatPlacesLived,
 	formatYears,
 	getRandomDateFromYear,
 	getAgeFromBirthday,
 } from "../../utils/populateHelperFunctions";
+import { LifeEventData } from "../../../../types/IUser";
 
 export const getLifeEvents = (birthday: Date) => {
 	const age = getAgeFromBirthday(birthday);

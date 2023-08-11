@@ -1,6 +1,5 @@
 import { Schema, model, Document, ObjectId } from "mongoose";
-import { LifeEventData } from "./user-model/user-about.model";
-
+import { LifeEventData } from "../../types/IUser";
 export interface IPost extends Document {
 	content?: string;
 	author: ObjectId;

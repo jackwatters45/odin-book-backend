@@ -3,7 +3,6 @@ import request from "supertest";
 import { ObjectId } from "mongodb";
 import { Schema } from "mongoose";
 import debug from "debug";
-import jwt from "jsonwebtoken";
 
 import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
 import configRoutes from "../src/routes";
@@ -11,7 +10,7 @@ import configAuth from "../src/middleware/authConfig";
 import configOtherMiddleware from "../src/middleware/otherConfig";
 import { configDb, disconnectFromDatabase } from "../src/config/database";
 import Reaction from "../src/models/reaction.model";
-import { IUser } from "../src/models/user-model/user.model";
+import { IUser } from "../types/IUser";
 import Post, { IPost } from "../src/models/post.model";
 import Comment, { IComment } from "../src/models/comment.model";
 import {
@@ -22,7 +21,7 @@ import {
 	createRandomPost,
 	createPosts,
 } from "../tools/populateDbs/posts/populatePosts";
-import { apiPath, jwtSecret } from "../src/config/envVariables";
+import { apiPath } from "../src/config/envVariables";
 import { addRepliesToComment } from "../tools/populateDbs/posts/utils/addRepliesToComment";
 
 const log = debug("log:comment:test");
@@ -34,6 +33,8 @@ const posts: IPost[] = [];
 
 let standardUser: IUser;
 let standardUserJwt: string | undefined;
+
+let randomUser: IUser;
 let randomJwt: string | undefined;
 
 let postNoComments: IPost;
@@ -46,13 +47,10 @@ beforeAll(async () => {
 	users.push(...((await createUsers(numUsers)) as IUser[]));
 
 	standardUser = await createRandomUser();
-	standardUserJwt = jwt.sign({ id: standardUser._id }, jwtSecret, {
-		expiresIn: "1h",
-	});
+	standardUserJwt = standardUser.generateJwtToken();
 
-	randomJwt = jwt.sign({ id: users[0]._id }, jwtSecret, {
-		expiresIn: "1h",
-	});
+	randomUser = users[0];
+	randomJwt = randomUser.generateJwtToken();
 
 	posts.push(...((await createPosts(numUsers + 1)) as IPost[]));
 	const randomPost = await createRandomPost({ includeComments: false });
@@ -856,7 +854,7 @@ describe("DELETE /posts/:post/comments/:id/unreact", () => {
 	});
 
 	it("should return 404 if user has not reacted", async () => {
-		await Reaction.deleteOne({ user: users[0]._id });
+		await Reaction.deleteOne({ user: users[0]._id, parent: comment._id });
 		await Comment.findByIdAndUpdate(comment._id, {
 			$pull: { reactions: { user: users[0]._id } },
 		});

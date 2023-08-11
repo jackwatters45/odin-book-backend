@@ -1,88 +1,9 @@
-import { Schema, model, ObjectId, Document } from "mongoose";
+import { Schema, model } from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-import { UserAboutData, UserAboutDataSchema } from "./user-about.model";
-import { jwtSecret } from "../../config/envVariables";
-
-// Basic User Info
-export interface BasicUserInfo {
-	firstName: string;
-	lastName: string;
-	fullName: string;
-	email: string;
-	gender?: string;
-	birthday: Date;
-	pronouns?: "he/him" | "she/her" | "they/them";
-	avatarUrl?: string;
-	description?: string;
-	phoneNumber?: string;
-}
-
-export interface UserLoginData {
-	password?: string;
-	facebookId?: string;
-	googleId?: string;
-	githubId?: string;
-}
-
-export interface UserVerificationData {
-	isVerified: boolean;
-	type: "email" | "phoneNumber";
-	token?: string;
-	tokenExpires?: number;
-}
-
-export interface UserResetPasswordData {
-	type: "email" | "phoneNumber";
-	token?: string;
-	tokenExpires?: number;
-}
-
-// User Activity Data
-export interface UserActivityData {
-	friends: ObjectId[];
-	savedPosts: ObjectId[];
-	friendRequestsSent: ObjectId[];
-	friendRequestsReceived: ObjectId[];
-}
-
-// User Deleted Data
-interface DeletedData {
-	deletedBy: ObjectId | null;
-	deletedAt: Date;
-	email: string;
-	followerCount: number;
-}
-
-// User System Data
-export interface UserSystemData {
-	createdAt?: Date;
-	updatedAt?: Date;
-	userType: "user" | "admin" | "guest";
-	isDeleted: boolean;
-	deletedData?: DeletedData;
-	validUntil?: number;
-	refreshTokens: string[];
-}
-
-export interface IUser
-	extends Document,
-		BasicUserInfo,
-		UserLoginData,
-		UserActivityData,
-		UserSystemData,
-		UserAboutData {
-	// UserAboutData is from user-about.model.ts
-	verification: UserVerificationData;
-	resetPassword: UserResetPasswordData;
-	comparePassword: (password: string) => Promise<boolean>;
-	generateJwtToken: () => string;
-}
-
-export interface IUserWithId extends IUser {
-	_id: ObjectId;
-}
+import { IUser } from "../../types/IUser";
+import { jwtSecret } from "../config/envVariables";
 
 const UserSchema = new Schema<IUser>(
 	{
@@ -158,7 +79,61 @@ const UserSchema = new Schema<IUser>(
 			token: { type: String, trim: true },
 			tokenExpires: { type: Number },
 		},
-		...UserAboutDataSchema.obj,
+		work: [
+			{
+				company: { type: String, required: true, trim: true, maxlength: 100 },
+				position: { type: String, trim: true, maxlength: 100 },
+				city: { type: String, trim: true, maxlength: 100 },
+				description: { type: String, trim: true, maxlength: 500 },
+				startDate: { type: Date },
+				endDate: { type: Date },
+			},
+		],
+		education: [
+			{
+				school: { type: String, required: true, trim: true, maxlength: 100 },
+				degree: { type: String, trim: true, maxlength: 100 },
+				fieldOfStudy: { type: String, trim: true, maxlength: 100 },
+				concentration: { type: String, trim: true, maxlength: 100 },
+				secondaryConcentrations: [{ type: String, trim: true, maxlength: 100 }],
+				city: { type: String, trim: true, maxlength: 100 },
+				description: { type: String, trim: true, maxlength: 500 },
+				startDate: { type: Date },
+				endDate: { type: Date },
+				activities: [{ type: String, trim: true, maxlength: 500 }],
+			},
+		],
+		placesLived: [
+			{
+				city: { type: String, required: true, trim: true, maxlength: 100 },
+				country: { type: String, required: true, trim: true, maxlength: 100 },
+				dateMovedIn: { type: Date },
+				dateMovedOut: { type: Date },
+			},
+		],
+		website: { type: String, trim: true, maxlength: 200 },
+		socialLinks: [
+			{
+				platform: { type: String, required: true, trim: true, lowercase: true },
+				username: {
+					type: String,
+					required: true,
+					trim: true,
+					minlength: 3,
+					maxlength: 40,
+				},
+				url: { type: String, trim: true, maxlength: 200 },
+			},
+		],
+		aboutYou: { type: String, trim: true, maxlength: 1000 },
+		nicknames: [{ type: String, trim: true, maxlength: 50 }],
+		lifeEvents: [
+			{
+				title: { type: String, required: true, trim: true, maxlength: 200 },
+				description: { type: String, trim: true, maxlength: 500 },
+				date: { type: Date, required: true },
+			},
+		],
 	},
 	{
 		timestamps: true,
@@ -172,6 +147,13 @@ UserSchema.path("savedPosts").default([]);
 UserSchema.path("friendRequestsSent").default([]);
 UserSchema.path("friendRequestsReceived").default([]);
 UserSchema.path("refreshTokens").default([]);
+
+UserSchema.path("work").default([]);
+UserSchema.path("education").default([]);
+UserSchema.path("placesLived").default([]);
+UserSchema.path("socialLinks").default([]);
+UserSchema.path("nicknames").default([]);
+UserSchema.path("lifeEvents").default([]);
 
 UserSchema.virtual("fullName").get(function (this: IUser) {
 	if (!this.firstName || !this.lastName) return "";

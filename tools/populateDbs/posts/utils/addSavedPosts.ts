@@ -1,6 +1,6 @@
 import { ObjectId } from "mongoose";
 
-import { IUser } from "../../../../src/models/user-model/user.model";
+import { IUser } from "../../../../types/IUser";
 import {
 	getRandValuesFromArray,
 	getRandomInt,

@@ -3,14 +3,14 @@ import request from "supertest";
 import { ObjectId } from "mongodb";
 import debug from "debug";
 import { faker } from "@faker-js/faker";
-import jwt from "jsonwebtoken";
 
 import { configDb, disconnectFromDatabase } from "../src/config/database";
 import configRoutes from "../src/routes";
 import configOtherMiddleware from "../src/middleware/otherConfig";
-import User, { IUser } from "../src/models/user-model/user.model";
+import User from "../src/models/user.model";
+import { IUser } from "../types/IUser";
 import Post, { IPost } from "../src/models/post.model";
-import { apiPath, jwtSecret } from "../src/config/envVariables";
+import { apiPath } from "../src/config/envVariables";
 import {
 	createRandomPost,
 	createPosts,
@@ -41,19 +41,13 @@ beforeAll(async () => {
 	await configAuth(app);
 
 	standardUser = await createRandomUser({ userType: "user" });
-	standardUserJwt = jwt.sign({ id: standardUser._id }, jwtSecret, {
-		expiresIn: "1h",
-	});
+	standardUserJwt = standardUser.generateJwtToken();
 
 	adminUser = await createRandomUser({ userType: "admin" });
-	adminJwt = jwt.sign({ id: adminUser._id }, jwtSecret, {
-		expiresIn: "1h",
-	});
+	adminJwt = adminUser.generateJwtToken();
 
 	randomUser = await createRandomUser({ userType: "user" });
-	randomJwt = jwt.sign({ id: randomUser._id }, jwtSecret, {
-		expiresIn: "1h",
-	});
+	randomJwt = randomUser.generateJwtToken();
 
 	users.push(standardUser, adminUser, randomUser);
 

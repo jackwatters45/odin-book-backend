@@ -1,4 +1,4 @@
-import User from "../../../src/models/user-model/user.model";
+import User from "../../../src/models/user.model";
 import Post from "../../../src/models/post.model";
 import Comment from "../../../src/models/comment.model";
 import Reaction from "../../../src/models/reaction.model";

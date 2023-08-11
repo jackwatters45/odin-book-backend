@@ -1,6 +1,7 @@
 import debug from "debug";
 
-import User, { IUser } from "../../src/models/user-model/user.model";
+import User from "../../src/models/user.model";
+import { IUser } from "../../types/IUser";
 import generateUser from "./generateUser";
 import { usernameType } from "./generateUsername";
 

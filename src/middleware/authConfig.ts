@@ -1,6 +1,7 @@
 import passport from "passport";
 import passportLocal from "passport-local";
-import User, { IUser } from "../models/user-model/user.model";
+import User from "../models/user.model";
+import { IUser } from "../../types/IUser";
 import passportJwt from "passport-jwt";
 import { Request, Application, NextFunction, Response } from "express";
 import {

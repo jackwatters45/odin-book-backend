@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { IUser } from "../src/models/user-model/user.model";
+import { IUser } from "./IUser";
 
 // Passport Request Interface Extension
 interface IRequestWithUser extends Request {
