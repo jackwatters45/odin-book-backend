@@ -7,6 +7,7 @@ import {
 	getLoginGithubCallback,
 	getLoginGoogle,
 	getLoginGoogleCallback,
+	getResetPassword,
 	getVerifyLink,
 	postChangePassword,
 	postForgotPassword,
@@ -51,6 +52,9 @@ router.post("/verify/resend", postResendVerificationCode);
 
 // /forgot-password
 router.post("/forgot-password", postForgotPassword);
+
+// /reset-password/
+router.get("/reset-password/:resetToken", getResetPassword);
 
 // /reset-password
 router.post("/reset-password/:resetToken", postResetPassword);

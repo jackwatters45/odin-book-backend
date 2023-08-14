@@ -569,6 +569,38 @@ export const postForgotPassword = [
 	}),
 ];
 
+// TODO generate token hash
+
+// @route   GET /reset-password/:resetToken
+// @desc    Confirm reset password code
+// @access  Public
+export const getResetPassword = expressAsyncHandler(async (req, res) => {
+	const resetToken = req.params.resetToken;
+	try {
+		const user = await User.findOne({ "resetPassword.token": resetToken });
+		if (!user) {
+			res.status(400).json({ message: "Invalid reset password code." });
+			return;
+		}
+
+		const { resetPassword } = user;
+		if (resetPassword.tokenExpires && resetPassword.tokenExpires < Date.now()) {
+			res.status(400).json({
+				message: "Reset password code has expired. Please request a new one.",
+			});
+			return;
+		}
+
+		res.status(302).json({ message: "Reset password code is valid." });
+	} catch (err) {
+		errorLog(err);
+		res
+
+			.status(500)
+			.json({ message: "An error occurred while resetting your password." });
+	}
+});
+
 // @route   POST /reset-password/:resetToken
 // @desc    Reset password
 // @access  Public
@@ -603,12 +635,11 @@ export const postResetPassword = [
 
 		const { newPassword } = req.body;
 
-		const resetToken = req.params.resetToken;
+		const { resetToken } = req.params;
 		try {
 			const user = await User.findOne({ "resetPassword.token": resetToken });
-
 			if (!user) {
-				res.status(400).json({ message: "Invalid reset password link." });
+				res.status(400).json({ message: "Invalid reset password code." });
 				return;
 			}
 
@@ -618,7 +649,7 @@ export const postResetPassword = [
 				resetPassword.tokenExpires < Date.now()
 			) {
 				res.status(400).json({
-					message: "Reset password link has expired. Please request a new one.",
+					message: "Reset password code has expired. Please request a new one.",
 				});
 				return;
 			}

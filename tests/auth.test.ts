@@ -540,14 +540,11 @@ describe("POST /verify/code/:verificationToken", () => {
 		expect(updatedUser.verification.tokenExpires).toBeUndefined();
 	});
 
-	// TODO
 	it("returns 400 if verification code is expired.", async () => {
 		try {
 			await User.findByIdAndUpdate(user._id, {
 				"verification.tokenExpires": Date.now() - 10000,
 			});
-			// user.verification.tokenExpires = Date.now() - 1000;
-			// await user.save();
 		} catch (error) {
 			throw new Error(error);
 		}
@@ -593,15 +590,11 @@ describe("POST /verify/code/:verificationToken", () => {
 		});
 	});
 
-	// TODO
 	it("returns 401 if user is already verified", async () => {
 		try {
 			await User.findByIdAndUpdate(user._id, {
 				"verification.isVerified": true,
 			});
-
-			// user.verification.isVerified = true;
-			// await user.save();
 		} catch (error) {
 			throw new Error(error);
 		}
@@ -905,6 +898,135 @@ describe("POST /forgot-password", () => {
 	});
 });
 
+describe("GET /reset-password/:resetToken", () => {
+	let resetToken: string;
+
+	beforeEach(async () => {
+		const { token, tokenExpires, type } = generateRandomTokenEmailOrSms();
+		await signUpUser({ resetPassword: { token, tokenExpires, type } }, type);
+		resetToken = token;
+	});
+
+	it("returns 302 and a success message if the reset password token is valid", async () => {
+		const res = await request(app)
+			.get(`${apiPath}/auth/reset-password/${resetToken}`)
+			.expect(302);
+
+		expect(res.body.message).toBe("Reset password code is valid.");
+	});
+
+	it("returns 400 if the reset password token is invalid ", async () => {
+		const res = await request(app)
+			.get(`${apiPath}/auth/reset-password/${faker.string.uuid()}`)
+			.expect(400);
+
+		expect(res.body.message).toBe("Invalid reset password code.");
+	});
+
+	it("returns 400 if the reset password token is expired", async () => {
+		const { token, type } = generateRandomTokenEmailOrSms();
+		await signUpUser(
+			{
+				resetPassword: {
+					token,
+					tokenExpires: faker.date.past().getTime(),
+					type,
+				},
+			},
+			type,
+		);
+
+		const res = await request(app)
+			.get(`${apiPath}/auth/reset-password/${token}`)
+			.expect(400);
+
+		expect(res.body.message).toBe(
+			"Reset password code has expired. Please request a new one.",
+		);
+	});
+
+	it("returns 500 if an error occurs while finding the user", async () => {
+		jest.spyOn(User, "findOne").mockRejectedValueOnce(new Error("Test error"));
+
+		const res = await request(app)
+			.get(`${apiPath}/auth/reset-password/${resetToken}`)
+			.expect(500);
+
+		expect(res.body.message).toBe(
+			"An error occurred while resetting your password.",
+		);
+	});
+});
+
+// // @route   POST /reset-password/:resetToken
+// // @desc    Reset password
+// // @access  Public
+// export const postResetPassword = [
+// 	body("newPassword")
+// 		.notEmpty()
+// 		.trim()
+// 		.isLength({ min: 8 })
+// 		.withMessage("Password should be at least 8 characters long")
+// 		.matches(
+// 			/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*?()])[A-Za-z\d!@#$%^&*?()]{8,}$/,
+// 			"i",
+// 		)
+// 		.withMessage(
+// 			"Password must contain at least one uppercase letter, one lowercase letter, one special character, one number, and be at least 8 characters long",
+// 		),
+// 	body("confirmPassword")
+// 		.notEmpty()
+// 		.trim()
+// 		.custom((confirmPassword, { req }) => {
+// 			if (confirmPassword !== req.body.newPassword) {
+// 				throw new Error("Passwords do not match.");
+// 			}
+// 			return true;
+// 		}),
+// 	expressAsyncHandler(async (req, res) => {
+// 		const errors = validationResult(req);
+// 		if (!errors.isEmpty()) {
+// 			res.status(400).json({ errors: errors.array() });
+// 			return;
+// 		}
+
+// 		const { newPassword } = req.body;
+
+// 		const { resetToken } = req.params;
+// 		try {
+// 			const user = await User.findOne({ "resetPassword.token": resetToken });
+// 			if (!user) {
+// 				res.status(400).json({ message: "Invalid reset password code." });
+// 				return;
+// 			}
+
+// 			const { resetPassword } = user;
+// 			if (
+// 				resetPassword.tokenExpires &&
+// 				resetPassword.tokenExpires < Date.now()
+// 			) {
+// 				res.status(400).json({
+// 					message: "Reset password code has expired. Please request a new one.",
+// 				});
+// 				return;
+// 			}
+
+// 			user.password = newPassword;
+// 			user.resetPassword.token = undefined;
+// 			user.resetPassword.tokenExpires = undefined;
+
+// 			await user.save();
+
+// 			res.status(200).json({ message: "Password reset successfully." });
+// 		} catch (err) {
+// 			errorLog(err);
+// 			res
+// 				.status(500)
+// 				.json({ message: "An error occurred while resetting your password." });
+// 		}
+// 	}),
+// ];
+
 describe("POST /reset-password:resetToken", () => {
 	let user: IUser;
 	let newPassword: string;
@@ -947,7 +1069,7 @@ describe("POST /reset-password:resetToken", () => {
 			.send({ newPassword, confirmPassword })
 			.expect(400);
 
-		expect(res.body.message).toBe("Invalid reset password link.");
+		expect(res.body.message).toBe("Invalid reset password code.");
 
 		const updatedUser = await User.findOne({ _id: user._id });
 		if (!updatedUser) throw new Error("User not found.");
@@ -977,7 +1099,7 @@ describe("POST /reset-password:resetToken", () => {
 			.expect(400);
 
 		expect(res.body.message).toBe(
-			"Reset password link has expired. Please request a new one.",
+			"Reset password code has expired. Please request a new one.",
 		);
 
 		const updatedUser = await User.findOne({ _id: user._id });
