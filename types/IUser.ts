@@ -24,12 +24,14 @@ export interface UserLoginData {
 export interface UserVerificationData {
 	isVerified: boolean;
 	type: "email" | "phoneNumber";
+	code?: string;
 	token?: string;
 	tokenExpires?: number;
 }
 
 export interface UserResetPasswordData {
 	type: "email" | "phoneNumber";
+	code?: string;
 	token?: string;
 	tokenExpires?: number;
 }

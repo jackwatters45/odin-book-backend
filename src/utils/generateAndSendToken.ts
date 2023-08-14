@@ -1,14 +1,10 @@
 import {
-	generateTokenEmail,
 	sendResetPasswordEmail,
 	sendVerificationEmail,
 } from "../config/nodemailer";
-import {
-	generateTokenSMS,
-	sendResetPasswordSMS,
-	sendVerificationSMS,
-} from "../config/twilio";
+import { sendResetPasswordSMS, sendVerificationSMS } from "../config/twilio";
 import { IUser } from "../../types/IUser";
+import generateToken from "../config/utils/generateToken";
 
 const generateAndSendToken = async (
 	user: IUser,
@@ -21,10 +17,11 @@ const generateAndSendToken = async (
 		throw new Error("User does not have an email address.");
 	}
 
-	const { token, tokenExpires } =
-		method === "email" ? generateTokenEmail() : generateTokenSMS();
+	const { token, tokenExpires, code } = generateToken();
 	user[tokenType].token = token;
 	user[tokenType].tokenExpires = tokenExpires;
+	user[tokenType].code = code;
+
 	user[tokenType].type = method;
 
 	try {
@@ -36,14 +33,15 @@ const generateAndSendToken = async (
 
 	try {
 		if (method === "email") {
+			const email = user.email;
 			tokenType === "verification"
-				? await sendVerificationEmail(user.email, token)
-				: await sendResetPasswordEmail(user.email, token);
+				? await sendVerificationEmail(email, code, token)
+				: await sendResetPasswordEmail(email, code, token);
 		} else if (method === "phoneNumber") {
 			const phoneNumber = user.phoneNumber as string;
 			tokenType === "verification"
-				? await sendVerificationSMS(phoneNumber, token)
-				: await sendResetPasswordSMS(phoneNumber, token);
+				? await sendVerificationSMS(phoneNumber, code, token)
+				: await sendResetPasswordSMS(phoneNumber, code, token);
 		}
 	} catch (err) {
 		console.error(err);

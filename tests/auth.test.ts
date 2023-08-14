@@ -637,7 +637,9 @@ describe("POST /verify/link/:verificationToken", () => {
 			.get(`${apiPath}/auth/verify/link/${user.verification.token}`)
 			.expect(302);
 
-		expect(res.header.location).toBe("/login");
+		expect(res.body).toEqual({
+			message: "Verification successful.",
+		});
 
 		const updatedUser = (await User.findById(user._id)) as IUser;
 		expect(updatedUser.verification.isVerified).toBe(true);
@@ -948,7 +950,6 @@ describe("POST /find-account/", () => {
 			})
 			.expect(500);
 
-		log(res.body);
 		expect(res.body.message).toBe("Test error");
 	});
 });

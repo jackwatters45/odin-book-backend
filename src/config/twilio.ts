@@ -8,11 +8,6 @@ import {
 
 const client = twilio(twilioAccountSid, twilioAuthToken);
 
-export const generateTokenSMS = () => ({
-	token: Math.floor(100000 + Math.random() * 900000).toString(),
-	tokenExpires: Date.now() + 15 * 60 * 1000,
-});
-
 const createTwilioMessage = async (to: string, body: string) => {
 	try {
 		const message = await client.messages.create({
@@ -28,43 +23,48 @@ const createTwilioMessage = async (to: string, body: string) => {
 };
 
 const getVerificationLink = (verificationToken: string) =>
-	`${appUrl}/verify?token=${verificationToken}`;
+	`${appUrl}/verify/link/${verificationToken}`;
 
-const getVerificationMessage = (code: string) => {
+const getVerificationMessage = (code: string, token: string) => {
 	return `Your verification code is ${code}. 
   
   You can also click on the following link to verify your account: ${getVerificationLink(
-		code,
+		token,
 	)}
 
   It expires in 15 minutes. If you did not request this verification code, please ignore this message.`;
 };
 
-const getResetPasswordLink = (resetPasswordCode: string) =>
-	`${appUrl}/reset-password?token=${resetPasswordCode}`;
+const getResetPasswordLink = (token: string) =>
+	`${appUrl}/reset-password/${token}`;
 
-const getResetPasswordMessage = (resetPasswordCode: string) => {
-	return `You are receiving this message because you (or someone else) have requested the reset of the password for your account.
+const getResetPasswordMessage = (code: string, token: string) => {
+	return `You are receiving this message because you (or someone else) requested the reset of the password for your account.
 
-  Please click on the following link, or paste this into your browser to complete the process:
+  Your code is ${code}. 
+  
+  You can also click on the following link to reset your password: ${getResetPasswordLink(
+		token,
+	)}
 
-  ${getResetPasswordLink(resetPasswordCode)}
 
   If you did not request this, please ignore this message and your password will remain unchanged.`;
 };
 
 export const sendVerificationSMS = async (
 	phoneNumber: string,
-	verificationCode: string,
+	code: string,
+	token: string,
 ) => {
-	const message = getVerificationMessage(verificationCode);
+	const message = getVerificationMessage(code, token);
 	await createTwilioMessage(phoneNumber, message);
 };
 
 export const sendResetPasswordSMS = async (
 	phoneNumber: string,
-	resetPasswordCode: string,
+	code: string,
+	token: string,
 ) => {
-	const message = getResetPasswordMessage(resetPasswordCode);
+	const message = getResetPasswordMessage(code, token);
 	await createTwilioMessage(phoneNumber, message);
 };

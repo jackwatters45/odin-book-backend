@@ -10,6 +10,7 @@ import { jwtSecret, nodeEnv, refreshTokenSecret } from "../config/envVariables";
 import generateAndSendToken from "../utils/generateAndSendToken";
 import { authenticateJwt } from "../middleware/authConfig";
 import { IUser } from "../../types/IUser";
+import useResetToken from "./utils/useResetToken";
 
 const log = debug("log:auth:controller");
 const errorLog = debug("error:auth:controller");
@@ -387,6 +388,8 @@ export const postRefreshToken = expressAsyncHandler(
 	},
 );
 
+const resetVerification = useResetToken("verification");
+
 // @desc    Verify user using code
 // @route   POST /verify/code/:verificationToken
 // @access  Private
@@ -402,10 +405,8 @@ export const postVerifyCode = [
 			}
 
 			if (user.verification.isVerified) {
-				// shouldn't be possible that user is verified but token is not undefined
-				user.verification.token = undefined;
-				user.verification.tokenExpires = undefined;
-				await user.save();
+				// shouldn't be possible that user verified but token defined
+				await resetVerification(user);
 				res.status(400).json({ message: "User is already verified." });
 				return;
 			}
@@ -418,9 +419,7 @@ export const postVerifyCode = [
 			}
 
 			if (verification.tokenExpires && verification.tokenExpires < Date.now()) {
-				user.verification.token = undefined;
-				user.verification.tokenExpires = undefined;
-				await user.save();
+				await resetVerification(user);
 				res.status(400).json({
 					message: "Verification code has expired. Please request a new one.",
 				});
@@ -428,10 +427,8 @@ export const postVerifyCode = [
 			}
 
 			user.verification.isVerified = true;
-			user.verification.token = undefined;
-			user.verification.tokenExpires = undefined;
+			await resetVerification(user);
 
-			await user.save();
 			res.status(200).json({ message: "Verification successful." });
 		} catch (error) {
 			errorLog(error);
@@ -455,24 +452,21 @@ export const getVerifyLink = expressAsyncHandler(
 				"verification.token": verificationToken,
 				isDeleted: false,
 			});
-
 			if (!user) {
 				res.status(401).json({ message: "Invalid verification link." });
 				return;
 			}
 
 			if (user.verification.isVerified) {
-				user.verification.token = undefined;
-				user.verification.tokenExpires = undefined;
-				await user.save();
+				await resetVerification(user);
 				res.status(400).json({ message: "User is already verified." });
 				return;
 			}
 
 			const { verification } = user;
 			if (verification.tokenExpires && verification.tokenExpires < Date.now()) {
-				user.verification.token = undefined;
-				user.verification.tokenExpires = undefined;
+				await resetVerification(user);
+
 				await user.save();
 				res.status(400).json({
 					message: "Verification link has expired. Please request a new one.",
@@ -481,11 +475,9 @@ export const getVerifyLink = expressAsyncHandler(
 			}
 
 			user.verification.isVerified = true;
-			user.verification.token = undefined;
-			user.verification.tokenExpires = undefined;
-			await user.save();
+			await resetVerification(user);
 
-			res.redirect("/login");
+			res.status(302).json({ message: "Verification successful." });
 		} catch (err) {
 			errorLog(err);
 			res
@@ -534,7 +526,7 @@ export const postResendVerificationCode = [
 export const postForgotPassword = [
 	body("userId")
 		.trim()
-		.isLength({ min: 1 })
+		.isLength({ min: 5 })
 		.escape()
 		.withMessage("Email or phone is required."),
 	expressAsyncHandler(async (req, res) => {
@@ -559,9 +551,11 @@ export const postForgotPassword = [
 			await generateAndSendToken(user, "resetPassword", idType);
 			res.status(200).json({
 				message: "If the account exists, a reset password link was sent.",
+				// TODO add to test
+				userId,
 			});
 		} catch (err) {
-			// TODO is right?
+			// TODO is err.message or err better?
 			errorLog(err);
 			res.status(500).json({
 				message: err.message || "Could not send reset password email.",
@@ -589,11 +583,9 @@ export const postFindAccount = expressAsyncHandler(async (req, res) => {
 		res.status(200).json({ message: "User found.", user });
 	} catch (err) {
 		errorLog(err);
-		res
-			.status(500)
-			.json({
-				message: err.message || "An error occurred while finding user.",
-			});
+		res.status(500).json({
+			message: err.message || "An error occurred while finding user.",
+		});
 	}
 });
 
@@ -626,6 +618,8 @@ export const getResetPassword = expressAsyncHandler(async (req, res) => {
 			.json({ message: "An error occurred while resetting your password." });
 	}
 });
+
+const resetResetPassword = useResetToken("resetPassword");
 
 // @route   POST /reset-password/:resetToken
 // @desc    Reset password
@@ -674,6 +668,7 @@ export const postResetPassword = [
 				resetPassword.tokenExpires &&
 				resetPassword.tokenExpires < Date.now()
 			) {
+				await resetResetPassword(user);
 				res.status(400).json({
 					message: "Reset password code has expired. Please request a new one.",
 				});
@@ -681,10 +676,7 @@ export const postResetPassword = [
 			}
 
 			user.password = newPassword;
-			user.resetPassword.token = undefined;
-			user.resetPassword.tokenExpires = undefined;
-
-			await user.save();
+			await resetResetPassword(user);
 
 			res.status(200).json({ message: "Password reset successfully." });
 		} catch (err) {
