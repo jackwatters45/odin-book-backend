@@ -561,6 +561,7 @@ export const postForgotPassword = [
 				message: "If the account exists, a reset password link was sent.",
 			});
 		} catch (err) {
+			// TODO is right?
 			errorLog(err);
 			res.status(500).json({
 				message: err.message || "Could not send reset password email.",
@@ -569,7 +570,32 @@ export const postForgotPassword = [
 	}),
 ];
 
-// TODO generate token hash
+// @route   POST /find-account/
+// @desc    Find account
+// @access  Public
+export const postFindAccount = expressAsyncHandler(async (req, res) => {
+	const username = req.body.username;
+	const idType = username.includes("@") ? "email" : "phoneNumber";
+
+	try {
+		const user = await User.findOne({ [idType]: username }).select(
+			"firstName lastName userType avatarUrl phoneNumber email",
+		);
+		if (!user) {
+			res.status(404).json({ message: "User not found." });
+			return;
+		}
+
+		res.status(200).json({ message: "User found.", user });
+	} catch (err) {
+		errorLog(err);
+		res
+			.status(500)
+			.json({
+				message: err.message || "An error occurred while finding user.",
+			});
+	}
+});
 
 // @route   GET /reset-password/:resetToken
 // @desc    Confirm reset password code

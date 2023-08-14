@@ -10,6 +10,7 @@ import {
 	getResetPassword,
 	getVerifyLink,
 	postChangePassword,
+	postFindAccount,
 	postForgotPassword,
 	postLogin,
 	postLoginGuest,
@@ -52,6 +53,9 @@ router.post("/verify/resend", postResendVerificationCode);
 
 // /forgot-password
 router.post("/forgot-password", postForgotPassword);
+
+// /find-account
+router.post("/find-account", postFindAccount);
 
 // /reset-password/
 router.get("/reset-password/:resetToken", getResetPassword);
