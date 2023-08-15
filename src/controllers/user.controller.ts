@@ -8,6 +8,7 @@ import { IUser } from "../../types/IUser";
 import Post from "../models/post.model";
 import Comment from "../models/comment.model";
 import { authenticateJwt } from "../middleware/authConfig";
+import validateUsername from "./utils/validateUsername";
 
 const log = debug("log:user:controller");
 const errorLog = debug("error:user:controller");
@@ -164,9 +165,11 @@ export const createUser = [
 			const { firstName, password, lastName, birthday, username, userType } =
 				req.body;
 
-			const idType = username.includes("@") ? "email" : "phoneNumber";
+			const { usernameType, formattedUsername } = validateUsername(username);
 
-			const userExists = await User.findOne({ [idType]: username });
+			const userExists = await User.findOne({
+				[usernameType]: formattedUsername,
+			});
 			if (userExists) {
 				res
 					.status(400)
@@ -180,10 +183,10 @@ export const createUser = [
 				password,
 				birthday: new Date(birthday),
 				pronouns: req.body?.pronouns ?? undefined,
-				[idType]: username,
+				[usernameType]: username,
 				verification: {
 					isVerified: false,
-					type: idType,
+					type: usernameType,
 				},
 				userType,
 			});

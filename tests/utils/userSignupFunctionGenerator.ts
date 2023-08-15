@@ -4,6 +4,7 @@ import User from "../../src/models/user.model";
 import { IUser } from "../../types/IUser";
 import generateUser from "./generateUser";
 import { usernameType } from "./generateUsername";
+import { getUsernameType } from "../../src/controllers/utils/validateUsername";
 
 const log = debug("log:userSignupFunctionGenerator");
 
@@ -13,7 +14,7 @@ export const userSignupFunctionGenerator = () => {
 		usernameType?: usernameType,
 	) => {
 		const { username, ...userData } = generateUser({ usernameType });
-		const idType = username.includes("@") ? "email" : "phoneNumber";
+		const idType = getUsernameType(username);
 
 		try {
 			const user = await User.create({

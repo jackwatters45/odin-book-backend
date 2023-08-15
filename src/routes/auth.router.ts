@@ -7,7 +7,8 @@ import {
 	getLoginGithubCallback,
 	getLoginGoogle,
 	getLoginGoogleCallback,
-	getResetPassword,
+	getResetPasswordCode,
+	getResetPasswordLink,
 	getVerifyLink,
 	postChangePassword,
 	postFindAccount,
@@ -57,10 +58,13 @@ router.post("/find-account", postFindAccount);
 // /forgot-password
 router.post("/forgot-password", postForgotPassword);
 
-// /reset-password/
-router.get("/reset-password/:resetToken", getResetPassword);
+// /reset-password/code/:resetCode
+router.get("/reset-password/code/:resetCode", getResetPasswordCode);
 
-// /reset-password
+// /reset-password/link/:resetToken
+router.get("/reset-password/link/:resetToken", getResetPasswordLink);
+
+// /reset-password/code/:resetToken
 router.post("/reset-password/:resetToken", postResetPassword);
 
 // /change-password

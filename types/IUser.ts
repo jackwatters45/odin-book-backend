@@ -12,6 +12,7 @@ export interface BasicUserInfo {
 	avatarUrl?: string;
 	description?: string;
 	phoneNumber?: string;
+	country?: string;
 }
 
 export interface UserLoginData {

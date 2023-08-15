@@ -11,6 +11,7 @@ import generateAndSendToken from "../utils/generateAndSendToken";
 import { authenticateJwt } from "../middleware/authConfig";
 import { IUser } from "../../types/IUser";
 import useResetToken from "./utils/useResetToken";
+import validateAndFormatUsername from "./utils/validateUsername";
 
 const log = debug("log:auth:controller");
 const errorLog = debug("error:auth:controller");
@@ -206,9 +207,12 @@ export const postSignUp = [
 
 			const { firstName, password, lastName, username, birthday } = req.body;
 
-			const idType = username.includes("@") ? "email" : "phoneNumber";
+			const { usernameType, formattedUsername } =
+				validateAndFormatUsername(username);
 
-			const userExists = await User.findOne({ [idType]: username });
+			const userExists = await User.findOne({
+				[usernameType]: formattedUsername,
+			});
 			if (userExists) {
 				res
 					.status(400)
@@ -223,10 +227,10 @@ export const postSignUp = [
 				birthday,
 				pronouns: req.body?.pronouns ?? undefined,
 				gender: req.body?.gender ?? undefined,
-				[idType]: username,
+				[usernameType]: formattedUsername,
 				verification: {
 					isVerified: false,
-					type: idType,
+					type: usernameType,
 				},
 			});
 
@@ -537,10 +541,11 @@ export const postForgotPassword = [
 		}
 
 		const { userId } = req.body;
-		const idType = userId.includes("@") ? "email" : "phoneNumber";
+		const { usernameType, formattedUsername } =
+			validateAndFormatUsername(userId);
 
 		try {
-			const user = await User.findOne({ [idType]: userId });
+			const user = await User.findOne({ [usernameType]: formattedUsername });
 			if (!user) {
 				res.status(200).json({
 					message: "If the account exists, a reset password link was sent.",
@@ -548,7 +553,7 @@ export const postForgotPassword = [
 				return;
 			}
 
-			await generateAndSendToken(user, "resetPassword", idType);
+			await generateAndSendToken(user, "resetPassword", usernameType);
 			res.status(200).json({
 				message: "If the account exists, a reset password link was sent.",
 				// TODO add to test
@@ -569,12 +574,13 @@ export const postForgotPassword = [
 // @access  Public
 export const postFindAccount = expressAsyncHandler(async (req, res) => {
 	const username = req.body.username;
-	const idType = username.includes("@") ? "email" : "phoneNumber";
+	const { usernameType, formattedUsername } =
+		validateAndFormatUsername(username);
 
 	try {
-		const user = await User.findOne({ [idType]: username }).select(
-			"firstName lastName userType avatarUrl phoneNumber email",
-		);
+		const user = await User.findOne({
+			[usernameType]: formattedUsername,
+		}).select("firstName lastName userType avatarUrl phoneNumber email");
 		if (!user) {
 			res.status(404).json({ message: "User not found." });
 			return;
@@ -589,31 +595,59 @@ export const postFindAccount = expressAsyncHandler(async (req, res) => {
 	}
 });
 
-// @route   GET /reset-password/:resetToken
+// result based on findOne in below functions is the same
+const resetPassword = (user: IUser, res: Response) => {
+	if (!user) {
+		res.status(400).json({ message: "Invalid reset password code." });
+		return;
+	}
+
+	const { resetPassword } = user;
+	if (resetPassword.tokenExpires && resetPassword.tokenExpires < Date.now()) {
+		res.status(400).json({
+			message: "Reset password code has expired. Please request a new one.",
+		});
+		return;
+	}
+
+	res.status(302).json({
+		message: "Reset password code is valid.",
+		token: resetPassword.token,
+	});
+};
+
+// @route   GET /reset-password/code/:resetCode
 // @desc    Confirm reset password code
 // @access  Public
-export const getResetPassword = expressAsyncHandler(async (req, res) => {
-	const resetToken = req.params.resetToken;
+export const getResetPasswordCode = expressAsyncHandler(async (req, res) => {
+	const resetCode = req.params.resetCode;
 	try {
-		const user = await User.findOne({ "resetPassword.token": resetToken });
-		if (!user) {
-			res.status(400).json({ message: "Invalid reset password code." });
-			return;
-		}
+		const user = (await User.findOne({
+			"resetPassword.code": resetCode,
+		})) as IUser;
 
-		const { resetPassword } = user;
-		if (resetPassword.tokenExpires && resetPassword.tokenExpires < Date.now()) {
-			res.status(400).json({
-				message: "Reset password code has expired. Please request a new one.",
-			});
-			return;
-		}
-
-		res.status(302).json({ message: "Reset password code is valid." });
+		resetPassword(user, res);
 	} catch (err) {
 		errorLog(err);
 		res
+			.status(500)
+			.json({ message: "An error occurred while resetting your password." });
+	}
+});
 
+// @route   GET /reset-password/link/:resetToken
+// @desc    Confirm reset password link
+// @access  Public
+export const getResetPasswordLink = expressAsyncHandler(async (req, res) => {
+	const resetToken = req.params.resetToken;
+	try {
+		const user = (await User.findOne({
+			"resetPassword.token": resetToken,
+		})) as IUser;
+		resetPassword(user, res);
+	} catch (err) {
+		errorLog(err);
+		res
 			.status(500)
 			.json({ message: "An error occurred while resetting your password." });
 	}

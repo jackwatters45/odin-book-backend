@@ -16,6 +16,7 @@ const createTwilioMessage = async (to: string, body: string) => {
 			to,
 		});
 
+		console.log(message);
 		return message;
 	} catch (err) {
 		console.error(err);
@@ -66,5 +67,9 @@ export const sendResetPasswordSMS = async (
 	token: string,
 ) => {
 	const message = getResetPasswordMessage(code, token);
-	await createTwilioMessage(phoneNumber, message);
+	try {
+		await createTwilioMessage(phoneNumber, message);
+	} catch (err) {
+		console.error(err);
+	}
 };

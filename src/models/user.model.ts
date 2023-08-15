@@ -27,6 +27,7 @@ const UserSchema = new Schema<IUser>(
 		},
 		birthday: { type: Date },
 		password: { type: String, trim: true, minlength: 8, maxlength: 100 },
+		country: { type: String, trim: true, maxlength: 100 },
 		facebookId: { type: String, trim: true, unique: true, sparse: true },
 		googleId: { type: String, trim: true, unique: true, sparse: true },
 		githubId: { type: String, trim: true, unique: true, sparse: true },

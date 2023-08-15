@@ -20,6 +20,7 @@ import passportGithub, { Profile as GithubProfile } from "passport-github2";
 import { VerifyCallback } from "passport-oauth2";
 
 import debug from "debug";
+import validateUsername from "../controllers/utils/validateUsername";
 
 const log = debug("log:authConfig");
 
@@ -63,8 +64,9 @@ const configAuth = (app: Application) => {
 	passport.use(
 		new LocalStrategy(async (username, password, done) => {
 			try {
-				const loginType = username.includes("@") ? "email" : "phoneNumber";
-				const user = await User.findOne({ [loginType]: username });
+				const { usernameType: loginType, formattedUsername } =
+					validateUsername(username);
+				const user = await User.findOne({ [loginType]: formattedUsername });
 				if (!user)
 					return done(null, false, {
 						message: "User with this email/phone not found",

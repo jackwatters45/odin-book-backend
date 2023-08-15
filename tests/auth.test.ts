@@ -23,6 +23,7 @@ import { userSignupFunctionGenerator } from "./utils/userSignupFunctionGenerator
 import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
 import { parseCookies } from "./utils/parseCookie";
 import getUserWithoutPassword from "./utils/getUserWithoutPassword";
+import { getUsernameType } from "../src/controllers/utils/validateUsername";
 
 const log = debug("log:auth:test");
 
@@ -740,7 +741,7 @@ describe("POST /verify/resend", () => {
 		const { token, tokenExpires, type } = generateRandomTokenEmailOrSms();
 		const baseUser = generateUser({ usernameType: type });
 
-		userIdType = baseUser.username.includes("@") ? "email" : "phoneNumber";
+		userIdType = getUsernameType(baseUser.username);
 		const userData = new User({
 			...baseUser,
 			[userIdType]: baseUser.username,
