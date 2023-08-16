@@ -11,7 +11,7 @@ import generateAndSendToken from "../utils/generateAndSendToken";
 import { authenticateJwt } from "../middleware/authConfig";
 import { IUser } from "../../types/IUser";
 import useResetToken from "./utils/useResetToken";
-import validateAndFormatUsername from "./utils/validateUsername";
+import validateAndFormatUsername from "./utils/validateAndFormatUsername";
 
 const log = debug("log:auth:controller");
 const errorLog = debug("error:auth:controller");
@@ -103,6 +103,36 @@ export const postLogin = [
 		},
 	),
 ];
+
+// @desc    Log in user who forgot password but not changing password
+// @route /login/forgot-password
+// @access  Public
+export const postLoginForgotPassword = expressAsyncHandler(
+	async (req: Request, res: Response) => {
+		const token = req.body.token;
+
+		log("token", token);
+
+		if (!token) {
+			res.status(401).json({ message: "Token not found" });
+			return;
+		}
+
+		try {
+			const user = (await User.findOne({
+				"resetPassword.token": token,
+				isDeleted: false,
+			})) as IUser;
+
+			await resetResetPassword(user);
+
+			handleUserLogin(res, user);
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: "Server error" });
+		}
+	},
+);
 
 // @desc    Login as guest
 // @route   POST /login-guest
@@ -560,10 +590,76 @@ export const postForgotPassword = [
 				userId,
 			});
 		} catch (err) {
-			// TODO is err.message or err better?
 			errorLog(err);
 			res.status(500).json({
 				message: err.message || "Could not send reset password email.",
+			});
+		}
+	}),
+];
+
+// @route   POST /update-password/:token
+// @desc    Update password
+// @access  Private
+export const updateForgottenPassword = [
+	body("newPassword")
+		.notEmpty()
+		.trim()
+		.isLength({ min: 8 })
+		.withMessage("Password should be at least 8 characters long")
+		.matches(
+			/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*?()])[A-Za-z\d!@#$%^&*?()]{8,}$/,
+			"i",
+		)
+		.withMessage(
+			"Password must contain at least one uppercase letter, one lowercase letter, one special character, one number, and be at least 8 characters long",
+		),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			res.status(400).json({ errors: errors.array() });
+			return;
+		}
+
+		try {
+			const user = await User.findOne({
+				"resetPassword.token": req.params.token,
+			});
+
+			if (!user) {
+				res.status(400).json({ message: "Invalid reset password code." });
+				return;
+			}
+
+			const { resetPassword } = user;
+			if (
+				resetPassword.tokenExpires &&
+				resetPassword.tokenExpires < Date.now()
+			) {
+				await resetResetPassword(user);
+				res.status(400).json({
+					message: "Reset password code has expired. Please request a new one.",
+				});
+
+				return;
+			}
+
+			user.password = req.body.newPassword;
+			await resetResetPassword(user);
+
+			res.status(200).json({ message: "Password updated successfully." });
+
+			// TODO add
+			// const { email, phoneNumber } = user;
+			// if (email) {
+			// 	await sendPasswordUpdatedEmail(email);
+			// } else if (phoneNumber) {
+			// 	await sendPasswordUpdatedSMS(phoneNumber);
+			// }
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({
+				message: err.message || "An error occurred while updating password.",
 			});
 		}
 	}),
@@ -596,7 +692,7 @@ export const postFindAccount = expressAsyncHandler(async (req, res) => {
 });
 
 // result based on findOne in below functions is the same
-const resetPassword = (user: IUser, res: Response) => {
+const resetPassword = async (user: IUser, res: Response) => {
 	if (!user) {
 		res.status(400).json({ message: "Invalid reset password code." });
 		return;
@@ -607,6 +703,7 @@ const resetPassword = (user: IUser, res: Response) => {
 		res.status(400).json({
 			message: "Reset password code has expired. Please request a new one.",
 		});
+		await resetResetPassword(user);
 		return;
 	}
 
@@ -626,7 +723,7 @@ export const getResetPasswordCode = expressAsyncHandler(async (req, res) => {
 			"resetPassword.code": resetCode,
 		})) as IUser;
 
-		resetPassword(user, res);
+		await resetPassword(user, res);
 	} catch (err) {
 		errorLog(err);
 		res
@@ -644,7 +741,7 @@ export const getResetPasswordLink = expressAsyncHandler(async (req, res) => {
 		const user = (await User.findOne({
 			"resetPassword.token": resetToken,
 		})) as IUser;
-		resetPassword(user, res);
+		await resetPassword(user, res);
 	} catch (err) {
 		errorLog(err);
 		res

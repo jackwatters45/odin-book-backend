@@ -14,6 +14,7 @@ import {
 	postFindAccount,
 	postForgotPassword,
 	postLogin,
+	postLoginForgotPassword,
 	postLoginGuest,
 	postLogout,
 	postRefreshToken,
@@ -21,12 +22,19 @@ import {
 	postResetPassword,
 	postSignUp,
 	postVerifyCode,
+	updateForgottenPassword,
 } from "../controllers/auth.controller";
 
 const router = express.Router();
 
 //  /login
 router.post("/login", postLogin);
+
+// /login/forgot-password
+router.post("/login", postLoginForgotPassword);
+
+// //login/forgot-password
+router.post("/login/forgot-password", postLoginForgotPassword);
 
 // /login-guest
 router.post("/login-guest", postLoginGuest);
@@ -57,6 +65,9 @@ router.post("/find-account", postFindAccount);
 
 // /forgot-password
 router.post("/forgot-password", postForgotPassword);
+
+// /update-password/:token
+router.post("/update-password/:token", updateForgottenPassword);
 
 // /reset-password/code/:resetCode
 router.get("/reset-password/code/:resetCode", getResetPasswordCode);

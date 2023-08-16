@@ -16,7 +16,6 @@ const createTwilioMessage = async (to: string, body: string) => {
 			to,
 		});
 
-		console.log(message);
 		return message;
 	} catch (err) {
 		console.error(err);
@@ -28,12 +27,12 @@ const getVerificationLink = (verificationToken: string) =>
 
 const getVerificationMessage = (code: string, token: string) => {
 	return `Your verification code is ${code}. 
-  
-  You can also click on the following link to verify your account: ${getVerificationLink(
+
+	You can also click on the following link to verify your account: ${getVerificationLink(
 		token,
 	)}
 
-  It expires in 15 minutes. If you did not request this verification code, please ignore this message.`;
+	It expires in 15 minutes. If you did not request this verification code, please ignore this message.`;
 };
 
 const getResetPasswordLink = (token: string) =>
@@ -42,9 +41,9 @@ const getResetPasswordLink = (token: string) =>
 const getResetPasswordMessage = (code: string, token: string) => {
 	return `You are receiving this message because you (or someone else) requested the reset of the password for your account.
 
-  Your code is ${code}. 
+	Your code is ${code}. 
   
-  You can also click on the following link to reset your password: ${getResetPasswordLink(
+	You can also click on the following link to reset your password: ${getResetPasswordLink(
 		token,
 	)}
 

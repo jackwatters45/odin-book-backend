@@ -1,6 +1,8 @@
 import { IUser } from "../../../types/IUser";
 
-const useResetToken = (type: "verification" | "resetPassword") => {
+const useResetToken = (
+	type: "verification" | "resetPassword",
+): ((user: IUser) => Promise<void>) => {
 	return async (user: IUser) => {
 		user.verification.token = undefined;
 		user.verification.tokenExpires = undefined;

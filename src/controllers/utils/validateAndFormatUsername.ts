@@ -37,7 +37,7 @@ interface IValidateUsername {
 	formattedUsername: string | null;
 }
 
-const validateUsername = (input: string): IValidateUsername => {
+const validateAndFormatUsername = (input: string): IValidateUsername => {
 	const usernameType = getUsernameType(input);
 	const formattedUsername =
 		usernameType === "email"
@@ -50,4 +50,4 @@ const validateUsername = (input: string): IValidateUsername => {
 	};
 };
 
-export default validateUsername;
+export default validateAndFormatUsername;

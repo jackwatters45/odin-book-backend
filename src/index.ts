@@ -6,7 +6,7 @@ import configAuthMiddleware from "./middleware/authConfig";
 import configOtherMiddleware from "./middleware/otherConfig";
 import { configDb } from "./config/database";
 import configRoutes from "./routes";
-import configProdMiddleware from "./middleware/prodConfig";
+// import configProdMiddleware from "./middleware/prodConfig";
 import configErrorMiddleware from "./middleware/errorConfig";
 import configCloudinary from "./config/cloudinary";
 import { port, appUrl } from "./config/envVariables";
@@ -18,7 +18,7 @@ const configApp = async () => {
 	await configDb();
 	configAuthMiddleware(app);
 	configOtherMiddleware(app);
-	configProdMiddleware(app);
+	// configProdMiddleware(app);
 	configCloudinary();
 
 	// Config Routes

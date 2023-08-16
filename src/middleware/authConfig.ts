@@ -20,7 +20,7 @@ import passportGithub, { Profile as GithubProfile } from "passport-github2";
 import { VerifyCallback } from "passport-oauth2";
 
 import debug from "debug";
-import validateUsername from "../controllers/utils/validateUsername";
+import validateAndFormatUsername from "../controllers/utils/validateAndFormatUsername";
 
 const log = debug("log:authConfig");
 
@@ -65,7 +65,7 @@ const configAuth = (app: Application) => {
 		new LocalStrategy(async (username, password, done) => {
 			try {
 				const { usernameType: loginType, formattedUsername } =
-					validateUsername(username);
+					validateAndFormatUsername(username);
 				const user = await User.findOne({ [loginType]: formattedUsername });
 				if (!user)
 					return done(null, false, {

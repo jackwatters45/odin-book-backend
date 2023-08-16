@@ -15,7 +15,7 @@ import resizeImages from "../utils/resizeImages";
 import { uploadFilesToCloudinary } from "../utils/uploadToCloudinary";
 
 const log = debug("log:post:controller");
-const errorLog = debug("error:post:controller");
+const errorLog = debug("err:post:controller");
 
 // TODO specific populate options
 
@@ -42,9 +42,9 @@ export const getPosts = expressAsyncHandler(
 
 			const posts = await postsQuery.exec();
 			res.status(200).json({ posts, meta: { total: postsCount } });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -69,9 +69,9 @@ export const getPostById = expressAsyncHandler(
 				});
 
 			res.status(200).json({ post });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -125,9 +125,9 @@ export const createPost = [
 
 			await post.save();
 			res.status(201).json({ post });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message, post });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message, post });
 		}
 	}),
 ];
@@ -184,9 +184,9 @@ export const updatePost = [
 			const updatedPost = await post.save();
 
 			res.status(200).json({ post: updatedPost, message: "Post updated" });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -214,9 +214,9 @@ export const deletePost = [
 			await Post.findByIdAndDelete(req.params.id);
 
 			res.status(200).json({ message: "Post deleted", post });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -268,9 +268,9 @@ export const reactToPost = [
 			await post.save();
 
 			res.status(201).json({ message: "Reaction added", post });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -311,9 +311,9 @@ export const unreactToPost = [
 			await post.save();
 
 			res.status(200).json({ message: "Reaction removed", post });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -335,9 +335,9 @@ export const getPostReactions = expressAsyncHandler(
 				.sort({ createdAt: -1 });
 
 			res.status(200).json({ reactions });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -372,8 +372,8 @@ export const toggleSavedPost = [
 			);
 
 			res.status(200).json({ savedPosts: userUpdated?.savedPosts });
-		} catch (error) {
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -392,8 +392,8 @@ export const getSavedPosts = [
 				.sort({ createdAt: -1 });
 
 			res.status(200).json({ posts });
-		} catch (error) {
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -423,8 +423,8 @@ export const sharePost = [
 			await sharedPost.save();
 
 			res.status(201).json({ message: "Post shared successfully", sharedPost });
-		} catch (error) {
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -457,8 +457,8 @@ export const getPostsByFriends = [
 			}
 
 			res.status(200).json({ posts, meta: { total: postsCount } });
-		} catch (error) {
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];

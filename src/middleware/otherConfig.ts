@@ -10,6 +10,11 @@ const configOtherMiddleware = (app: Application) => {
 	app.use(express.urlencoded({ extended: false }));
 	app.use(cookieParser());
 	app.use(cors({ origin: corsOrigin, credentials: true }));
+
+	app.use((req, res, next) => {
+		console.log(req.body); // Log the incoming payload
+		next();
+	});
 };
 
 export default configOtherMiddleware;

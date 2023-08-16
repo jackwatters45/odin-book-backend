@@ -4,7 +4,7 @@ import User from "../../src/models/user.model";
 import { IUser } from "../../types/IUser";
 import generateUser from "./generateUser";
 import { usernameType } from "./generateUsername";
-import { getUsernameType } from "../../src/controllers/utils/validateUsername";
+import { getUsernameType } from "../../src/controllers/utils/validateAndFormatUsername";
 
 const log = debug("log:userSignupFunctionGenerator");
 

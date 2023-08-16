@@ -11,7 +11,7 @@ import Post from "../models/post.model";
 import { authenticateJwt } from "../middleware/authConfig";
 
 const log = debug("log:comment:controller");
-const errorLog = debug("error:comment:controller");
+const errorLog = debug("err:comment:controller");
 
 // @desc    Get all comments from post
 // @route   GET /posts/:post/comments
@@ -68,9 +68,9 @@ export const getComments = expressAsyncHandler(
 				comments,
 				meta: { total: commentsCount, totalParent: parentCommentsCount },
 			});
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -106,9 +106,9 @@ export const getReplies = expressAsyncHandler(
 				.exec();
 
 			res.status(200).json({ replies });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -138,9 +138,9 @@ export const getCommentById = expressAsyncHandler(
 			}
 
 			res.status(200).json({ comment, message: "Comment found" });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -213,11 +213,11 @@ export const createComment = [
 			res
 				.status(201)
 				.json({ message: "Comment created", comment: commentWithAuthor });
-		} catch (error) {
+		} catch (err) {
 			await session.abortTransaction();
 
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		} finally {
 			session.endSession();
 		}
@@ -266,9 +266,9 @@ export const updateComment = [
 			await comment.save();
 
 			res.status(201).json({ message: "Comment updated", comment });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -310,9 +310,9 @@ export const deleteComment = [
 				message: "Comment deleted successfully",
 				comment: updatedComment,
 			});
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -373,11 +373,11 @@ export const createCommentReply = [
 			await session.commitTransaction();
 
 			res.status(201).json({ newComment });
-		} catch (error) {
+		} catch (err) {
 			await session.abortTransaction();
 
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		} finally {
 			session.endSession();
 		}
@@ -440,9 +440,9 @@ export const reactToComment = [
 			await comment.save();
 
 			res.status(201).json({ message: "Reaction added", comment });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -492,9 +492,9 @@ export const unreactToComment = [
 			await comment.save();
 
 			res.status(201).json({ message: "Reaction removed", comment });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];

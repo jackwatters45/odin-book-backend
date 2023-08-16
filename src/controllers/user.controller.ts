@@ -8,10 +8,10 @@ import { IUser } from "../../types/IUser";
 import Post from "../models/post.model";
 import Comment from "../models/comment.model";
 import { authenticateJwt } from "../middleware/authConfig";
-import validateUsername from "./utils/validateUsername";
+import validateAndFormatUsername from "./utils/validateAndFormatUsername";
 
 const log = debug("log:user:controller");
-const errorLog = debug("error:user:controller");
+const errorLog = debug("err:user:controller");
 
 // @desc    Get all users
 // @route   GET /users
@@ -26,9 +26,9 @@ export const getUsers = expressAsyncHandler(
 				.sort({ createdAt: -1 });
 
 			res.status(200).json({ users, meta: { total: usersTotal } });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -54,9 +54,9 @@ export const getUserById = expressAsyncHandler(
 			}
 
 			res.status(200).json({ user, posts, comments });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -94,9 +94,9 @@ export const getDeletedUserById = [
 			]);
 
 			res.status(200).json({ user, posts, comments });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -165,7 +165,8 @@ export const createUser = [
 			const { firstName, password, lastName, birthday, username, userType } =
 				req.body;
 
-			const { usernameType, formattedUsername } = validateUsername(username);
+			const { usernameType, formattedUsername } =
+				validateAndFormatUsername(username);
 
 			const userExists = await User.findOne({
 				[usernameType]: formattedUsername,
@@ -218,15 +219,6 @@ export const updateUserPassword = [
 		.withMessage(
 			"Password must contain at least one uppercase letter, one lowercase letter, one special character, one number, and be at least 8 characters long",
 		),
-	body("confirmPassword")
-		.notEmpty()
-		.trim()
-		.custom((confirmPassword, { req }) => {
-			if (confirmPassword !== req.body.newPassword) {
-				throw new Error("Passwords do not match");
-			}
-			return true;
-		}),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
@@ -252,9 +244,9 @@ export const updateUserPassword = [
 			await user.save();
 
 			res.status(201).json({ message: "Password updated successfully" });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -331,9 +323,9 @@ export const updateUserBasicInfo = [
 			res
 				.status(201)
 				.json({ updatedUser, message: "User updated successfully" });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -366,9 +358,9 @@ export const getUserPosts = expressAsyncHandler(
 				message: "Posts retrieved successfully",
 				meta: { total: postCount },
 			});
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -397,9 +389,9 @@ export const getUserFriends = expressAsyncHandler(
 				friends: user.friends,
 				message: "Friends retrieved successfully",
 			});
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	},
 );
@@ -459,9 +451,9 @@ export const getUserSavedPosts = [
 				savedPosts: savedPostsWithLimitOffset,
 				meta: { total: savedPostsCount },
 			});
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -511,9 +503,9 @@ export const sendFriendRequest = [
 			});
 
 			res.status(200).json({ message: "Friend request sent successfully" });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -562,9 +554,9 @@ export const unfriendUser = [
 				message: "Friend removed successfully",
 				updatedFriendsList,
 			});
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -632,9 +624,9 @@ export const acceptFriendRequest = [
 				otherUserUpdatedFriendsList: updatedOtherUser.friends,
 				otherUserUpdatedFriendRequestsSent: updatedOtherUser.friendRequestsSent,
 			});
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
@@ -697,9 +689,9 @@ export const rejectFriendRequest = [
 				otherUserUpdatedFriendRequestsSent,
 				otherUserUpdatedFriendsList: userToReject.friends,
 			});
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({ message: error.message });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
 		}
 	}),
 ];

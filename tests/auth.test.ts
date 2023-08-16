@@ -23,7 +23,7 @@ import { userSignupFunctionGenerator } from "./utils/userSignupFunctionGenerator
 import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
 import { parseCookies } from "./utils/parseCookie";
 import getUserWithoutPassword from "./utils/getUserWithoutPassword";
-import { getUsernameType } from "../src/controllers/utils/validateUsername";
+import { getUsernameType } from "../src/controllers/utils/validateAndFormatUsername";
 
 const log = debug("log:auth:test");
 
