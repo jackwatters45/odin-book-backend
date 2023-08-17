@@ -113,7 +113,7 @@ const configAuth = (app: Application) => {
 			{
 				clientID: facebookAppId,
 				clientSecret: facebookAppSecret,
-				callbackURL: `${appUrl}/auth/facebook/callback`,
+				callbackURL: `${appUrl}/auth/login/facebook/callback`,
 				profileFields: ["id", "emails", "name", "gender", "birthday"],
 			},
 			async (accessToken, refreshToken, profile, done) => {
@@ -155,7 +155,7 @@ const configAuth = (app: Application) => {
 			{
 				clientID: googleClientId,
 				clientSecret: googleClientSecret,
-				callbackURL: `${appUrl}/auth/google/callback`,
+				callbackURL: `${appUrl}/auth/login/google/callback`,
 			},
 			async (accessToken, refreshToken, profile, done) => {
 				try {
@@ -198,7 +198,7 @@ const configAuth = (app: Application) => {
 			{
 				clientID: githubClientId,
 				clientSecret: githubClientSecret,
-				callbackURL: `${appUrl}/auth/github/callback`,
+				callbackURL: `${appUrl}/auth/login/github/callback`,
 			},
 			async (
 				accessToken: string,
@@ -207,8 +207,7 @@ const configAuth = (app: Application) => {
 				done: VerifyCallback,
 			) => {
 				try {
-					let user = await User.findOne({ githubId: profile.id }).exec();
-
+					let user = await User.findOne({ githubId: profile.id });
 					if (!user) {
 						const email = profile.emails && profile.emails[0].value;
 
@@ -237,6 +236,7 @@ const configAuth = (app: Application) => {
 					}
 
 					const { password: _, ...userWithoutPassword } = user.toObject();
+					console.log("user", userWithoutPassword);
 					return done(null, userWithoutPassword);
 				} catch (err) {
 					return done(err);

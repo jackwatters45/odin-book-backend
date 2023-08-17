@@ -6,7 +6,12 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import debug from "debug";
 
 import User from "../models/user.model";
-import { jwtSecret, nodeEnv, refreshTokenSecret } from "../config/envVariables";
+import {
+	corsOrigin,
+	jwtSecret,
+	nodeEnv,
+	refreshTokenSecret,
+} from "../config/envVariables";
 import generateAndSendToken from "../utils/generateAndSendToken";
 import { authenticateJwt } from "../middleware/authConfig";
 import { IUser } from "../../types/IUser";
@@ -52,7 +57,13 @@ export const handleUserLogin = async (res: Response, user: IUser) => {
 	});
 
 	const { isVerified, type } = user.verification;
-	if (isVerified || nodeEnv === "test" || user.userType === "guest") return;
+	if (
+		isVerified ||
+		nodeEnv === "test" ||
+		nodeEnv === "development" ||
+		user.userType === "guest"
+	)
+		return;
 
 	try {
 		await generateAndSendToken(user, "verification", type);
@@ -897,16 +908,24 @@ export const getLoginFacebook = passport.authenticate("facebook", {
 	scope: ["email"],
 });
 
-export const getLoginFacebookCallback = [
-	passport.authenticate("facebook", {
-		successRedirect: "/",
-		failureRedirect: "/login",
-		session: false,
-	}),
-	(req: Request, res: Response) => {
-		handleUserLogin(res, req.user as IUser);
-	},
-];
+export const getLoginFacebookCallback = (req: Request, res: Response) => {
+	passport.authenticate(
+		"facebook",
+		{ session: false },
+		(err?: Error, user?: IUser, info?: { message: string }) => {
+			if (err) {
+				return res.redirect(`${corsOrigin}/login?error=serverError`);
+			}
+
+			if (info?.message === "Email already registered using another method") {
+				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
+			}
+
+			handleUserLogin(res, user as IUser);
+			return res.redirect(`${corsOrigin}/`);
+		},
+	)(req, res);
+};
 
 // @desc    Login with Google
 // @route   GET /login/google
@@ -915,16 +934,24 @@ export const getLoginGoogle = passport.authenticate("google", {
 	scope: ["profile", "email"],
 });
 
-export const getLoginGoogleCallback = [
-	passport.authenticate("google", {
-		successRedirect: "/",
-		failureRedirect: "/login",
-		session: false,
-	}),
-	(req: Request, res: Response) => {
-		handleUserLogin(res, req.user as IUser);
-	},
-];
+export const getLoginGoogleCallback = (req: Request, res: Response) => {
+	passport.authenticate(
+		"google",
+		{ session: false },
+		(err?: Error, user?: IUser, info?: { message: string }) => {
+			if (err) {
+				return res.redirect(`${corsOrigin}/login?error=serverError`);
+			}
+
+			if (info?.message === "Email already registered using another method") {
+				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
+			}
+
+			handleUserLogin(res, user as IUser);
+			return res.redirect(`${corsOrigin}/`);
+		},
+	)(req, res);
+};
 
 // @desc    Login with Github
 // @route   GET /login/github
@@ -933,12 +960,52 @@ export const getLoginGithub = passport.authenticate("github", {
 	scope: ["user:email"],
 });
 
-export const getLoginGithubCallback = [
-	passport.authenticate("github", {
-		failureRedirect: "/login",
-		session: false,
-	}),
-	(req: Request, res: Response) => {
-		handleUserLogin(res, req.user as IUser);
-	},
-];
+export const getLoginGithubCallback = (req: Request, res: Response) => {
+	passport.authenticate(
+		"github",
+		{ session: false },
+		(err?: Error, user?: IUser, info?: { message: string }) => {
+			if (err) {
+				return res.redirect(`${corsOrigin}/login?error=serverError`);
+			}
+
+			if (info?.message === "Email already registered using another method") {
+				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
+			}
+
+			handleUserLogin(res, user as IUser);
+			return res.redirect(`${corsOrigin}/`);
+		},
+	)(req, res);
+};
+//         // Handle error
+//         return res.redirect(`${corsOrigin}/login?error=serverError`);
+//     }
+
+//     if (!user) {
+//         // Authentication failed
+//         if (info && info.message === 'Email already registered using another method') {
+//             return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
+//         } else {
+//             return res.redirect(`${corsOrigin}/login?error=authFailure`);
+//         }
+//     }
+
+//     // If everything's good, establish a session or perform other post-authentication tasks.
+//     // ... your logic here ...
+
+//     // Redirect to a successful login page or dashboard
+//     return res.redirect(`${corsOrigin}/dashboard`);
+
+// })(req, res, next);
+
+// [
+// 	passport.authenticate("github", {
+// 		failureRedirect: `${corsOrigin}/login?error=authFailure`,
+// 		session: false,
+// 	}),
+// 	(req: Request, res: Response) => {
+// 		handleUserLogin(res, req.user as IUser);
+// 		res.redirect(`${corsOrigin}/`);
+// 	},
+// ];
