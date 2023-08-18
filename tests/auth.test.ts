@@ -246,6 +246,10 @@ describe("POST /login", () => {
 	});
 });
 
+describe("POST /login/forgot-password", () => {
+	// TODO
+});
+
 describe("POST /login-guest", () => {
 	it("should login a guest", async () => {
 		const res = await request(app)
@@ -831,6 +835,60 @@ describe("POST /verify/resend", () => {
 	});
 });
 
+describe("POST /find-account/", () => {
+	beforeEach(async () => {
+		await signUpUser();
+	});
+
+	it("returns 200 and the user if the user exists", async () => {
+		const { user } = await signUpUser();
+
+		const res = await request(app)
+			.post(`${apiPath}/auth/find-account`)
+			.send({
+				username: user.email || user.phoneNumber,
+			})
+			.expect(200);
+
+		expect(res.body).toEqual({
+			message: "User found.",
+			user: expect.objectContaining({
+				_id: expect.any(String),
+				firstName: expect.any(String),
+				lastName: expect.any(String),
+				userType: expect.any(String),
+				avatarUrl: expect.any(String),
+			}),
+		});
+	});
+
+	it("returns 404 if the user does not exist", async () => {
+		const res = await request(app)
+			.post(`${apiPath}/auth/find-account`)
+			.send({
+				username: faker.internet.email(),
+			})
+			.expect(404);
+
+		expect(res.body.message).toBe("User not found.");
+	});
+
+	it("returns 500 if an error occurs while finding the user", async () => {
+		jest.spyOn(User, "findOne").mockReturnValueOnce({
+			select: jest.fn().mockRejectedValueOnce(new Error("Test error")),
+		} as never);
+
+		const res = await request(app)
+			.post(`${apiPath}/auth/find-account`)
+			.send({
+				username: faker.internet.email(),
+			})
+			.expect(500);
+
+		expect(res.body.message).toBe("Test error");
+	});
+});
+
 jest.mock("../src/utils/generateAndSendToken", () => jest.fn());
 describe("POST /forgot-password", () => {
 	it("returns 200 and sends a reset password link to the user's email if user exists", async () => {
@@ -901,61 +959,224 @@ describe("POST /forgot-password", () => {
 	});
 });
 
-describe("POST /find-account/", () => {
+// / @route   POST /update-password/:token
+// @desc    Update password
+// @access  Private
+// export const updateForgottenPassword = [
+// 	body("newPassword")
+// 		.notEmpty()
+// 		.trim()
+// 		.isLength({ min: 8 })
+// 		.withMessage("Password should be at least 8 characters long")
+// 		.matches(
+// 			/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*?()])[A-Za-z\d!@#$%^&*?()]{8,}$/,
+// 			"i",
+// 		)
+// 		.withMessage(
+// 			"Password must contain at least one uppercase letter, one lowercase letter, one special character, one number, and be at least 8 characters long",
+// 		),
+// 	expressAsyncHandler(async (req: Request, res: Response) => {
+// 		const errors = validationResult(req);
+// 		if (!errors.isEmpty()) {
+// 			res.status(400).json({ errors: errors.array() });
+// 			return;
+// 		}
+
+// 		try {
+// 			const user = await User.findOne({
+// 				"resetPassword.token": req.params.token,
+// 			});
+
+// 			if (!user) {
+// 				res.status(400).json({ message: "Invalid reset password code." });
+// 				return;
+// 			}
+
+// 			const { resetPassword } = user;
+// 			if (
+// 				resetPassword.tokenExpires &&
+// 				resetPassword.tokenExpires < Date.now()
+// 			) {
+// 				await resetResetPassword(user);
+// 				res.status(400).json({
+// 					message: "Reset password code has expired. Please request a new one.",
+// 				});
+
+// 				return;
+// 			}
+
+// 			user.password = req.body.newPassword;
+// 			await resetResetPassword(user);
+
+// 			res.status(200).json({ message: "Password updated successfully." });
+
+// 			// TODO add
+// 			// const { email, phoneNumber } = user;
+// 			// if (email) {
+// 			// 	await sendPasswordUpdatedEmail(email);
+// 			// } else if (phoneNumber) {
+// 			// 	await sendPasswordUpdatedSMS(phoneNumber);
+// 			// }
+// 		} catch (err) {
+// 			errorLog(err);
+// 			res.status(500).json({
+// 				message: err.message || "An error occurred while updating password.",
+// 			});
+// 		}
+// 	}),
+// ];
+
+describe("POST /update-password/:token", () => {
+	let resetToken: string;
+
 	beforeEach(async () => {
-		await signUpUser();
+		const { token, tokenExpires, type, code } = generateRandomTokenEmailOrSms();
+		await signUpUser({
+			resetPassword: { token, tokenExpires, type, code },
+		});
+
+		resetToken = token;
 	});
 
-	it("returns 200 and the user if the user exists", async () => {
-		const { user } = await signUpUser();
-
+	it("returns 200 and updates the user's password if the reset password token is valid", async () => {
+		const newPassword = generatePassword();
 		const res = await request(app)
-			.post(`${apiPath}/auth/find-account`)
-			.send({
-				username: user.email || user.phoneNumber,
-			})
+			.post(`${apiPath}/auth/update-password/${resetToken}`)
+			.send({ newPassword })
 			.expect(200);
 
 		expect(res.body).toEqual({
-			message: "User found.",
-			user: expect.objectContaining({
-				_id: expect.any(String),
-				firstName: expect.any(String),
-				lastName: expect.any(String),
-				userType: expect.any(String),
-				avatarUrl: expect.any(String),
-			}),
+			message: "Password updated successfully.",
 		});
 	});
 
-	it("returns 404 if the user does not exist", async () => {
+	it("returns 400 if the new password is invalid", async () => {
+		const newPassword = generateInvalidPassword();
 		const res = await request(app)
-			.post(`${apiPath}/auth/find-account`)
-			.send({
-				username: faker.internet.email(),
-			})
-			.expect(404);
+			.post(`${apiPath}/auth/update-password/${resetToken}`)
+			.send({ newPassword })
+			.expect(400);
 
-		expect(res.body.message).toBe("User not found.");
+		expect(res.body).toEqual({
+			errors: expect.any(Array),
+		});
 	});
 
-	it("returns 500 if an error occurs while finding the user", async () => {
-		jest.spyOn(User, "findOne").mockReturnValueOnce({
-			select: jest.fn().mockRejectedValueOnce(new Error("Test error")),
-		} as never);
+	it("returns 400 if the reset password token is invalid", async () => {
+		const newPassword = generatePassword();
+		const res = await request(app)
+			.post(`${apiPath}/auth/update-password/${faker.string.uuid()}`)
+			.send({ newPassword })
+			.expect(400);
+
+		expect(res.body).toEqual({
+			message: "Invalid reset password token.",
+		});
+	});
+
+	it("returns 400 if the reset password token is expired", async () => {
+		const { token, type } = generateRandomTokenEmailOrSms();
+		await signUpUser({
+			resetPassword: {
+				token,
+				tokenExpires: faker.date.past().getTime(),
+				type,
+			},
+		});
+
+		const newPassword = generatePassword();
+		const res = await request(app)
+			.post(`${apiPath}/auth/update-password/${token}`)
+			.send({ newPassword })
+			.expect(400);
+
+		expect(res.body).toEqual({
+			message: "Reset password token has expired. Please request a new one.",
+		});
+	});
+
+	it("returns 500 if an error occurs while updating the user's password", async () => {
+		const newPassword = generatePassword();
+		jest
+			.spyOn(User.prototype, "save")
+			.mockRejectedValueOnce(new Error("Test error"));
 
 		const res = await request(app)
-			.post(`${apiPath}/auth/find-account`)
-			.send({
-				username: faker.internet.email(),
-			})
+			.post(`${apiPath}/auth/update-password/${resetToken}`)
+			.send({ newPassword })
 			.expect(500);
 
-		expect(res.body.message).toBe("Test error");
+		expect(res.body).toEqual({
+			message: "Test error",
+		});
 	});
 });
 
-describe("GET /reset-password/:resetToken", () => {
+describe("GET /reset-password/code/:resetCode", () => {
+	let resetCode: string;
+
+	beforeEach(async () => {
+		const { token, tokenExpires, type, code } = generateRandomTokenEmailOrSms();
+		await signUpUser(
+			{ resetPassword: { token, tokenExpires, code, type } },
+			type,
+		);
+		resetCode = code;
+	});
+
+	it("returns 302 and a success message if the reset password code is valid", async () => {
+		const res = await request(app)
+			.get(`${apiPath}/auth/reset-password/code/${resetCode}`)
+			.expect(302);
+
+		expect(res.body.message).toBe("Reset password code is valid.");
+	});
+
+	it("returns 400 if the reset password code is invalid ", async () => {
+		const res = await request(app)
+			.get(`${apiPath}/auth/reset-password/code/${faker.string.uuid()}`)
+			.expect(400);
+
+		expect(res.body.message).toBe("Invalid reset password code.");
+	});
+
+	it("returns 400 if the reset password code is expired", async () => {
+		const { token, type, code } = generateRandomTokenEmailOrSms();
+		await signUpUser(
+			{
+				resetPassword: {
+					token,
+					code,
+					tokenExpires: faker.date.past().getTime(),
+					type,
+				},
+			},
+			type,
+		);
+
+		const res = await request(app)
+			.get(`${apiPath}/auth/reset-password/code/${code}`)
+			.expect(400);
+
+		expect(res.body.message).toBe(
+			"Reset password code has expired. Please request a new one.",
+		);
+	});
+
+	it("returns 500 if an error occurs while finding the user", async () => {
+		jest.spyOn(User, "findOne").mockRejectedValueOnce(new Error("Test error"));
+
+		const res = await request(app)
+			.get(`${apiPath}/auth/reset-password/code/${resetCode}`)
+			.expect(500);
+
+		expect(res.body.message).toBe(
+			"An error occurred while resetting your password.",
+		);
+	});
+});
+
+describe("GET /reset-password/link/:resetToken", () => {
 	let resetToken: string;
 
 	beforeEach(async () => {
@@ -966,18 +1187,18 @@ describe("GET /reset-password/:resetToken", () => {
 
 	it("returns 302 and a success message if the reset password token is valid", async () => {
 		const res = await request(app)
-			.get(`${apiPath}/auth/reset-password/${resetToken}`)
+			.get(`${apiPath}/auth/reset-password/link/${resetToken}`)
 			.expect(302);
 
-		expect(res.body.message).toBe("Reset password code is valid.");
+		expect(res.body.message).toBe("Reset password token is valid.");
 	});
 
 	it("returns 400 if the reset password token is invalid ", async () => {
 		const res = await request(app)
-			.get(`${apiPath}/auth/reset-password/${faker.string.uuid()}`)
+			.get(`${apiPath}/auth/reset-password/link/${faker.string.uuid()}`)
 			.expect(400);
 
-		expect(res.body.message).toBe("Invalid reset password code.");
+		expect(res.body.message).toBe("Invalid reset password token.");
 	});
 
 	it("returns 400 if the reset password token is expired", async () => {
@@ -994,11 +1215,11 @@ describe("GET /reset-password/:resetToken", () => {
 		);
 
 		const res = await request(app)
-			.get(`${apiPath}/auth/reset-password/${token}`)
+			.get(`${apiPath}/auth/reset-password/link/${token}`)
 			.expect(400);
 
 		expect(res.body.message).toBe(
-			"Reset password code has expired. Please request a new one.",
+			"Reset password token has expired. Please request a new one.",
 		);
 	});
 
@@ -1006,7 +1227,7 @@ describe("GET /reset-password/:resetToken", () => {
 		jest.spyOn(User, "findOne").mockRejectedValueOnce(new Error("Test error"));
 
 		const res = await request(app)
-			.get(`${apiPath}/auth/reset-password/${resetToken}`)
+			.get(`${apiPath}/auth/reset-password/link/${resetToken}`)
 			.expect(500);
 
 		expect(res.body.message).toBe(

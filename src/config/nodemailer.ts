@@ -1,5 +1,10 @@
 import nodemailer from "nodemailer";
-import { appUrl, emailHost, emailPassword } from "../config/envVariables";
+import {
+	appUrl,
+	corsOrigin,
+	emailHost,
+	emailPassword,
+} from "../config/envVariables";
 import Mail from "nodemailer/lib/mailer";
 
 const transporter = nodemailer.createTransport({
@@ -10,7 +15,9 @@ const transporter = nodemailer.createTransport({
 	},
 });
 
-const getVerificationLink = (token: string) => `${appUrl}/verify/link/${token}`;
+// TODO change to frontend url
+const getVerificationLink = (token: string) =>
+	`${appUrl}/auth/verify/link/${token}`;
 
 export const getMailOptionsVerify = (
 	email: string,
@@ -49,7 +56,7 @@ export const getMailOptionsVerify = (
 };
 
 const getResetPasswordLink = (token: string) =>
-	`${appUrl}/reset-password/${token}`;
+	`${corsOrigin}/recover/validate-link/${token}`;
 
 export const getMailOptionsReset = (
 	email: string,

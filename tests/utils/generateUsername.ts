@@ -7,6 +7,6 @@ export const generateUsername = (usernameType?: usernameType): string => {
 		usernameType || (faker.datatype.boolean(0.5) ? "email" : "phoneNumber");
 
 	return type === "email"
-		? faker.internet.email()
-		: faker.phone.number("+1##########");
+		? faker.internet.email().toLowerCase()
+		: faker.phone.number("+1555#######");
 };

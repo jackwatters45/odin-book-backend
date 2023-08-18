@@ -21,9 +21,8 @@ import validateAndFormatUsername from "./utils/validateAndFormatUsername";
 const log = debug("log:auth:controller");
 const errorLog = debug("error:auth:controller");
 
-// TODO cookie options
-export const handleUserLogin = async (res: Response, user: IUser) => {
-	const payload = { id: user._id };
+const loginUser = async (userId: string) => {
+	const payload = { id: userId };
 
 	const jwtToken = jwt.sign(payload, jwtSecret, {
 		expiresIn: "1h",
@@ -33,43 +32,67 @@ export const handleUserLogin = async (res: Response, user: IUser) => {
 		expiresIn: "7d",
 	});
 
-	user.refreshTokens.push(refreshToken);
-	await user.save();
-
-	res.cookie("jwt", jwtToken, {
-		maxAge: 3600000,
-		httpOnly: true,
-		// secure: true,
-		// sameSite: "none",
-	});
-
-	res.cookie("refreshToken", refreshToken, {
-		maxAge: 604800000, // 7 days
-		httpOnly: true,
-		// secure: true,
-		// sameSite: "none",
-	});
-
-	const { password: _, ...userWithoutPassword } = user.toObject();
-	res.status(200).json({
-		message: "Logged in successfully.",
-		user: userWithoutPassword,
-	});
-
-	const { isVerified, type } = user.verification;
-	if (
-		isVerified ||
-		nodeEnv === "test" ||
-		nodeEnv === "development" ||
-		user.userType === "guest"
-	)
-		return;
-
 	try {
+		const updatedUser = await User.findByIdAndUpdate(
+			userId,
+			{ $push: { refreshTokens: refreshToken } },
+			{ new: true },
+		);
+
+		if (!updatedUser) throw new Error("User not found.");
+
+		const { password: _, ...userWithoutPassword } = updatedUser.toObject();
+
+		return {
+			jwtToken,
+			refreshToken,
+			message: "Logged in successfully.",
+			user: userWithoutPassword,
+		};
+	} catch (err) {
+		throw new Error(err.message);
+	}
+};
+
+// TODO cookie options
+// TODO check not broke everything
+export const handleUserLogin = async (res: Response, user: IUser) => {
+	try {
+		const {
+			jwtToken,
+			refreshToken,
+			message,
+			user: userWithoutPassword,
+		} = await loginUser(user._id);
+
+		res.cookie("jwt", jwtToken, {
+			maxAge: 3600000,
+			httpOnly: true,
+			// secure: true,
+			// sameSite: "none",
+		});
+
+		res.cookie("refreshToken", refreshToken, {
+			maxAge: 604800000, // 7 days
+			httpOnly: true,
+			// secure: true,
+			// sameSite: "none",
+		});
+
+		res.status(200).json({ message, user: userWithoutPassword });
+
+		const { isVerified, type } = userWithoutPassword.verification;
+		if (
+			isVerified ||
+			nodeEnv === "test" ||
+			nodeEnv === "development" ||
+			user.userType === "guest"
+		)
+			return;
+
 		await generateAndSendToken(user, "verification", type);
 	} catch (err) {
-		res.status(500).json({ message: err.message });
-		return;
+		return { message: err.message };
 	}
 };
 
@@ -609,6 +632,32 @@ export const postForgotPassword = [
 	}),
 ];
 
+// @route   POST /find-account/
+// @desc    Find account
+// @access  Public
+export const postFindAccount = expressAsyncHandler(async (req, res) => {
+	const username = req.body.username;
+	const { usernameType, formattedUsername } =
+		validateAndFormatUsername(username);
+
+	try {
+		const user = await User.findOne({
+			[usernameType]: formattedUsername,
+		}).select("firstName lastName userType avatarUrl phoneNumber email");
+		if (!user) {
+			res.status(404).json({ message: "User not found." });
+			return;
+		}
+
+		res.status(200).json({ message: "User found.", user });
+	} catch (err) {
+		errorLog(err);
+		res.status(500).json({
+			message: err.message || "An error occurred while finding user.",
+		});
+	}
+});
+
 // @route   POST /update-password/:token
 // @desc    Update password
 // @access  Private
@@ -638,7 +687,7 @@ export const updateForgottenPassword = [
 			});
 
 			if (!user) {
-				res.status(400).json({ message: "Invalid reset password code." });
+				res.status(400).json({ message: "Invalid reset password token." });
 				return;
 			}
 
@@ -649,7 +698,8 @@ export const updateForgottenPassword = [
 			) {
 				await resetResetPassword(user);
 				res.status(400).json({
-					message: "Reset password code has expired. Please request a new one.",
+					message:
+						"Reset password token has expired. Please request a new one.",
 				});
 
 				return;
@@ -676,50 +726,30 @@ export const updateForgottenPassword = [
 	}),
 ];
 
-// @route   POST /find-account/
-// @desc    Find account
-// @access  Public
-export const postFindAccount = expressAsyncHandler(async (req, res) => {
-	const username = req.body.username;
-	const { usernameType, formattedUsername } =
-		validateAndFormatUsername(username);
-
-	try {
-		const user = await User.findOne({
-			[usernameType]: formattedUsername,
-		}).select("firstName lastName userType avatarUrl phoneNumber email");
-		if (!user) {
-			res.status(404).json({ message: "User not found." });
-			return;
-		}
-
-		res.status(200).json({ message: "User found.", user });
-	} catch (err) {
-		errorLog(err);
-		res.status(500).json({
-			message: err.message || "An error occurred while finding user.",
-		});
-	}
-});
+const resetResetPassword = useResetToken("resetPassword");
 
 // result based on findOne in below functions is the same
-const resetPassword = async (user: IUser, res: Response) => {
+const resetPassword = async (
+	user: IUser,
+	res: Response,
+	name: "token" | "code",
+) => {
 	if (!user) {
-		res.status(400).json({ message: "Invalid reset password code." });
+		res.status(400).json({ message: `Invalid reset password ${name}.` });
 		return;
 	}
 
 	const { resetPassword } = user;
 	if (resetPassword.tokenExpires && resetPassword.tokenExpires < Date.now()) {
 		res.status(400).json({
-			message: "Reset password code has expired. Please request a new one.",
+			message: `Reset password ${name} has expired. Please request a new one.`,
 		});
 		await resetResetPassword(user);
 		return;
 	}
 
 	res.status(302).json({
-		message: "Reset password code is valid.",
+		message: `Reset password ${name} is valid.`,
 		token: resetPassword.token,
 	});
 };
@@ -734,7 +764,7 @@ export const getResetPasswordCode = expressAsyncHandler(async (req, res) => {
 			"resetPassword.code": resetCode,
 		})) as IUser;
 
-		await resetPassword(user, res);
+		await resetPassword(user, res, "code");
 	} catch (err) {
 		errorLog(err);
 		res
@@ -752,7 +782,8 @@ export const getResetPasswordLink = expressAsyncHandler(async (req, res) => {
 		const user = (await User.findOne({
 			"resetPassword.token": resetToken,
 		})) as IUser;
-		await resetPassword(user, res);
+
+		await resetPassword(user, res, "token");
 	} catch (err) {
 		errorLog(err);
 		res
@@ -760,8 +791,6 @@ export const getResetPasswordLink = expressAsyncHandler(async (req, res) => {
 			.json({ message: "An error occurred while resetting your password." });
 	}
 });
-
-const resetResetPassword = useResetToken("resetPassword");
 
 // @route   POST /reset-password/:resetToken
 // @desc    Reset password
@@ -912,7 +941,7 @@ export const getLoginFacebookCallback = (req: Request, res: Response) => {
 	passport.authenticate(
 		"facebook",
 		{ session: false },
-		(err?: Error, user?: IUser, info?: { message: string }) => {
+		async (err?: Error, user?: IUser, info?: { message: string }) => {
 			if (err) {
 				return res.redirect(`${corsOrigin}/login?error=serverError`);
 			}
@@ -921,7 +950,7 @@ export const getLoginFacebookCallback = (req: Request, res: Response) => {
 				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
 			}
 
-			handleUserLogin(res, user as IUser);
+			await loginUser(user?._id);
 			return res.redirect(`${corsOrigin}/`);
 		},
 	)(req, res);
@@ -938,7 +967,7 @@ export const getLoginGoogleCallback = (req: Request, res: Response) => {
 	passport.authenticate(
 		"google",
 		{ session: false },
-		(err?: Error, user?: IUser, info?: { message: string }) => {
+		async (err?: Error, user?: IUser, info?: { message: string }) => {
 			if (err) {
 				return res.redirect(`${corsOrigin}/login?error=serverError`);
 			}
@@ -947,8 +976,8 @@ export const getLoginGoogleCallback = (req: Request, res: Response) => {
 				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
 			}
 
-			handleUserLogin(res, user as IUser);
-			return res.redirect(`${corsOrigin}/`);
+			await loginUser(user?._id);
+			res.redirect(`${corsOrigin}/`);
 		},
 	)(req, res);
 };
@@ -964,7 +993,7 @@ export const getLoginGithubCallback = (req: Request, res: Response) => {
 	passport.authenticate(
 		"github",
 		{ session: false },
-		(err?: Error, user?: IUser, info?: { message: string }) => {
+		async (err?: Error, user?: IUser, info?: { message: string }) => {
 			if (err) {
 				return res.redirect(`${corsOrigin}/login?error=serverError`);
 			}
@@ -973,39 +1002,8 @@ export const getLoginGithubCallback = (req: Request, res: Response) => {
 				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
 			}
 
-			handleUserLogin(res, user as IUser);
+			await loginUser(user?._id);
 			return res.redirect(`${corsOrigin}/`);
 		},
 	)(req, res);
 };
-//         // Handle error
-//         return res.redirect(`${corsOrigin}/login?error=serverError`);
-//     }
-
-//     if (!user) {
-//         // Authentication failed
-//         if (info && info.message === 'Email already registered using another method') {
-//             return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
-//         } else {
-//             return res.redirect(`${corsOrigin}/login?error=authFailure`);
-//         }
-//     }
-
-//     // If everything's good, establish a session or perform other post-authentication tasks.
-//     // ... your logic here ...
-
-//     // Redirect to a successful login page or dashboard
-//     return res.redirect(`${corsOrigin}/dashboard`);
-
-// })(req, res, next);
-
-// [
-// 	passport.authenticate("github", {
-// 		failureRedirect: `${corsOrigin}/login?error=authFailure`,
-// 		session: false,
-// 	}),
-// 	(req: Request, res: Response) => {
-// 		handleUserLogin(res, req.user as IUser);
-// 		res.redirect(`${corsOrigin}/`);
-// 	},
-// ];

@@ -32,7 +32,11 @@
 		"populate": "DEBUG=log ts-node tools/populateDbs/populateDbs.ts"
 	},
 	"lint-staged": {
-		"*.ts": "npm run fix"
+		"*.ts": [
+			"npm run fix",
+			"npm run format"
+		],
+		"json": "npm run format"
 	},
 	"dependencies": {
 		"bcryptjs": "^2.4.3",

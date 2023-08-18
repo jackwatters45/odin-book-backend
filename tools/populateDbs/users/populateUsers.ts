@@ -47,7 +47,7 @@ const createRandomBasicInfo = () => {
 	const password = faker.internet.password({ length: 10 });
 	const avatarUrl = faker.internet.avatar();
 	const description = faker.person.bio();
-	const phoneNumber = faker.phone.number("+1##########");
+	const phoneNumber = faker.phone.number("+1555#######");
 	const birthday = faker.date.past({ years: 50 });
 
 	return {

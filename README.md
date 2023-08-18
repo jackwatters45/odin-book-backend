@@ -4,6 +4,8 @@
 
 - hash all tokens
 
+- password changed notification
+
 - still rough draft, need to add more tests + implement
   - creating posts - figure out post details when actually implementing
 - non local auth methods

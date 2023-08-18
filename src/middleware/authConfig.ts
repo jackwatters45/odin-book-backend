@@ -236,7 +236,6 @@ const configAuth = (app: Application) => {
 					}
 
 					const { password: _, ...userWithoutPassword } = user.toObject();
-					console.log("user", userWithoutPassword);
 					return done(null, userWithoutPassword);
 				} catch (err) {
 					return done(err);
