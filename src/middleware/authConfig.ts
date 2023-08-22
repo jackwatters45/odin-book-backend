@@ -3,7 +3,7 @@ import passportLocal from "passport-local";
 import User from "../models/user.model";
 import { IUser } from "../../types/IUser";
 import passportJwt from "passport-jwt";
-import { Request, Application, NextFunction, Response } from "express";
+import { Request, Application } from "express";
 import {
 	appUrl,
 	facebookAppId,
@@ -32,32 +32,6 @@ const GithubStrategy = passportGithub.Strategy;
 
 const cookieExtractor = (req: Request): string | null => {
 	return req && req.cookies ? req.cookies["jwt"] : null;
-};
-
-export const authenticateJwt = (
-	req: Request,
-	res: Response,
-	next: NextFunction,
-) => {
-	passport.authenticate(
-		"jwt",
-		{ session: false },
-		(err: Error, user: IUser) => {
-			if (err) {
-				log(err);
-				return next(err);
-			}
-
-			if (!user) {
-				res
-					.status(401)
-					.json({ message: "You must be logged in to perform this action" });
-				return;
-			}
-			req.user = user;
-			next();
-		},
-	)(req, res, next);
 };
 
 const configAuth = (app: Application) => {

@@ -13,7 +13,7 @@ import {
 	refreshTokenSecret,
 } from "../config/envVariables";
 import generateAndSendToken from "../utils/generateAndSendToken";
-import { authenticateJwt } from "../middleware/authConfig";
+import authenticateAndRefreshTokenMiddleware from "../middleware/refreshTokens";
 import { IUser } from "../../types/IUser";
 import useResetToken from "./utils/useResetToken";
 import validateAndFormatUsername from "./utils/validateAndFormatUsername";
@@ -321,13 +321,11 @@ export const postLogout = expressAsyncHandler(
 		}
 
 		try {
-			const decoded = jwt.verify(refreshToken, refreshTokenSecret) as {
-				id: string;
+			const { _id } = jwt.verify(refreshToken, refreshTokenSecret) as {
+				_id: string;
 			};
 
-			const userId = decoded.id;
-
-			const user = await User.findById(userId);
+			const user = await User.findById(_id);
 			if (!user) {
 				res.status(401).json({ message: "Invalid or expired token" });
 				return;
@@ -464,7 +462,7 @@ const resetVerification = useResetToken("verification");
 // @route   POST /verify/code/:verificationToken
 // @access  Private
 export const postVerifyCode = [
-	authenticateJwt,
+	authenticateAndRefreshTokenMiddleware,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		try {
 			const loggedInUser = req.user as IUser;
@@ -561,7 +559,7 @@ export const getVerifyLink = expressAsyncHandler(
 // @route   POST /verify/resend
 // @access  Private
 export const postResendVerificationCode = [
-	authenticateJwt,
+	authenticateAndRefreshTokenMiddleware,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
@@ -865,7 +863,7 @@ export const postResetPassword = [
 // @route   POST /change-password
 // @access  Private
 export const postChangePassword = [
-	authenticateJwt,
+	authenticateAndRefreshTokenMiddleware,
 	body("newPassword")
 		.notEmpty()
 		.trim()
