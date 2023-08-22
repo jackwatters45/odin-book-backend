@@ -22,7 +22,7 @@ const log = debug("log:auth:controller");
 const errorLog = debug("error:auth:controller");
 
 const loginUser = async (userId: string) => {
-	const payload = { id: userId };
+	const payload = { _id: userId };
 
 	const jwtToken = jwt.sign(payload, jwtSecret, {
 		expiresIn: "1h",
@@ -145,8 +145,6 @@ export const postLoginForgotPassword = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const token = req.body.token;
 
-		log("token", token);
-
 		if (!token) {
 			res.status(401).json({ message: "Token not found" });
 			return;
@@ -210,13 +208,15 @@ export const postSignUp = [
 		.withMessage(
 			"Username id is required and should be a valid email or phone number",
 		)
-		.isLength({ min: 5, max: 50 })
-		.withMessage("Username should be between 5 and 50 characters"),
+		.isLength({ min: 5, max: 254 })
+		.withMessage("Username should be between 5 and 254 characters (inclusive)"),
 	body("password")
 		.notEmpty()
 		.trim()
-		.isLength({ min: 8, max: 50 })
-		.withMessage("Password should be at least 8 characters long")
+		.isLength({ min: 8, max: 100 })
+		.withMessage(
+			"Password should be at least 8  and no longer than 100 characters long",
+		)
 		.matches(
 			/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*?()])[A-Za-z\d!@#$%^&*?()]{8,}$/,
 			"i",
@@ -374,10 +374,12 @@ export const getCurrentUser = expressAsyncHandler(
 
 		try {
 			const { _id } = jwt.verify(token, jwtSecret) as JwtPayload;
+
 			const user = await User.findOne(
 				{ _id, isDeleted: false },
 				{ password: 0 },
 			);
+
 			if (!user) {
 				res
 					.status(401)
@@ -406,8 +408,8 @@ export const postRefreshToken = expressAsyncHandler(
 
 		let user: IUser | null = null;
 		try {
-			const { id } = jwt.verify(token, refreshTokenSecret) as { id: string };
-			user = await User.findOne({ _id: id, isDeleted: false }, { password: 0 });
+			const { _id } = jwt.verify(token, refreshTokenSecret) as { _id: string };
+			user = await User.findOne({ _id, isDeleted: false }, { password: 0 });
 			if (!user || user.refreshTokens.indexOf(token) === -1) {
 				res
 					.status(401)
@@ -420,7 +422,7 @@ export const postRefreshToken = expressAsyncHandler(
 		}
 
 		try {
-			const newPayload = { id: user._id, name: user.firstName };
+			const newPayload = { _id: user._id, name: user.firstName };
 			const newJwtToken = jwt.sign(newPayload, jwtSecret, {
 				expiresIn: "1h",
 			});
@@ -942,7 +944,7 @@ export const getLoginFacebookCallback = (req: Request, res: Response) => {
 		"facebook",
 		{ session: false },
 		async (err?: Error, user?: IUser, info?: { message: string }) => {
-			if (err) {
+			if (err || !user) {
 				return res.redirect(`${corsOrigin}/login?error=serverError`);
 			}
 
@@ -950,7 +952,35 @@ export const getLoginFacebookCallback = (req: Request, res: Response) => {
 				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
 			}
 
-			await loginUser(user?._id);
+			const {
+				jwtToken,
+				refreshToken,
+				user: userWithoutPassword,
+			} = await loginUser(user?._id);
+
+			res.cookie("jwt", jwtToken, {
+				maxAge: 3600000,
+				httpOnly: true,
+				// secure: true,
+				// sameSite: "none",
+			});
+
+			res.cookie("refreshToken", refreshToken, {
+				maxAge: 604800000, // 7 days
+				httpOnly: true,
+				// secure: true,
+				// sameSite: "none",
+			});
+
+			const { isVerified, type } = userWithoutPassword.verification;
+			if (
+				!isVerified &&
+				nodeEnv !== "production" &&
+				userWithoutPassword.userType !== "guest"
+			) {
+				await generateAndSendToken(user, "verification", type);
+			}
+
 			return res.redirect(`${corsOrigin}/`);
 		},
 	)(req, res);
@@ -968,7 +998,7 @@ export const getLoginGoogleCallback = (req: Request, res: Response) => {
 		"google",
 		{ session: false },
 		async (err?: Error, user?: IUser, info?: { message: string }) => {
-			if (err) {
+			if (err || !user) {
 				return res.redirect(`${corsOrigin}/login?error=serverError`);
 			}
 
@@ -976,8 +1006,36 @@ export const getLoginGoogleCallback = (req: Request, res: Response) => {
 				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
 			}
 
-			await loginUser(user?._id);
-			res.redirect(`${corsOrigin}/`);
+			const {
+				jwtToken,
+				refreshToken,
+				user: userWithoutPassword,
+			} = await loginUser(user?._id);
+
+			res.cookie("jwt", jwtToken, {
+				maxAge: 3600000,
+				httpOnly: true,
+				// secure: true,
+				// sameSite: "none",
+			});
+
+			res.cookie("refreshToken", refreshToken, {
+				maxAge: 604800000, // 7 days
+				httpOnly: true,
+				// secure: true,
+				// sameSite: "none",
+			});
+
+			const { isVerified, type } = userWithoutPassword.verification;
+			if (
+				!isVerified &&
+				nodeEnv === "production" &&
+				userWithoutPassword.userType !== "guest"
+			) {
+				await generateAndSendToken(user, "verification", type);
+			}
+
+			return res.redirect(`${corsOrigin}/`);
 		},
 	)(req, res);
 };
@@ -994,7 +1052,7 @@ export const getLoginGithubCallback = (req: Request, res: Response) => {
 		"github",
 		{ session: false },
 		async (err?: Error, user?: IUser, info?: { message: string }) => {
-			if (err) {
+			if (err || !user) {
 				return res.redirect(`${corsOrigin}/login?error=serverError`);
 			}
 
@@ -1002,7 +1060,35 @@ export const getLoginGithubCallback = (req: Request, res: Response) => {
 				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
 			}
 
-			await loginUser(user?._id);
+			const {
+				jwtToken,
+				refreshToken,
+				user: userWithoutPassword,
+			} = await loginUser(user?._id);
+
+			res.cookie("jwt", jwtToken, {
+				maxAge: 3600000,
+				httpOnly: true,
+				// secure: true,
+				// sameSite: "none",
+			});
+
+			res.cookie("refreshToken", refreshToken, {
+				maxAge: 604800000, // 7 days
+				httpOnly: true,
+				// secure: true,
+				// sameSite: "none",
+			});
+
+			const { isVerified, type } = userWithoutPassword.verification;
+			if (
+				!isVerified &&
+				nodeEnv !== "production" &&
+				userWithoutPassword.userType !== "guest"
+			) {
+				await generateAndSendToken(user, "verification", type);
+			}
+
 			return res.redirect(`${corsOrigin}/`);
 		},
 	)(req, res);

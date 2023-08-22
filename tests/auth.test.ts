@@ -274,7 +274,7 @@ describe("POST /logout", () => {
 		try {
 			user = (await signUpUser()).user;
 
-			const payload = { id: user._id };
+			const payload = { _id: user._id };
 			jwtToken = user.generateJwtToken();
 			refreshToken = jwt.sign(payload, refreshTokenSecret, { expiresIn: "7d" });
 
@@ -417,7 +417,7 @@ describe("POST /refresh-token", () => {
 	beforeEach(async () => {
 		user = (await signUpUser()).user;
 
-		const payload = { id: user._id };
+		const payload = { _id: user._id };
 		refreshToken = jwt.sign(payload, refreshTokenSecret, {
 			expiresIn: "7d",
 		});

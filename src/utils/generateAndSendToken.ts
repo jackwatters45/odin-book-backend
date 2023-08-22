@@ -6,6 +6,7 @@ import { sendResetPasswordSMS, sendVerificationSMS } from "../config/twilio";
 import { IUser } from "../../types/IUser";
 import generateToken from "../config/utils/generateToken";
 
+// TODO: may need to just take in user id and find user in this function instead of passing in user
 const generateAndSendToken = async (
 	user: IUser,
 	tokenType: "verification" | "resetPassword",

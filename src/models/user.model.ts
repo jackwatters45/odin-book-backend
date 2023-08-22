@@ -15,7 +15,7 @@ const UserSchema = new Schema<IUser>(
 			unique: true,
 			sparse: true,
 			minlength: 5,
-			maxlength: 50,
+			maxlength: 253,
 		},
 		phoneNumber: {
 			type: String,
