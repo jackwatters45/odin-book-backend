@@ -55,7 +55,6 @@ const loginUser = async (userId: string) => {
 };
 
 // TODO cookie options
-// TODO check not broke everything
 export const handleUserLogin = async (res: Response, user: IUser) => {
 	try {
 		const {
@@ -79,18 +78,16 @@ export const handleUserLogin = async (res: Response, user: IUser) => {
 			// sameSite: "none",
 		});
 
-		res.status(200).json({ message, user: userWithoutPassword });
-
 		const { isVerified, type } = userWithoutPassword.verification;
 		if (
-			isVerified ||
-			nodeEnv === "test" ||
-			nodeEnv === "development" ||
-			user.userType === "guest"
-		)
-			return;
+			!isVerified &&
+			nodeEnv === "production" &&
+			userWithoutPassword.userType !== "guest"
+		) {
+			await generateAndSendToken(user, "verification", type);
+		}
 
-		await generateAndSendToken(user, "verification", type);
+		res.status(200).json({ message, user: userWithoutPassword });
 	} catch (err) {
 		return { message: err.message };
 	}
@@ -115,7 +112,7 @@ export const postLogin = [
 				passport.authenticate(
 					"local",
 					{ session: false },
-					function (err: Error, user: IUser, info: { message: string }) {
+					async (err: Error, user: IUser, info: { message: string }) => {
 						if (err) {
 							res.status(500).json({ message: err.message });
 							return;
@@ -127,7 +124,7 @@ export const postLogin = [
 								.json({ message: info.message || "Invalid credentials" });
 							return;
 						}
-						handleUserLogin(res, user);
+						await handleUserLogin(res, user);
 					},
 				)(req, res, next);
 			} catch (err) {
@@ -158,7 +155,7 @@ export const postLoginForgotPassword = expressAsyncHandler(
 
 			await resetResetPassword(user);
 
-			handleUserLogin(res, user);
+			await handleUserLogin(res, user);
 		} catch (err) {
 			errorLog(err);
 			res.status(500).json({ message: "Server error" });
@@ -180,7 +177,7 @@ export const postLoginGuest = expressAsyncHandler(
 					validUntil: Date.now() + 1000 * 60 * 15,
 				}),
 			);
-			handleUserLogin(res, user);
+			await handleUserLogin(res, user);
 		} catch (err) {
 			errorLog(err);
 			res.status(500).json({ message: "Server error" });
@@ -300,7 +297,7 @@ export const postSignUp = [
 
 			await user.save();
 
-			handleUserLogin(res, user);
+			await handleUserLogin(res, user);
 		} catch (err) {
 			errorLog(err);
 			res.status(500).json({ message: "An unexpected error occurred." });
@@ -942,12 +939,12 @@ export const getLoginFacebookCallback = (req: Request, res: Response) => {
 		"facebook",
 		{ session: false },
 		async (err?: Error, user?: IUser, info?: { message: string }) => {
-			if (err || !user) {
-				return res.redirect(`${corsOrigin}/login?error=serverError`);
-			}
-
 			if (info?.message === "Email already registered using another method") {
 				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
+			}
+
+			if (err || !user) {
+				return res.redirect(`${corsOrigin}/login?error=serverError`);
 			}
 
 			const {
@@ -973,7 +970,7 @@ export const getLoginFacebookCallback = (req: Request, res: Response) => {
 			const { isVerified, type } = userWithoutPassword.verification;
 			if (
 				!isVerified &&
-				nodeEnv !== "production" &&
+				nodeEnv === "production" &&
 				userWithoutPassword.userType !== "guest"
 			) {
 				await generateAndSendToken(user, "verification", type);
@@ -996,12 +993,12 @@ export const getLoginGoogleCallback = (req: Request, res: Response) => {
 		"google",
 		{ session: false },
 		async (err?: Error, user?: IUser, info?: { message: string }) => {
-			if (err || !user) {
-				return res.redirect(`${corsOrigin}/login?error=serverError`);
-			}
-
 			if (info?.message === "Email already registered using another method") {
 				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
+			}
+
+			if (err || !user) {
+				return res.redirect(`${corsOrigin}/login?error=serverError`);
 			}
 
 			const {
@@ -1050,12 +1047,12 @@ export const getLoginGithubCallback = (req: Request, res: Response) => {
 		"github",
 		{ session: false },
 		async (err?: Error, user?: IUser, info?: { message: string }) => {
-			if (err || !user) {
-				return res.redirect(`${corsOrigin}/login?error=serverError`);
-			}
-
 			if (info?.message === "Email already registered using another method") {
 				return res.redirect(`${corsOrigin}/login?error=emailAlreadyRegistered`);
+			}
+
+			if (err || !user) {
+				return res.redirect(`${corsOrigin}/login?error=serverError`);
 			}
 
 			const {
@@ -1081,7 +1078,7 @@ export const getLoginGithubCallback = (req: Request, res: Response) => {
 			const { isVerified, type } = userWithoutPassword.verification;
 			if (
 				!isVerified &&
-				nodeEnv !== "production" &&
+				nodeEnv === "production" &&
 				userWithoutPassword.userType !== "guest"
 			) {
 				await generateAndSendToken(user, "verification", type);

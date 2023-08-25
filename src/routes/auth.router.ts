@@ -31,9 +31,6 @@ const router = express.Router();
 router.post("/login", postLogin);
 
 // /login/forgot-password
-router.post("/login", postLoginForgotPassword);
-
-// //login/forgot-password
 router.post("/login/forgot-password", postLoginForgotPassword);
 
 // /login-guest
