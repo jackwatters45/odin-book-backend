@@ -39,6 +39,7 @@ const UserSchema = new Schema<IUser>(
 		},
 		friends: [{ type: Schema.Types.ObjectId, ref: "User" }],
 		description: { type: String, trim: true, default: "" },
+		coverPhotoUrl: { type: String, trim: true, default: "" },
 		avatarUrl: { type: String, trim: true, default: "" },
 		savedPosts: [{ type: Schema.Types.ObjectId, ref: "Post" }],
 		friendRequestsSent: [{ type: Schema.Types.ObjectId, ref: "User" }],

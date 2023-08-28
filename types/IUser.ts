@@ -10,6 +10,7 @@ export interface BasicUserInfo {
 	birthday: Date;
 	pronouns?: "he/him" | "she/her" | "they/them";
 	avatarUrl?: string;
+	coverPhotoUrl?: string;
 	description?: string;
 	phoneNumber?: string;
 	country?: string;

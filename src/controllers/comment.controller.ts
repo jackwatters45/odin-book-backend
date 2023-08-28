@@ -8,7 +8,7 @@ import Comment from "../models/comment.model";
 import Reaction, { reactionTypes } from "../models/reaction.model";
 import { IUser } from "../../types/IUser";
 import Post from "../models/post.model";
-import authenticateAndRefreshTokenMiddleware from "../middleware/refreshTokens";
+import { authenticateJwt } from "../middleware/authenticateJwt";
 
 const log = debug("log:comment:controller");
 const errorLog = debug("err:comment:controller");
@@ -149,7 +149,7 @@ export const getCommentById = expressAsyncHandler(
 // @route   POST /posts/:post/comments
 // @access  Private
 export const createComment = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	body("content").trim().notEmpty().withMessage("Comment content is required"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -228,7 +228,7 @@ export const createComment = [
 // @route   PATCH posts/:post/comments/:id
 // @access  Private
 export const updateComment = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	body("content").trim().notEmpty().withMessage("Comment content is required"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -277,7 +277,7 @@ export const updateComment = [
 // @route   DELETE posts/:post/comments/:id
 // @access  Private
 export const deleteComment = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
@@ -321,7 +321,7 @@ export const deleteComment = [
 // @route   POST posts/:post/comments/:id/reply
 // @access  Private
 export const createCommentReply = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	body("content")
 		.trim()
 		.isLength({ min: 1, max: 500 })
@@ -388,7 +388,7 @@ export const createCommentReply = [
 // @route   POST posts/:post/comments/:id/react
 // @access  Private
 export const reactToComment = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -451,7 +451,7 @@ export const reactToComment = [
 // @route   DELETE posts/:post/comments/:id/unreact
 // @access  Private
 export const unreactToComment = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 

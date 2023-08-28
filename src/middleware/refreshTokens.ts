@@ -1,7 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import User from "../models/user.model";
-import passport from "passport";
 import debug from "debug";
 
 import { jwtSecret, refreshTokenSecret } from "../config/envVariables";
@@ -9,7 +8,7 @@ import { IUser } from "../../types/IUser";
 
 const log = debug("log:refreshTokens");
 
-export const refreshTokensMiddleware = async (
+const refreshTokensMiddleware = async (
 	req: Request,
 	res: Response,
 	next: NextFunction,
@@ -70,42 +69,4 @@ export const refreshTokensMiddleware = async (
 	}
 };
 
-export const authenticateJwt = (
-	req: Request,
-	res: Response,
-	next: NextFunction,
-) => {
-	passport.authenticate(
-		"jwt",
-		{ session: false },
-		(err: Error, user: IUser) => {
-			if (err) {
-				log(err);
-				return next(err);
-			}
-
-			if (!user) {
-				res
-					.status(401)
-					.json({ message: "You must be logged in to perform this action" });
-				return;
-			}
-			req.user = user;
-			next();
-		},
-	)(req, res, next);
-};
-
-const authenticateAndRefreshTokenMiddleware = (
-	req: Request,
-	res: Response,
-	next: NextFunction,
-) => {
-	refreshTokensMiddleware(req, res, (err) => {
-		if (err) return next(err);
-
-		authenticateJwt(req, res, next);
-	});
-};
-
-export default authenticateAndRefreshTokenMiddleware;
+export default refreshTokensMiddleware;

@@ -17,7 +17,6 @@ import {
 	postLoginForgotPassword,
 	postLoginGuest,
 	postLogout,
-	postRefreshToken,
 	postResendVerificationCode,
 	postResetPassword,
 	postSignUp,
@@ -44,9 +43,6 @@ router.post("/logout", postLogout);
 
 // /current-user
 router.get("/current-user", getCurrentUser);
-
-// /refresh-token
-router.post("/refresh-token", postRefreshToken);
 
 // /verify/code/:verificationToken
 router.post("/verify/code/:verificationToken", postVerifyCode);

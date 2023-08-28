@@ -13,10 +13,12 @@ import {
 	refreshTokenSecret,
 } from "../config/envVariables";
 import generateAndSendToken from "../utils/generateAndSendToken";
-import authenticateAndRefreshTokenMiddleware from "../middleware/refreshTokens";
+
 import { IUser } from "../../types/IUser";
 import useResetToken from "./utils/useResetToken";
 import validateAndFormatUsername from "./utils/validateAndFormatUsername";
+import refreshTokensMiddleware from "../middleware/refreshTokens";
+import { authenticateJwt } from "../middleware/authenticateJwt";
 
 const log = debug("log:auth:controller");
 const errorLog = debug("error:auth:controller");
@@ -356,8 +358,9 @@ export const postLogout = expressAsyncHandler(
 // @desc    Get current user
 // @route   GET /current-user
 // @access  Private
-export const getCurrentUser = expressAsyncHandler(
-	async (req: Request, res: Response) => {
+export const getCurrentUser = [
+	refreshTokensMiddleware,
+	expressAsyncHandler(async (req: Request, res: Response) => {
 		const token = req.cookies.jwt;
 		if (!token) {
 			res.status(200).json({
@@ -387,71 +390,8 @@ export const getCurrentUser = expressAsyncHandler(
 			errorLog(err);
 			res.status(401).json({ isAuthenticated: false, message: err.message });
 		}
-	},
-);
-
-// @desc    Refresh user token
-// @route   POST /refresh-token
-// @access  Private
-export const postRefreshToken = expressAsyncHandler(
-	async (req: Request, res: Response) => {
-		const token = req.cookies.refreshToken;
-		if (!token) {
-			res.status(401).json({ message: "Refresh token not found" });
-			return;
-		}
-
-		let user: IUser | null = null;
-		try {
-			const { _id } = jwt.verify(token, refreshTokenSecret) as { _id: string };
-			user = await User.findOne({ _id, isDeleted: false }, { password: 0 });
-			if (!user || user.refreshTokens.indexOf(token) === -1) {
-				res
-					.status(401)
-					.json({ message: "User not found or refresh token invalid" });
-				return;
-			}
-		} catch (err) {
-			res.status(401).json({ message: "Invalid or expired token" });
-			return;
-		}
-
-		try {
-			const newPayload = { _id: user._id, name: user.firstName };
-			const newJwtToken = jwt.sign(newPayload, jwtSecret, {
-				expiresIn: "1h",
-			});
-			const newRefreshToken = jwt.sign(newPayload, refreshTokenSecret, {
-				expiresIn: "7d",
-			});
-
-			user.refreshTokens = user.refreshTokens.filter((t) => t !== token);
-			user.refreshTokens.push(newRefreshToken);
-			await user.save();
-
-			res.cookie("jwt", newJwtToken, {
-				maxAge: 3600000, // 1 hour
-				httpOnly: true,
-				// secure: true,
-				// sameSite: "none",
-			});
-			res.cookie("refreshToken", newRefreshToken, {
-				maxAge: 604800000, // 7 days
-				httpOnly: true,
-				// secure: true,
-				// sameSite: "none",
-			});
-
-			res.status(200).json({ message: "Refreshed token successfully." });
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({
-				message: "An unexpected error occurred while refreshing jwt token.",
-				error: err.message,
-			});
-		}
-	},
-);
+	}),
+];
 
 const resetVerification = useResetToken("verification");
 
@@ -459,7 +399,7 @@ const resetVerification = useResetToken("verification");
 // @route   POST /verify/code/:verificationToken
 // @access  Private
 export const postVerifyCode = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		try {
 			const loggedInUser = req.user as IUser;
@@ -556,7 +496,7 @@ export const getVerifyLink = expressAsyncHandler(
 // @route   POST /verify/resend
 // @access  Private
 export const postResendVerificationCode = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
@@ -860,7 +800,7 @@ export const postResetPassword = [
 // @route   POST /change-password
 // @access  Private
 export const postChangePassword = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	body("newPassword")
 		.notEmpty()
 		.trim()

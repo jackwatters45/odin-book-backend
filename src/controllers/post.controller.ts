@@ -10,9 +10,9 @@ import expressAsyncHandler from "express-async-handler";
 // import { calculateStartTime } from "../utils/calculateStartTime";
 import postValidation from "./utils/postValidation";
 import Reaction, { reactionTypes } from "../models/reaction.model";
-import authenticateAndRefreshTokenMiddleware from "../middleware/refreshTokens";
 import resizeImages from "../utils/resizeImages";
 import { uploadFilesToCloudinary } from "../utils/uploadToCloudinary";
+import { authenticateJwt } from "../middleware/authenticateJwt";
 
 const log = debug("log:post:controller");
 const errorLog = debug("err:post:controller");
@@ -83,7 +83,7 @@ export const getPostById = expressAsyncHandler(
 // @route   POST /posts
 // @access  Private
 export const createPost = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	...postValidation,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -136,7 +136,7 @@ export const createPost = [
 // @route   PATCH /posts/:id
 // @access  Private
 export const updatePost = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	...postValidation,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -195,7 +195,7 @@ export const updatePost = [
 // @route   DELETE /posts/:id
 // @access  Private
 export const deletePost = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		try {
 			const user = req.user as IUser;
@@ -225,7 +225,7 @@ export const deletePost = [
 // @route   PATCH /posts/:id/react
 // @access  Private
 export const reactToPost = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -279,7 +279,7 @@ export const reactToPost = [
 // @route   DELETE /posts/:id/unreact
 // @access  Private
 export const unreactToPost = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
@@ -346,7 +346,7 @@ export const getPostReactions = expressAsyncHandler(
 // @route   PATCH /posts/saved-posts/:id
 // @access  Private
 export const toggleSavedPost = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
@@ -382,7 +382,7 @@ export const toggleSavedPost = [
 // @route   GET /posts/saved-posts
 // @access  Private
 export const getSavedPosts = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
@@ -402,7 +402,7 @@ export const getSavedPosts = [
 // @route   POST /posts/:id/share
 // @access  Private
 export const sharePost = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
@@ -433,7 +433,7 @@ export const sharePost = [
 // @route   GET /posts/friends
 // @access  Private
 export const getPostsByFriends = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 

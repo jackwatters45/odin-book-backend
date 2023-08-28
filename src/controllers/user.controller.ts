@@ -7,8 +7,8 @@ import User from "../models/user.model";
 import { IUser } from "../../types/IUser";
 import Post from "../models/post.model";
 import Comment from "../models/comment.model";
-import authenticateAndRefreshTokenMiddleware from "../middleware/refreshTokens";
 import validateAndFormatUsername from "./utils/validateAndFormatUsername";
+import { authenticateJwt } from "../middleware/authenticateJwt";
 
 const log = debug("log:user:controller");
 const errorLog = debug("err:user:controller");
@@ -65,7 +65,7 @@ export const getUserById = expressAsyncHandler(
 // @route   GET /users/:id/deleted
 // @access  Admin
 export const getDeletedUserById = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
@@ -105,7 +105,7 @@ export const getDeletedUserById = [
 // @route   POST /users
 // @access  Admin
 export const createUser = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	body("firstName")
 		.trim()
 		.notEmpty()
@@ -206,7 +206,7 @@ export const createUser = [
 // @route   PATCH /users/:id/password
 // @access  Admin
 export const updateUserPassword = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	body("newPassword")
 		.notEmpty()
 		.trim()
@@ -255,7 +255,7 @@ export const updateUserPassword = [
 // @route   PATCH /users/:id/basic
 // @access  Private
 export const updateUserBasicInfo = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	body("firstName")
 		.trim()
 		.notEmpty()
@@ -400,7 +400,7 @@ export const getUserFriends = expressAsyncHandler(
 // @route   GET /users/:id/saved-posts
 // @access  Private
 export const getUserSavedPosts = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
@@ -462,7 +462,7 @@ export const getUserSavedPosts = [
 // @route   POST /users/:id/friend-requests
 // @access  Private
 export const sendFriendRequest = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
 
@@ -514,7 +514,7 @@ export const sendFriendRequest = [
 // @route   DELETE /users/me/friends/:friendId
 // @access  Private
 export const unfriendUser = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
 		const userToUnfriendId = String(req.params.friendId);
@@ -565,7 +565,7 @@ export const unfriendUser = [
 // @route   POST /users/me/friend-requests/:requestId/accept
 // @access  Private
 export const acceptFriendRequest = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
 
@@ -635,7 +635,7 @@ export const acceptFriendRequest = [
 // @route   POST /users/me/friend-requests/:requestId/reject
 // @access  Private
 export const rejectFriendRequest = [
-	authenticateAndRefreshTokenMiddleware,
+	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
 		const requestId = String(req.params.requestId);
