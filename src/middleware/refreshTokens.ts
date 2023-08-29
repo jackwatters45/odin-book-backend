@@ -17,33 +17,34 @@ const refreshTokensMiddleware = async (
 	const refreshToken = req.cookies.refreshToken;
 	try {
 		jwt.verify(accessToken, jwtSecret);
-		next(); // Access token is valid, continue to the route
+		next();
 	} catch (error) {
-		// Access token is invalid or expired. Try refreshing using the refresh token.
 		if (!refreshToken) {
-			console.log("No refresh token found");
-			return res.status(401).json({ message: "Refresh token not found" });
+			return res
+				.status(200)
+				.json({ isAuthenticated: false, message: "Refresh token not found" });
 		}
 
 		let decoded;
 		try {
 			decoded = jwt.verify(refreshToken, refreshTokenSecret) as { _id: string };
 		} catch (err) {
-			return res
-				.status(401)
-				.json({ message: "Invalid or expired refresh token" });
+			return res.status(401).json({
+				isAuthenticated: false,
+				message: "Invalid or expired refresh token",
+			});
 		}
 
-		// Now that we're sure the refreshToken is a valid JWT, let's check it against the database
 		const user: IUser | null = await User.findOne(
 			{ _id: decoded._id, isDeleted: false },
 			{ password: 0 },
 		);
 
 		if (!user || user.refreshTokens.indexOf(refreshToken) === -1) {
-			return res
-				.status(401)
-				.json({ message: "User not found or refresh token invalid" });
+			return res.status(401).json({
+				isAuthenticated: false,
+				message: "User not found or refresh token invalid",
+			});
 		}
 
 		const newPayload = { _id: user._id, name: user.firstName };
@@ -65,7 +66,6 @@ const refreshTokensMiddleware = async (
 			httpOnly: true,
 		});
 
-		// Continue processing the original request
 		next();
 	}
 };
