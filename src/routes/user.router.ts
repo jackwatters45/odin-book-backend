@@ -12,7 +12,9 @@ import {
 	sendFriendRequest,
 	unfriendUser,
 	updateUserBasicInfo,
+	updateUserCoverPhoto,
 	updateUserPassword,
+	updateUserProfilePhoto,
 } from "../controllers/user.controller";
 
 const router = express.Router();
@@ -31,6 +33,12 @@ router.post("/", createUser);
 
 // /updateUserPassword/:id
 router.patch("/updateUser/:id/password", updateUserPassword);
+
+// /updateUser/:id/profile-photo
+router.patch("/updateUser/:id/profile-photo", updateUserProfilePhoto);
+
+// /updateUser/:id/cover-photo
+router.patch("/updateUser/:id/cover-photo", updateUserCoverPhoto);
 
 // /updateUser/:id/basic
 router.patch("/updateUser/:id/basic", updateUserBasicInfo);

@@ -5,11 +5,9 @@
 - hash all tokens
 
 - password changed notification
-
-- still rough draft, need to add more tests + implement
-  - creating posts - figure out post details when actually implementing
-- non local auth methods
-  - haven't done at all cause no real idea how should work
+- consistent name avatar vs profile pic
+- sharp resize -> actual sizes for each type (avatar, cover, post)
+- creating posts - figure out post details when actually implementing
 - generate token tests
 - notifications test + routes etc
 

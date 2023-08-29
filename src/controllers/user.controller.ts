@@ -9,6 +9,9 @@ import Post from "../models/post.model";
 import Comment from "../models/comment.model";
 import validateAndFormatUsername from "./utils/validateAndFormatUsername";
 import { authenticateJwt } from "../middleware/authenticateJwt";
+import { uploadFileToCloudinary } from "../utils/uploadToCloudinary";
+import { resizeImage } from "../utils/resizeImages";
+import upload from "../config/multer";
 
 const log = debug("log:user:controller");
 const errorLog = debug("err:user:controller");
@@ -244,6 +247,99 @@ export const updateUserPassword = [
 			await user.save();
 
 			res.status(201).json({ message: "Password updated successfully" });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
+		}
+	}),
+];
+
+// @desc    Update user profile photo
+// @route   PATCH /users/:id/profile-photo
+// @access  Private
+export const updateUserProfilePhoto = [
+	authenticateJwt,
+	upload.single("file"),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const reqUser = req.user as IUser;
+
+		const userId = String(req.params.id);
+
+		if (userId !== reqUser.id && reqUser.userType !== "admin") {
+			res.status(403).json({ message: "Unauthorized" });
+			return;
+		}
+
+		const file = req.file;
+		if (!file) {
+			res.status(400).json({ message: "No file provided" });
+			return;
+		}
+
+		try {
+			const user = await User.findById(userId);
+			if (!user) {
+				res.status(404).json({ message: "User not found" });
+				return;
+			}
+
+			const resizedImage = await resizeImage(file, { width: 128, height: 128 });
+			const imageLink = await uploadFileToCloudinary(resizedImage);
+			user.avatarUrl = imageLink;
+
+			await user.save();
+
+			res
+				.status(201)
+				.json({ message: "User profile photo updated successfully", user });
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
+		}
+	}),
+];
+
+// @desc    Update user cover photo
+// @route   PATCH /users/:id/cover-photo
+// @access  Private
+export const updateUserCoverPhoto = [
+	authenticateJwt,
+	upload.single("file"),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const reqUser = req.user as IUser;
+
+		const userId = String(req.params.id);
+
+		if (userId !== reqUser.id && reqUser.userType !== "admin") {
+			res.status(403).json({ message: "Unauthorized" });
+			return;
+		}
+
+		const file = req.file;
+		if (!file) {
+			res.status(400).json({ message: "No file provided" });
+			return;
+		}
+
+		try {
+			const user = await User.findById(userId);
+			if (!user) {
+				res.status(404).json({ message: "User not found" });
+				return;
+			}
+
+			const resizedImage = await resizeImage(file, {
+				width: 1280,
+				height: 720,
+			});
+			const imageLink = await uploadFileToCloudinary(resizedImage);
+			user.coverPhotoUrl = imageLink;
+
+			await user.save();
+
+			res
+				.status(201)
+				.json({ message: "Cover photo updated successfully", user });
 		} catch (err) {
 			errorLog(err);
 			res.status(500).json({ message: err.message });

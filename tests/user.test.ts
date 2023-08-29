@@ -2,10 +2,14 @@ import express, { NextFunction } from "express";
 import request from "supertest";
 import { ObjectId } from "mongodb";
 import debug from "debug";
+import passport from "passport";
+import path from "path";
 
 import { disconnectFromDatabase, configDb } from "../src/config/database";
 import configOtherMiddleware from "../src/middleware/otherConfig";
 import configRoutes from "../src/routes";
+import configCloudinary from "../src/config/cloudinary";
+import configErrorMiddleware from "../src/middleware/errorConfig";
 import User from "../src/models/user.model";
 import { IUser } from "../types/IUser";
 import Post, { IPost } from "../src/models/post.model";
@@ -27,7 +31,6 @@ import clearDatabase from "../tools/populateDbs/utils/clearDatabase";
 import getPostIdsFromPosts from "./utils/getPostIdsFromPosts";
 import configAuth from "../src/middleware/authConfig";
 import getNextIndexArray from "../src/utils/getNextIndexArray";
-import passport from "passport";
 import IRequestWithUser from "../types/IRequestWithUser";
 
 const log = debug("log:user:test");
@@ -51,6 +54,7 @@ beforeAll(async () => {
 	await configDb();
 	await clearDatabase();
 	await configAuth(app);
+	configCloudinary();
 
 	const usersAndPosts = await createUsersAndSavedPosts(numUsers - 2);
 	posts.push(...usersAndPosts.posts);
@@ -87,6 +91,8 @@ beforeAll(async () => {
 
 	configOtherMiddleware(app);
 	configRoutes(app);
+
+	configErrorMiddleware(app);
 }, 50000);
 
 describe("GET /users", () => {
@@ -374,7 +380,7 @@ describe("PATCH /updateUserPassword/:id", () => {
 	it("should update the user password", async () => {
 		const res = await request(app)
 			.patch(`${apiPath}/users/updateUser/${standardUser.id}/password`)
-			.send({ newPassword: validPassword, confirmPassword: validPassword })
+			.send({ newPassword: validPassword })
 			.set("Cookie", [`jwt=${adminUserJwt}`])
 			.expect(201);
 
@@ -383,32 +389,11 @@ describe("PATCH /updateUserPassword/:id", () => {
 		});
 	});
 
-	it("should fail when passwords do not match", async () => {
-		const res = await request(app)
-			.patch(`${apiPath}/users/updateUser/${standardUser.id}/password`)
-			.send({
-				newPassword: validPassword,
-				confirmPassword: generatePassword(),
-			})
-			.set("Cookie", [`jwt=${adminUserJwt}`])
-			.expect(400);
-
-		expect(res.body).toEqual(
-			expect.objectContaining({
-				errors: expect.arrayContaining([
-					expect.objectContaining({
-						msg: expect.stringContaining("Passwords do not match"),
-					}),
-				]),
-			}),
-		);
-	});
-
 	it("should fail when new password does not meet requirements", async () => {
 		const invalidPassword = generateInvalidPassword();
 		const res = await request(app)
 			.patch(`${apiPath}/users/updateUser/${standardUser.id}/password`)
-			.send({ newPassword: invalidPassword, confirmPassword: invalidPassword })
+			.send({ newPassword: invalidPassword })
 			.set("Cookie", [`jwt=${adminUserJwt}`])
 			.expect(400);
 
@@ -422,7 +407,7 @@ describe("PATCH /updateUserPassword/:id", () => {
 			.patch(
 				`${apiPath}/users/updateUser/${new ObjectId().toString()}/password`,
 			)
-			.send({ newPassword: validPassword, confirmPassword: validPassword })
+			.send({ newPassword: validPassword })
 			.set("Cookie", [`jwt=${adminUserJwt}`])
 			.expect(404);
 
@@ -432,7 +417,7 @@ describe("PATCH /updateUserPassword/:id", () => {
 	it("should fail when user is not logged in", async () => {
 		const res = await request(app)
 			.patch(`${apiPath}/users/updateUser/${standardUser.id}/password`)
-			.send({ newPassword: validPassword, confirmPassword: validPassword })
+			.send({ newPassword: validPassword })
 			.expect(401);
 
 		expect(res.body).toEqual({
@@ -443,7 +428,7 @@ describe("PATCH /updateUserPassword/:id", () => {
 	it("should fail when user is not an admin", async () => {
 		const res = await request(app)
 			.patch(`${apiPath}/users/updateUser/${adminUser.id}/password`)
-			.send({ newPassword: validPassword, confirmPassword: validPassword })
+			.send({ newPassword: validPassword })
 			.set("Cookie", [`jwt=${standardUserJwt}`])
 			.expect(403);
 
@@ -457,8 +442,220 @@ describe("PATCH /updateUserPassword/:id", () => {
 
 		const res = await request(app)
 			.patch(`${apiPath}/users/updateUser/${standardUser.id}/password`)
-			.send({ newPassword: validPassword, confirmPassword: validPassword })
+			.send({ newPassword: validPassword })
 			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.expect(500);
+
+		expect(res.body).toEqual({ message: "Database error" });
+	});
+});
+
+describe("PATCH /updateUser/:id/profile-photo", () => {
+	let imagePath: string;
+
+	beforeAll(() => {
+		imagePath = path.join(__dirname, "./utils/test-photo.webp");
+	});
+
+	it("should update the user avatar photo when user is admin", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/profile-photo`)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.attach("file", imagePath)
+			.expect(201);
+
+		expect(res.body).toEqual({
+			message: "User profile photo updated successfully",
+			user: expect.objectContaining({
+				avatarUrl: expect.any(String),
+			}),
+		});
+	});
+
+	it("should update user avatar photo when user is not an admin but is editing their own profile", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/profile-photo`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.attach("file", imagePath)
+			.expect(201);
+
+		expect(res.body).toEqual({
+			message: "User profile photo updated successfully",
+			user: expect.objectContaining({
+				avatarUrl: expect.any(String),
+			}),
+		});
+	});
+
+	it("should fail with 403 error when user is trying to edit someone else's profile and is not an admin", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${adminUser.id}/profile-photo`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.attach("file", imagePath)
+			.expect(403);
+
+		expect(res.body).toEqual({ message: "Unauthorized" });
+	});
+
+	it("should fail with 401 error when user is not logged in", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/profile-photo`)
+			.attach("file", imagePath)
+			.expect(401);
+
+		expect(res.body).toEqual({
+			message: "You must be logged in to perform this action",
+		});
+	});
+
+	it("should fail with 404 error when user to edit is not found", async () => {
+		const res = await request(app)
+			.patch(
+				`${apiPath}/users/updateUser/${new ObjectId().toString()}/profile-photo`,
+			)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.attach("file", imagePath)
+			.expect(404);
+
+		expect(res.body).toEqual({ message: "User not found" });
+	});
+
+	it("should fail with 400 error when no file is provided", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/profile-photo`)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.expect(400);
+
+		expect(res.body).toEqual({ message: "No file provided" });
+	});
+
+	it("should fail when file is not an image (jpg, jpeg, png, gif, webp)", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/profile-photo`)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.attach("file", path.join(__dirname, "./utils/test-file.txt"))
+			.expect(400);
+
+		expect(res.body).toEqual({
+			message: "Invalid file type. Only image types are allowed.",
+		});
+	});
+
+	it("should fail with 500 error when database query fails", async () => {
+		jest.spyOn(User.prototype, "save").mockImplementationOnce(() => {
+			throw new Error("Database error");
+		});
+
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/profile-photo`)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.attach("file", imagePath)
+			.expect(500);
+
+		expect(res.body).toEqual({ message: "Database error" });
+	});
+});
+
+describe("PATCH /updateUser/:id/cover-photo", () => {
+	let imagePath: string;
+
+	beforeAll(() => {
+		imagePath = path.join(__dirname, "./utils/test-photo.webp");
+	});
+
+	it("should update the user cover photo when user is admin", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/cover-photo`)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.attach("file", imagePath)
+			.expect(201);
+
+		expect(res.body).toEqual({
+			message: "Cover photo updated successfully",
+			user: expect.objectContaining({
+				coverPhotoUrl: expect.any(String),
+			}),
+		});
+	});
+
+	it("should update user cover photo when user is not an admin but is editing their own profile", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/cover-photo`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.attach("file", imagePath)
+			.expect(201);
+
+		expect(res.body).toEqual({
+			message: "Cover photo updated successfully",
+			user: expect.objectContaining({
+				coverPhotoUrl: expect.any(String),
+			}),
+		});
+	});
+
+	it("should fail with 403 error when user is trying to edit someone else's profile and is not an admin", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${adminUser.id}/cover-photo`)
+			.set("Cookie", [`jwt=${standardUserJwt}`])
+			.attach("file", imagePath)
+			.expect(403);
+
+		expect(res.body).toEqual({ message: "Unauthorized" });
+	});
+
+	it("should fail with 401 error when user is not logged in", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/cover-photo`)
+			.attach("file", imagePath)
+			.expect(401);
+
+		expect(res.body).toEqual({
+			message: "You must be logged in to perform this action",
+		});
+	});
+
+	it("should fail with 404 error when user to edit is not found", async () => {
+		const res = await request(app)
+			.patch(
+				`${apiPath}/users/updateUser/${new ObjectId().toString()}/cover-photo`,
+			)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.attach("file", imagePath)
+			.expect(404);
+
+		expect(res.body).toEqual({ message: "User not found" });
+	});
+
+	it("should fail with 400 error when no file is provided", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/cover-photo`)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.expect(400);
+
+		expect(res.body).toEqual({ message: "No file provided" });
+	});
+
+	it("should fail when file is not an image (jpg, jpeg, png, gif, webp)", async () => {
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/cover-photo`)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.attach("file", path.join(__dirname, "./utils/test-file.txt"))
+			.expect(400);
+
+		expect(res.body).toEqual({
+			message: "Invalid file type. Only image types are allowed.",
+		});
+	});
+
+	it("should fail with 500 error when database query fails", async () => {
+		jest.spyOn(User.prototype, "save").mockImplementationOnce(() => {
+			throw new Error("Database error");
+		});
+
+		const res = await request(app)
+			.patch(`${apiPath}/users/updateUser/${standardUser.id}/cover-photo`)
+			.set("Cookie", [`jwt=${adminUserJwt}`])
+			.attach("file", imagePath)
 			.expect(500);
 
 		expect(res.body).toEqual({ message: "Database error" });

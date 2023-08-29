@@ -2,9 +2,10 @@ import sharp from "sharp";
 
 export const resizeImage = async (
 	file: Express.Multer.File,
+	size: { width: number; height: number },
 ): Promise<Buffer> => {
 	try {
-		return await sharp(file.buffer).resize(128, 128).png().toBuffer();
+		return await sharp(file.buffer).resize(size).png().toBuffer();
 	} catch (error) {
 		throw new Error(`Failed to resize image: ${error.message}`);
 	}
@@ -12,6 +13,7 @@ export const resizeImage = async (
 
 const resizeImages = async (
 	files: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] },
+	size = { width: 1280, height: 720 },
 ) => {
 	// Convert the files into a flat array
 	let fileList: Express.Multer.File[];
@@ -23,7 +25,9 @@ const resizeImages = async (
 	}
 
 	// Resize each file
-	return await Promise.all(fileList.map(async (file) => resizeImage(file)));
+	return await Promise.all(
+		fileList.map(async (file) => resizeImage(file, size)),
+	);
 };
 
 export default resizeImages;

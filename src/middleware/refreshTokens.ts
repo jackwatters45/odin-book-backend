@@ -21,6 +21,7 @@ const refreshTokensMiddleware = async (
 	} catch (error) {
 		// Access token is invalid or expired. Try refreshing using the refresh token.
 		if (!refreshToken) {
+			console.log("No refresh token found");
 			return res.status(401).json({ message: "Refresh token not found" });
 		}
 
