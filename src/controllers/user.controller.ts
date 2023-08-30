@@ -12,6 +12,7 @@ import { authenticateJwt } from "../middleware/authenticateJwt";
 import { uploadFileToCloudinary } from "../utils/uploadToCloudinary";
 import { resizeImage } from "../utils/resizeImages";
 import upload from "../config/multer";
+import removeFromCloudinary from "../utils/removeFromCloudinary";
 
 const log = debug("log:user:controller");
 const errorLog = debug("err:user:controller");
@@ -283,11 +284,17 @@ export const updateUserProfilePhoto = [
 				return;
 			}
 
+			const prevProfilePhoto = user.avatarUrl;
+
 			const resizedImage = await resizeImage(file, { width: 128, height: 128 });
 			const imageLink = await uploadFileToCloudinary(resizedImage);
 			user.avatarUrl = imageLink;
 
 			await user.save();
+
+			if (prevProfilePhoto) {
+				await removeFromCloudinary(prevProfilePhoto);
+			}
 
 			res
 				.status(201)
@@ -328,6 +335,8 @@ export const updateUserCoverPhoto = [
 				return;
 			}
 
+			const prevCoverPhoto = user.coverPhotoUrl;
+
 			const resizedImage = await resizeImage(file, {
 				width: 1280,
 				height: 720,
@@ -336,6 +345,10 @@ export const updateUserCoverPhoto = [
 			user.coverPhotoUrl = imageLink;
 
 			await user.save();
+
+			if (prevCoverPhoto) {
+				await removeFromCloudinary(prevCoverPhoto);
+			}
 
 			res
 				.status(201)

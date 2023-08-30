@@ -10,6 +10,6 @@
 - creating posts - figure out post details when actually implementing
 - generate token tests
 - notifications test + routes etc
-
 - move model types to own file
-- Types imports bad dumb
+- somehow sync types with frontend
+- use fingerprint for tokens (currently just one token per user)

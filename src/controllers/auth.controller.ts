@@ -37,7 +37,7 @@ const loginUser = async (userId: string) => {
 	try {
 		const updatedUser = await User.findByIdAndUpdate(
 			userId,
-			{ $push: { refreshTokens: refreshToken } },
+			{ refreshTokens: [refreshToken] },
 			{ new: true },
 		);
 

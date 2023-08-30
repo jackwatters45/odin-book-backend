@@ -29,7 +29,7 @@ const refreshTokensMiddleware = async (
 		try {
 			decoded = jwt.verify(refreshToken, refreshTokenSecret) as { _id: string };
 		} catch (err) {
-			return res.status(401).json({
+			return res.status(200).json({
 				isAuthenticated: false,
 				message: "Invalid or expired refresh token",
 			});
@@ -41,7 +41,7 @@ const refreshTokensMiddleware = async (
 		);
 
 		if (!user || user.refreshTokens.indexOf(refreshToken) === -1) {
-			return res.status(401).json({
+			return res.status(200).json({
 				isAuthenticated: false,
 				message: "User not found or refresh token invalid",
 			});
