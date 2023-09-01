@@ -12,7 +12,9 @@ import {
 	sendFriendRequest,
 	unfriendUser,
 	updateUserBasicInfo,
+	updateUserBio,
 	updateUserCoverPhoto,
+	updateUserHobbies,
 	updateUserPassword,
 	updateUserProfilePhoto,
 } from "../controllers/user.controller";
@@ -32,16 +34,22 @@ router.get("/:id/deleted", getDeletedUserById);
 router.post("/", createUser);
 
 // /updateUserPassword/:id
-router.patch("/updateUser/:id/password", updateUserPassword);
+router.patch("/:id/password", updateUserPassword);
 
-// /updateUser/:id/profile-photo
-router.patch("/updateUser/:id/profile-photo", updateUserProfilePhoto);
+// /:id/profile-photo
+router.patch("/:id/profile-photo", updateUserProfilePhoto);
 
-// /updateUser/:id/cover-photo
-router.patch("/updateUser/:id/cover-photo", updateUserCoverPhoto);
+// /:id/cover-photo
+router.patch("/:id/cover-photo", updateUserCoverPhoto);
 
-// /updateUser/:id/basic
-router.patch("/updateUser/:id/basic", updateUserBasicInfo);
+// /:id/hobbies
+router.patch("/:id/hobbies", updateUserHobbies);
+
+// /:id/bio
+router.patch("/:id/bio", updateUserBio);
+
+// /:id/basic
+router.patch("/:id/basic", updateUserBasicInfo);
 
 // TODO -> getUserActivity?
 // /users/:id/posts

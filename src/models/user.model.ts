@@ -129,7 +129,8 @@ const UserSchema = new Schema<IUser>(
 				url: { type: String, trim: true, maxlength: 200 },
 			},
 		],
-		aboutYou: { type: String, trim: true, maxlength: 1000 },
+		bio: { type: String, trim: true, maxlength: 101 },
+		hobbies: [{ type: String, trim: true }],
 		nicknames: [{ type: String, trim: true, maxlength: 50 }],
 		lifeEvents: [
 			{

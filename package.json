@@ -29,7 +29,8 @@
 		"format": "prettier --write .",
 		"fix": "npm run format & npm run lint:fix",
 		"prepare": "husky install",
-		"populate": "DEBUG=log ts-node tools/populateDbs/populateDbs.ts"
+		"populate": "DEBUG=log ts-node tools/populateDbs/populateDbs.ts",
+		"parseData": "node rawData/parseFile.mjs"
 	},
 	"lint-staged": {
 		"*.ts": [
@@ -58,6 +59,7 @@
 		"morgan": "^1.10.0",
 		"multer": "^1.4.5-lts.1",
 		"nodemailer": "^6.9.3",
+		"papaparse": "^5.4.1",
 		"passport": "^0.6.0",
 		"passport-facebook": "^3.0.0",
 		"passport-github2": "^0.1.12",
@@ -86,6 +88,7 @@
 		"@types/multer": "^1.4.7",
 		"@types/node": "^20.3.2",
 		"@types/nodemailer": "^6.4.8",
+		"@types/papaparse": "^5.3.8",
 		"@types/passport": "^1.0.12",
 		"@types/passport-facebook": "^2.1.11",
 		"@types/passport-github2": "^1.2.5",

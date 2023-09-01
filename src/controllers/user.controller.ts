@@ -1,6 +1,6 @@
 import expressAsyncHandler from "express-async-handler";
 import { Request, Response } from "express";
-import { body, validationResult } from "express-validator";
+import { ValidationChain, body, validationResult } from "express-validator";
 import debug from "debug";
 
 import User from "../models/user.model";
@@ -13,6 +13,7 @@ import { uploadFileToCloudinary } from "../utils/uploadToCloudinary";
 import { resizeImage } from "../utils/resizeImages";
 import upload from "../config/multer";
 import removeFromCloudinary from "../utils/removeFromCloudinary";
+import hobbiesBank from "../models/data/hobbies";
 
 const log = debug("log:user:controller");
 const errorLog = debug("err:user:controller");
@@ -255,15 +256,16 @@ export const updateUserPassword = [
 	}),
 ];
 
-// @desc    Update user profile photo
-// @route   PATCH /users/:id/profile-photo
-// @access  Private
-export const updateUserProfilePhoto = [
+type UserImageField = "avatarUrl" | "coverPhotoUrl";
+
+const updateUserImage = (
+	fieldToUpdate: UserImageField,
+	imageDimensions: { width: number; height: number },
+) => [
 	authenticateJwt,
 	upload.single("file"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
-
 		const userId = String(req.params.id);
 
 		if (userId !== reqUser.id && reqUser.userType !== "admin") {
@@ -278,43 +280,66 @@ export const updateUserProfilePhoto = [
 		}
 
 		try {
-			const user = await User.findById(userId);
+			const user = (await User.findById(userId)) as IUser;
 			if (!user) {
 				res.status(404).json({ message: "User not found" });
 				return;
 			}
 
-			const prevProfilePhoto = user.avatarUrl;
+			const prevImageUrl = user[fieldToUpdate];
 
-			const resizedImage = await resizeImage(file, { width: 128, height: 128 });
+			const resizedImage = await resizeImage(file, imageDimensions);
 			const imageLink = await uploadFileToCloudinary(resizedImage);
-			user.avatarUrl = imageLink;
+			user[fieldToUpdate] = imageLink;
 
 			await user.save();
 
-			if (prevProfilePhoto) {
-				await removeFromCloudinary(prevProfilePhoto);
+			if (prevImageUrl) {
+				await removeFromCloudinary(prevImageUrl);
 			}
 
-			res
-				.status(201)
-				.json({ message: "User profile photo updated successfully", user });
+			res.status(201).json({
+				message: `${fieldToUpdate.replace("Url", " ")}updated successfully`,
+				user,
+			});
 		} catch (err) {
 			errorLog(err);
 			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
+
+// @desc    Update user profile photo
+// @route   PATCH /users/:id/profile-photo
+// @access  Private
+export const updateUserProfilePhoto = updateUserImage("avatarUrl", {
+	width: 128,
+	height: 128,
+});
 
 // @desc    Update user cover photo
 // @route   PATCH /users/:id/cover-photo
 // @access  Private
-export const updateUserCoverPhoto = [
+export const updateUserCoverPhoto = updateUserImage("coverPhotoUrl", {
+	width: 1280,
+	height: 720,
+});
+
+type UserStandardField = "bio" | "hobbies";
+
+interface UserStandardFieldParams {
+	fieldToUpdate: UserStandardField;
+	validationRules: ValidationChain[];
+}
+
+const updateUserStandardField = ({
+	fieldToUpdate,
+	validationRules,
+}: UserStandardFieldParams) => [
 	authenticateJwt,
-	upload.single("file"),
+	...validationRules,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
-
 		const userId = String(req.params.id);
 
 		if (userId !== reqUser.id && reqUser.userType !== "admin") {
@@ -322,43 +347,58 @@ export const updateUserCoverPhoto = [
 			return;
 		}
 
-		const file = req.file;
-		if (!file) {
-			res.status(400).json({ message: "No file provided" });
-			return;
-		}
-
 		try {
-			const user = await User.findById(userId);
+			const user = (await User.findById(userId)) as IUser;
 			if (!user) {
 				res.status(404).json({ message: "User not found" });
 				return;
 			}
 
-			const prevCoverPhoto = user.coverPhotoUrl;
-
-			const resizedImage = await resizeImage(file, {
-				width: 1280,
-				height: 720,
-			});
-			const imageLink = await uploadFileToCloudinary(resizedImage);
-			user.coverPhotoUrl = imageLink;
-
+			user[fieldToUpdate] = req.body[fieldToUpdate];
 			await user.save();
-
-			if (prevCoverPhoto) {
-				await removeFromCloudinary(prevCoverPhoto);
-			}
 
 			res
 				.status(201)
-				.json({ message: "Cover photo updated successfully", user });
+				.json({ message: `${fieldToUpdate} updated successfully`, user });
 		} catch (err) {
 			errorLog(err);
 			res.status(500).json({ message: err.message });
 		}
 	}),
 ];
+
+// @desc    Update user bio
+// @route   PATCH /users/:id/bio
+// @access  Private
+export const updateUserBio = updateUserStandardField({
+	fieldToUpdate: "bio",
+	validationRules: [
+		body("bio")
+			.trim()
+			.notEmpty()
+			.withMessage("Bio should not be empty")
+			.isLength({ max: 101 })
+			.withMessage("Bio should not be longer than 101 characters"),
+	],
+});
+
+// @desc    Update user hobbies
+// @route   PATCH /users/:id/hobbies
+// @access  Private
+export const updateUserHobbies = updateUserStandardField({
+	fieldToUpdate: "hobbies",
+	validationRules: [
+		body("hobbies")
+			.isArray({ min: 1 })
+			.withMessage("Hobbies should be an array of at least one hobby")
+			.custom((hobbies) =>
+				hobbies.every(
+					(hobby: string) => !!hobbiesBank.find((h) => h.name === hobby),
+				),
+			)
+			.withMessage("Hobbies should be valid hobbies"),
+	],
+});
 
 // @desc    Update user basic info
 // @route   PATCH /users/:id/basic

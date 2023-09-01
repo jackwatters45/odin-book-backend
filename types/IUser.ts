@@ -113,9 +113,12 @@ export interface UserAboutData {
 	placesLived?: PlaceLivedData[];
 	website?: string;
 	socialLinks?: SocialLinksData[];
-	aboutYou?: string;
 	nicknames?: string[];
 	lifeEvents?: LifeEventData[];
+
+	// edit profile
+	hobbies?: string[];
+	bio?: string;
 }
 
 export interface IUser

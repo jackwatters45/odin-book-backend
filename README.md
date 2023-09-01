@@ -12,4 +12,5 @@
 - notifications test + routes etc
 - move model types to own file
 - somehow sync types with frontend
+- same with /models/data
 - use fingerprint for tokens (currently just one token per user)
