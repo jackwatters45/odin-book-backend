@@ -61,11 +61,13 @@ const refreshTokensMiddleware = async (
 			maxAge: 3600000, // 1 hour
 			httpOnly: true,
 		});
+
 		res.cookie("refreshToken", newRefreshToken, {
 			maxAge: 604800000, // 7 days
 			httpOnly: true,
 		});
 
+		req.cookies.jwt = newAccessToken;
 		next();
 	}
 };
