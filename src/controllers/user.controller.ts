@@ -325,16 +325,18 @@ export const updateUserCoverPhoto = updateUserImage("coverPhotoUrl", {
 	height: 720,
 });
 
-type UserStandardField = "bio" | "hobbies";
+type UserStandardField = "bio" | "hobbies" | "intro";
 
 interface UserStandardFieldParams {
 	fieldToUpdate: UserStandardField;
-	validationRules: ValidationChain[];
+	validationRules: ValidationChain[] | undefined;
+	useBodyDirectly?: boolean;
 }
 
 const updateUserStandardField = ({
 	fieldToUpdate,
-	validationRules,
+	validationRules = [],
+	useBodyDirectly,
 }: UserStandardFieldParams) => [
 	authenticateJwt,
 	...validationRules,
@@ -354,7 +356,11 @@ const updateUserStandardField = ({
 				return;
 			}
 
-			user[fieldToUpdate] = req.body[fieldToUpdate];
+			user[fieldToUpdate] = useBodyDirectly
+				? req.body
+				: req.body[fieldToUpdate];
+
+			log(user[fieldToUpdate]);
 			await user.save();
 
 			res
@@ -398,6 +404,15 @@ export const updateUserHobbies = updateUserStandardField({
 			)
 			.withMessage("Hobbies should be valid hobbies"),
 	],
+});
+
+// @desc    Update user intro
+// @route   PATCH /users/:id/intro
+// @access  Private
+export const updateUserIntro = updateUserStandardField({
+	fieldToUpdate: "intro",
+	validationRules: [],
+	useBodyDirectly: true,
 });
 
 // @desc    Update user basic info

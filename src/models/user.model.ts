@@ -3,7 +3,12 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 import { IUser } from "../../types/IUser";
+
 import { jwtSecret } from "../config/envVariables";
+import {
+	AUDIENCE_STATUS_OPTIONS,
+	VALID_SOCIAL_PLATFORMS_ARRAY,
+} from "../constants";
 
 const UserSchema = new Schema<IUser>(
 	{
@@ -118,7 +123,13 @@ const UserSchema = new Schema<IUser>(
 		website: { type: String, trim: true, maxlength: 200 },
 		socialLinks: [
 			{
-				platform: { type: String, required: true, trim: true, lowercase: true },
+				platform: {
+					type: String,
+					required: true,
+					trim: true,
+					lowercase: true,
+					enum: VALID_SOCIAL_PLATFORMS_ARRAY,
+				},
 				username: {
 					type: String,
 					required: true,
@@ -132,6 +143,46 @@ const UserSchema = new Schema<IUser>(
 		bio: { type: String, trim: true, maxlength: 101 },
 		hobbies: [{ type: String, trim: true }],
 		nicknames: [{ type: String, trim: true, maxlength: 50 }],
+		namePronunciation: {
+			firstName: { type: String, required: true, trim: true, maxlength: 50 },
+			lastName: { type: String, required: true, trim: true, maxlength: 50 },
+			fullName: { type: String, required: true, trim: true, maxlength: 100 },
+		},
+		intro: {
+			pronouns: { type: Map, of: Boolean, default: { pronouns: false } },
+			work: { type: Map, of: Boolean, default: {} },
+			education: { type: Map, of: Boolean, default: {} },
+			currentCity: { type: Map, of: Boolean, default: { currentCity: false } },
+			hometown: { type: Map, of: Boolean, default: { hometown: false } },
+			relationshipStatus: {
+				type: Map,
+				of: Boolean,
+				default: { relationshipStatus: false },
+			},
+			namePronunciation: {
+				type: Map,
+				of: Boolean,
+				default: { namePronunciation: false },
+			},
+			joined: { type: Map, of: Boolean, default: { joined: false } },
+			websites: {
+				type: Map,
+				of: String,
+				default: {
+					websites: "Only Me",
+				},
+			},
+			socialLinks: {
+				type: Map,
+				of: {
+					type: String,
+					enum: AUDIENCE_STATUS_OPTIONS,
+				},
+				default: {
+					socialLinks: "Only Me",
+				},
+			},
+		},
 		lifeEvents: [
 			{
 				title: { type: String, required: true, trim: true, maxlength: 200 },
@@ -163,6 +214,14 @@ UserSchema.path("lifeEvents").default([]);
 UserSchema.virtual("fullName").get(function (this: IUser) {
 	if (!this.firstName || !this.lastName) return "";
 	return `${this.firstName} ${this.lastName}`;
+});
+
+UserSchema.virtual("isVerified").get(function (this: IUser) {
+	return this.verification.isVerified;
+});
+
+UserSchema.virtual("friendCount").get(function (this: IUser) {
+	return this.friends.length;
 });
 
 UserSchema.pre("save", async function (this: IUser, next) {

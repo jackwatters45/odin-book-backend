@@ -1,4 +1,5 @@
 import { ObjectId, Document } from "mongoose";
+import { ValidSocialPlatformsType } from "../src/constants";
 
 // Basic User Info
 export interface BasicUserInfo {
@@ -76,6 +77,7 @@ export interface WorkData {
 
 export interface EducationData {
 	school: string;
+	type: "university" | "high school";
 	degree?: string;
 	fieldOfStudy?: string;
 	city?: string;
@@ -95,15 +97,35 @@ export interface PlaceLivedData {
 }
 
 export interface SocialLinksData {
-	platform: string;
+	platform: ValidSocialPlatformsType;
 	username: string;
-	url: string;
 }
 
 export interface LifeEventData {
 	title: string;
 	description?: string;
 	date: Date;
+}
+
+export interface NamePronunciationData {
+	firstName: string;
+	lastName: string;
+	fullName: string;
+}
+
+export type IntroField = Record<string, boolean>;
+
+export interface IntroData {
+	pronouns?: IntroField;
+	work?: IntroField;
+	education?: IntroField;
+	currentCity?: IntroField;
+	hometown?: IntroField;
+	relationshipStatus?: IntroField;
+	namePronunciation?: IntroField;
+	joined: IntroField;
+	websites?: IntroField;
+	socialLinks?: IntroField;
 }
 
 // User About Data
@@ -119,6 +141,10 @@ export interface UserAboutData {
 	// edit profile
 	hobbies?: string[];
 	bio?: string;
+	namePronunciation?: NamePronunciationData;
+
+	// TODO
+	intro: IntroData;
 }
 
 export interface IUser

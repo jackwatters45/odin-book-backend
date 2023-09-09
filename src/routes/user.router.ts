@@ -15,6 +15,7 @@ import {
 	updateUserBio,
 	updateUserCoverPhoto,
 	updateUserHobbies,
+	updateUserIntro,
 	updateUserPassword,
 	updateUserProfilePhoto,
 } from "../controllers/user.controller";
@@ -42,11 +43,14 @@ router.patch("/:id/profile-photo", updateUserProfilePhoto);
 // /:id/cover-photo
 router.patch("/:id/cover-photo", updateUserCoverPhoto);
 
+// /:id/bio
+router.patch("/:id/bio", updateUserBio);
+
 // /:id/hobbies
 router.patch("/:id/hobbies", updateUserHobbies);
 
-// /:id/bio
-router.patch("/:id/bio", updateUserBio);
+// /:id/intro
+router.patch("/:id/intro", updateUserIntro);
 
 // /:id/basic
 router.patch("/:id/basic", updateUserBasicInfo);
