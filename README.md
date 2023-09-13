@@ -14,3 +14,8 @@
 - somehow sync types with frontend
 - same with /models/data
 - use fingerprint for tokens (currently just one token per user)
+- next project use centralized error handling for all errors
+  - removed all typical 500 try catch blocks so may need to go back to somehow add specific error text
+  - if (!user) {
+    throw new NotFoundError("User not found");
+    }

@@ -10,6 +10,20 @@ import { MulterError } from "multer";
 
 const log = debug("log:configErrorMiddleware");
 
+export class BadRequestError extends Error {
+	statusCode = 400;
+	constructor(message: string) {
+		super(message);
+	}
+}
+
+export class NotFoundError extends Error {
+	statusCode = 404;
+	constructor(message: string) {
+		super(message);
+	}
+}
+
 const configErrorMiddleware = (app: Application) => {
 	const errorHandler: ErrorRequestHandler = (
 		err: Error,
@@ -26,6 +40,8 @@ const configErrorMiddleware = (app: Application) => {
 			} else {
 				res.status(500).json({ message: "Internal Server Error" });
 			}
+		} else if (err instanceof BadRequestError || err instanceof NotFoundError) {
+			res.status(err.statusCode).json({ message: err.message });
 		} else if (err instanceof Error) {
 			res.status(500).json({ message: err.message || "Internal Server Error" });
 		} else {
@@ -37,5 +53,3 @@ const configErrorMiddleware = (app: Application) => {
 };
 
 export default configErrorMiddleware;
-
-// TODO figure error handling out

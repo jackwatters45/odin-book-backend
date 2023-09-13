@@ -11,67 +11,61 @@ import Post from "../models/post.model";
 import { authenticateJwt } from "../middleware/authenticateJwt";
 
 const log = debug("log:comment:controller");
-const errorLog = debug("err:comment:controller");
 
 // @desc    Get all comments from post
 // @route   GET /posts/:post/comments
 // @access  Public
 export const getComments = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		try {
-			const postId = req.params.post;
+		const postId = req.params.post;
 
-			const [post, commentsCount, parentCommentsCount] = await Promise.all([
-				Post.findById(postId),
-				Comment.countDocuments({ post: postId }),
-				Comment.countDocuments({ post: postId, parentComment: null }),
-			]);
+		const [post, commentsCount, parentCommentsCount] = await Promise.all([
+			Post.findById(postId),
+			Comment.countDocuments({ post: postId }),
+			Comment.countDocuments({ post: postId, parentComment: null }),
+		]);
 
-			if (!post) {
-				res.status(404).json({ message: "Post not found" });
-				return;
-			}
-
-			const commentsQuery = Comment.find({ post: postId, parentComment: null });
-
-			if (req.query.offset) {
-				const offset = parseInt(req.query.offset as string);
-				commentsQuery.skip(offset);
-			}
-
-			if (req.query.limit) {
-				const limit = parseInt(req.query.limit as string);
-				commentsQuery.limit(limit);
-			}
-
-			// TODO: adjust sortBy options
-			if (req.query.sortBy) {
-				const sort = req.query.sortBy as string;
-				if (sort === "likes") {
-					commentsQuery.sort({ likes: -1, updatedAt: -1 });
-				} else if (sort === "dislikes") {
-					commentsQuery.sort({ dislikes: -1, updatedAt: -1 });
-				} else if (sort === "reactions") {
-					commentsQuery.sort({ reactions: -1, updatedAt: -1 });
-				} else if (sort === "newest") {
-					commentsQuery.sort({ updatedAt: -1 });
-				} else if (sort === "replies") {
-					commentsQuery.sort({ replies: -1, updatedAt: -1 });
-				} else {
-					commentsQuery.sort({ [sort]: -1 });
-				}
-			}
-
-			const comments = await commentsQuery.exec();
-
-			res.status(200).json({
-				comments,
-				meta: { total: commentsCount, totalParent: parentCommentsCount },
-			});
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: err.message });
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
 		}
+
+		const commentsQuery = Comment.find({ post: postId, parentComment: null });
+
+		if (req.query.offset) {
+			const offset = parseInt(req.query.offset as string);
+			commentsQuery.skip(offset);
+		}
+
+		if (req.query.limit) {
+			const limit = parseInt(req.query.limit as string);
+			commentsQuery.limit(limit);
+		}
+
+		// TODO: adjust sortBy options
+		if (req.query.sortBy) {
+			const sort = req.query.sortBy as string;
+			if (sort === "likes") {
+				commentsQuery.sort({ likes: -1, updatedAt: -1 });
+			} else if (sort === "dislikes") {
+				commentsQuery.sort({ dislikes: -1, updatedAt: -1 });
+			} else if (sort === "reactions") {
+				commentsQuery.sort({ reactions: -1, updatedAt: -1 });
+			} else if (sort === "newest") {
+				commentsQuery.sort({ updatedAt: -1 });
+			} else if (sort === "replies") {
+				commentsQuery.sort({ replies: -1, updatedAt: -1 });
+			} else {
+				commentsQuery.sort({ [sort]: -1 });
+			}
+		}
+
+		const comments = await commentsQuery.exec();
+
+		res.status(200).json({
+			comments,
+			meta: { total: commentsCount, totalParent: parentCommentsCount },
+		});
 	},
 );
 
@@ -80,36 +74,31 @@ export const getComments = expressAsyncHandler(
 // @access  Public
 export const getReplies = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		try {
-			const [post, comment] = await Promise.all([
-				Post.findById(req.params.post),
-				Comment.findById(req.params.id),
-			]);
+		const [post, comment] = await Promise.all([
+			Post.findById(req.params.post),
+			Comment.findById(req.params.id),
+		]);
 
-			if (!post) {
-				res.status(404).json({ message: "Post not found" });
-				return;
-			}
-
-			if (!comment) {
-				res.status(404).json({ message: "Comment not found" });
-				return;
-			}
-
-			const { limit = 3, offset = 0 } = req.query;
-
-			const replies = await Comment.find({ parentComment: req.params.id })
-				.sort({ updatedAt: -1 })
-				.skip(Number(offset))
-				.limit(Number(limit))
-				.populate("author", "firstName lastName avatarUrl isDeleted")
-				.exec();
-
-			res.status(200).json({ replies });
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: err.message });
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
 		}
+
+		if (!comment) {
+			res.status(404).json({ message: "Comment not found" });
+			return;
+		}
+
+		const { limit = 3, offset = 0 } = req.query;
+
+		const replies = await Comment.find({ parentComment: req.params.id })
+			.sort({ updatedAt: -1 })
+			.skip(Number(offset))
+			.limit(Number(limit))
+			.populate("author", "firstName lastName avatarUrl isDeleted")
+			.exec();
+
+		res.status(200).json({ replies });
 	},
 );
 
@@ -118,30 +107,25 @@ export const getReplies = expressAsyncHandler(
 // @access  Public
 export const getCommentById = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		try {
-			const [post, comment] = await Promise.all([
-				Post.findById(req.params.post),
-				Comment.findById(req.params.id).populate(
-					"author",
-					"firstName lastName avatarUrl isDeleted",
-				),
-			]);
+		const [post, comment] = await Promise.all([
+			Post.findById(req.params.post),
+			Comment.findById(req.params.id).populate(
+				"author",
+				"firstName lastName avatarUrl isDeleted",
+			),
+		]);
 
-			if (!post) {
-				res.status(404).json({ message: "Post not found" });
-				return;
-			}
-
-			if (!comment) {
-				res.status(404).json({ message: "Comment not found" });
-				return;
-			}
-
-			res.status(200).json({ comment, message: "Comment found" });
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: err.message });
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
 		}
+
+		if (!comment) {
+			res.status(404).json({ message: "Comment not found" });
+			return;
+		}
+
+		res.status(200).json({ comment, message: "Comment found" });
 	},
 );
 
@@ -215,9 +199,7 @@ export const createComment = [
 				.json({ message: "Comment created", comment: commentWithAuthor });
 		} catch (err) {
 			await session.abortTransaction();
-
-			errorLog(err);
-			res.status(500).json({ message: err.message });
+			throw new Error(err);
 		} finally {
 			session.endSession();
 		}
@@ -239,37 +221,32 @@ export const updateComment = [
 
 		const user = req.user as IUser;
 
-		try {
-			const [post, comment] = await Promise.all([
-				Post.findById(req.params.post),
-				Comment.findById(req.params.id),
-			]);
+		const [post, comment] = await Promise.all([
+			Post.findById(req.params.post),
+			Comment.findById(req.params.id),
+		]);
 
-			if (!post) {
-				res.status(404).json({ message: "Post not found" });
-				return;
-			}
-
-			if (!comment) {
-				res.status(404).json({ message: "Comment not found" });
-				return;
-			}
-
-			if (comment.author.toString() !== user._id.toString()) {
-				res.status(403).json({
-					message: "You must be the original commenter to edit a comment",
-				});
-				return;
-			}
-
-			comment.content = req.body.content;
-			await comment.save();
-
-			res.status(201).json({ message: "Comment updated", comment });
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: err.message });
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
 		}
+
+		if (!comment) {
+			res.status(404).json({ message: "Comment not found" });
+			return;
+		}
+
+		if (comment.author.toString() !== user._id.toString()) {
+			res.status(403).json({
+				message: "You must be the original commenter to edit a comment",
+			});
+			return;
+		}
+
+		comment.content = req.body.content;
+		await comment.save();
+
+		res.status(201).json({ message: "Comment updated", comment });
 	}),
 ];
 
@@ -281,39 +258,34 @@ export const deleteComment = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
-		try {
-			const [post, comment] = await Promise.all([
-				Post.findById(req.params.post),
-				Comment.findById(req.params.id),
-			]);
+		const [post, comment] = await Promise.all([
+			Post.findById(req.params.post),
+			Comment.findById(req.params.id),
+		]);
 
-			if (!post) {
-				res.status(404).json({ message: "Post not found" });
-				return;
-			}
-
-			if (!comment) {
-				res.status(404).json({ message: "Comment not found" });
-				return;
-			}
-
-			if (comment.author.toString() !== user._id.toString()) {
-				res.status(403).json({ message: "Not authorized" });
-				return;
-			}
-
-			comment.content = "[deleted]";
-			comment.isDeleted = true;
-			const updatedComment = await comment.save();
-
-			res.status(200).json({
-				message: "Comment deleted successfully",
-				comment: updatedComment,
-			});
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: err.message });
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
 		}
+
+		if (!comment) {
+			res.status(404).json({ message: "Comment not found" });
+			return;
+		}
+
+		if (comment.author.toString() !== user._id.toString()) {
+			res.status(403).json({ message: "Not authorized" });
+			return;
+		}
+
+		comment.content = "[deleted]";
+		comment.isDeleted = true;
+		const updatedComment = await comment.save();
+
+		res.status(200).json({
+			message: "Comment deleted successfully",
+			comment: updatedComment,
+		});
 	}),
 ];
 
@@ -375,9 +347,7 @@ export const createCommentReply = [
 			res.status(201).json({ newComment });
 		} catch (err) {
 			await session.abortTransaction();
-
-			errorLog(err);
-			res.status(500).json({ message: err.message });
+			throw new Error(err);
 		} finally {
 			session.endSession();
 		}
@@ -401,49 +371,44 @@ export const reactToComment = [
 
 		const { type } = req.body;
 
-		try {
-			const [post, comment] = await Promise.all([
-				Post.findById(req.params.post),
-				Comment.findById(req.params.id).populate("reactions"),
-			]);
+		const [post, comment] = await Promise.all([
+			Post.findById(req.params.post),
+			Comment.findById(req.params.id).populate("reactions"),
+		]);
 
-			if (!post) {
-				res.status(404).json({ message: "Post not found" });
-				return;
-			}
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
+		}
 
-			if (!comment) {
-				res.status(404).json({ message: "Comment not found" });
-				return;
-			}
+		if (!comment) {
+			res.status(404).json({ message: "Comment not found" });
+			return;
+		}
 
-			const existingReaction = await Reaction.findOne({
+		const existingReaction = await Reaction.findOne({
+			parent: comment._id,
+			author: user._id,
+		});
+
+		if (!existingReaction) {
+			const reaction = new Reaction({
 				parent: comment._id,
-				author: user._id,
+				user: user._id,
+				type,
 			});
 
-			if (!existingReaction) {
-				const reaction = new Reaction({
-					parent: comment._id,
-					user: user._id,
-					type,
-				});
+			const savedReaction = await reaction.save();
 
-				const savedReaction = await reaction.save();
-
-				comment.reactions.push(savedReaction._id as unknown as ObjectId);
-			} else {
-				existingReaction.type = type;
-				await existingReaction.save();
-			}
-
-			await comment.save();
-
-			res.status(201).json({ message: "Reaction added", comment });
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: err.message });
+			comment.reactions.push(savedReaction._id as unknown as ObjectId);
+		} else {
+			existingReaction.type = type;
+			await existingReaction.save();
 		}
+
+		await comment.save();
+
+		res.status(201).json({ message: "Reaction added", comment });
 	}),
 ];
 
@@ -455,46 +420,39 @@ export const unreactToComment = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
-		try {
-			const [post, comment] = await Promise.all([
-				Post.findById(req.params.post),
-				Comment.findById(req.params.id),
-			]);
+		const [post, comment] = await Promise.all([
+			Post.findById(req.params.post),
+			Comment.findById(req.params.id),
+		]);
 
-			if (!post) {
-				res.status(404).json({ message: "Post not found" });
-				return;
-			}
-
-			if (!comment) {
-				res.status(404).json({ message: "Comment not found" });
-				return;
-			}
-
-			const existingReaction = await Reaction.findOne({
-				parent: comment._id.toString(),
-				user: user._id.toString(),
-			});
-
-			if (!existingReaction) {
-				res
-					.status(404)
-					.json({ message: "User has not reacted to this comment" });
-				return;
-			}
-
-			await Reaction.findByIdAndDelete(existingReaction._id);
-
-			comment.reactions = comment.reactions.filter(
-				(reaction) => reaction.toString() !== existingReaction._id.toString(),
-			);
-
-			await comment.save();
-
-			res.status(201).json({ message: "Reaction removed", comment });
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: err.message });
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
 		}
+
+		if (!comment) {
+			res.status(404).json({ message: "Comment not found" });
+			return;
+		}
+
+		const existingReaction = await Reaction.findOne({
+			parent: comment._id.toString(),
+			user: user._id.toString(),
+		});
+
+		if (!existingReaction) {
+			res.status(404).json({ message: "User has not reacted to this comment" });
+			return;
+		}
+
+		await Reaction.findByIdAndDelete(existingReaction._id);
+
+		comment.reactions = comment.reactions.filter(
+			(reaction) => reaction.toString() !== existingReaction._id.toString(),
+		);
+
+		await comment.save();
+
+		res.status(201).json({ message: "Reaction removed", comment });
 	}),
 ];

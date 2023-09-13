@@ -21,7 +21,6 @@ import refreshTokensMiddleware from "../middleware/refreshTokens";
 import { authenticateJwt } from "../middleware/authenticateJwt";
 
 const log = debug("log:auth:controller");
-const errorLog = debug("error:auth:controller");
 
 const loginUser = async (userId: string) => {
 	const payload = { _id: userId };
@@ -56,41 +55,37 @@ const loginUser = async (userId: string) => {
 
 // TODO cookie options
 export const handleUserLogin = async (res: Response, user: IUser) => {
-	try {
-		const {
-			jwtToken,
-			refreshToken,
-			message,
-			user: userWithoutPassword,
-		} = await loginUser(user._id);
+	const {
+		jwtToken,
+		refreshToken,
+		message,
+		user: userWithoutPassword,
+	} = await loginUser(user._id);
 
-		res.cookie("jwt", jwtToken, {
-			maxAge: 3600000,
-			httpOnly: true,
-			// secure: true,
-			// sameSite: "none",
-		});
+	res.cookie("jwt", jwtToken, {
+		maxAge: 3600000,
+		httpOnly: true,
+		// secure: true,
+		// sameSite: "none",
+	});
 
-		res.cookie("refreshToken", refreshToken, {
-			maxAge: 604800000, // 7 days
-			httpOnly: true,
-			// secure: true,
-			// sameSite: "none",
-		});
+	res.cookie("refreshToken", refreshToken, {
+		maxAge: 604800000, // 7 days
+		httpOnly: true,
+		// secure: true,
+		// sameSite: "none",
+	});
 
-		const { isVerified, type } = userWithoutPassword.verification;
-		if (
-			!isVerified &&
-			nodeEnv === "production" &&
-			userWithoutPassword.userType !== "guest"
-		) {
-			await generateAndSendToken(user, "verification", type);
-		}
-
-		res.status(200).json({ message, user: userWithoutPassword });
-	} catch (err) {
-		return { message: err.message };
+	const { isVerified, type } = userWithoutPassword.verification;
+	if (
+		!isVerified &&
+		nodeEnv === "production" &&
+		userWithoutPassword.userType !== "guest"
+	) {
+		await generateAndSendToken(user, "verification", type);
 	}
+
+	res.status(200).json({ message, user: userWithoutPassword });
 };
 
 // @desc    Log in a user
@@ -101,36 +96,31 @@ export const postLogin = [
 	body("password").notEmpty().trim().withMessage("Password is required"),
 	expressAsyncHandler(
 		async (req: Request, res: Response, next: NextFunction) => {
-			try {
-				const errors = validationResult(req);
+			const errors = validationResult(req);
 
-				if (!errors.isEmpty()) {
-					res.status(400).json({ errors: errors.array() });
-					return;
-				}
-
-				passport.authenticate(
-					"local",
-					{ session: false },
-					async (err: Error, user: IUser, info: { message: string }) => {
-						if (err) {
-							res.status(500).json({ message: err.message });
-							return;
-						}
-
-						if (!user) {
-							res
-								.status(401)
-								.json({ message: info.message || "Invalid credentials" });
-							return;
-						}
-						await handleUserLogin(res, user);
-					},
-				)(req, res, next);
-			} catch (err) {
-				errorLog(err);
-				res.status(500).json({ message: "Server error" });
+			if (!errors.isEmpty()) {
+				res.status(400).json({ errors: errors.array() });
+				return;
 			}
+
+			passport.authenticate(
+				"local",
+				{ session: false },
+				async (err: Error, user: IUser, info: { message: string }) => {
+					if (err) {
+						res.status(500).json({ message: err.message });
+						return;
+					}
+
+					if (!user) {
+						res
+							.status(401)
+							.json({ message: info.message || "Invalid credentials" });
+						return;
+					}
+					await handleUserLogin(res, user);
+				},
+			)(req, res, next);
 		},
 	),
 ];
@@ -147,19 +137,14 @@ export const postLoginForgotPassword = expressAsyncHandler(
 			return;
 		}
 
-		try {
-			const user = (await User.findOne({
-				"resetPassword.token": token,
-				isDeleted: false,
-			}).select("password resetPassword")) as IUser;
+		const user = (await User.findOne({
+			"resetPassword.token": token,
+			isDeleted: false,
+		}).select("password resetPassword")) as IUser;
 
-			await resetResetPassword(user);
+		await resetResetPassword(user);
 
-			await handleUserLogin(res, user);
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: "Server error" });
-		}
+		await handleUserLogin(res, user);
 	},
 );
 
@@ -168,20 +153,15 @@ export const postLoginForgotPassword = expressAsyncHandler(
 // @access  Public
 export const postLoginGuest = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		try {
-			const user = await User.create(
-				new User({
-					firstName: "guest",
-					lastName: "user",
-					userType: "guest",
-					validUntil: Date.now() + 1000 * 60 * 15,
-				}),
-			);
-			await handleUserLogin(res, user);
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: "Server error" });
-		}
+		const user = await User.create(
+			new User({
+				firstName: "guest",
+				lastName: "user",
+				userType: "guest",
+				validUntil: Date.now() + 1000 * 60 * 15,
+			}),
+		);
+		await handleUserLogin(res, user);
 	},
 );
 
@@ -259,49 +239,44 @@ export const postSignUp = [
 		.notEmpty()
 		.withMessage("Gender should not be empty if provided"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
-		try {
-			const errors = validationResult(req);
-			if (!errors.isEmpty()) {
-				res.status(400).json({ errors: errors.array() });
-				return;
-			}
-
-			const { firstName, password, lastName, username, birthday } = req.body;
-
-			const { usernameType, formattedUsername } =
-				validateAndFormatUsername(username);
-
-			const userExists = await User.findOne({
-				[usernameType]: formattedUsername,
-			});
-			if (userExists) {
-				res
-					.status(400)
-					.json({ message: "User with this email/phone already exists" });
-				return;
-			}
-
-			const user = new User({
-				firstName,
-				lastName,
-				password,
-				birthday,
-				pronouns: req.body?.pronouns ?? undefined,
-				gender: req.body?.gender ?? undefined,
-				[usernameType]: formattedUsername,
-				verification: {
-					isVerified: false,
-					type: usernameType,
-				},
-			});
-
-			await user.save();
-
-			await handleUserLogin(res, user);
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({ message: "An unexpected error occurred." });
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			res.status(400).json({ errors: errors.array() });
+			return;
 		}
+
+		const { firstName, password, lastName, username, birthday } = req.body;
+
+		const { usernameType, formattedUsername } =
+			validateAndFormatUsername(username);
+
+		const userExists = await User.findOne({
+			[usernameType]: formattedUsername,
+		});
+		if (userExists) {
+			res
+				.status(400)
+				.json({ message: "User with this email/phone already exists" });
+			return;
+		}
+
+		const user = new User({
+			firstName,
+			lastName,
+			password,
+			birthday,
+			pronouns: req.body?.pronouns ?? undefined,
+			gender: req.body?.gender ?? undefined,
+			[usernameType]: formattedUsername,
+			verification: {
+				isVerified: false,
+				type: usernameType,
+			},
+		});
+
+		await user.save();
+
+		await handleUserLogin(res, user);
 	}),
 ];
 
@@ -317,25 +292,20 @@ export const postLogout = expressAsyncHandler(
 			return;
 		}
 
-		try {
-			const { _id } = jwt.verify(refreshToken, refreshTokenSecret) as {
-				_id: string;
-			};
+		const { _id } = jwt.verify(refreshToken, refreshTokenSecret) as {
+			_id: string;
+		};
 
-			const user = await User.findById(_id);
-			if (!user) {
-				res.status(401).json({ message: "Invalid or expired token" });
-				return;
-			}
-
-			user.refreshTokens = user.refreshTokens.filter(
-				(token) => token !== refreshToken,
-			);
-			await user.save();
-		} catch (err) {
+		const user = await User.findById(_id);
+		if (!user) {
 			res.status(401).json({ message: "Invalid or expired token" });
 			return;
 		}
+
+		user.refreshTokens = user.refreshTokens.filter(
+			(token) => token !== refreshToken,
+		);
+		await user.save();
 
 		res.clearCookie("jwt", {
 			httpOnly: true,
@@ -381,7 +351,7 @@ export const getCurrentUser = [
 
 			res.status(200).json({ user, isAuthenticated: true });
 		} catch (err) {
-			errorLog(err);
+			// TODO
 			res.status(401).json({ isAuthenticated: false, message: err.message });
 		}
 	}),
@@ -395,47 +365,39 @@ const resetVerification = useResetToken("verification");
 export const postVerifyCode = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
-		try {
-			const loggedInUser = req.user as IUser;
-			const user = await User.findById(loggedInUser._id).select("verification");
-			if (!user) {
-				res.status(404).json({ message: "User not found." });
-				return;
-			}
-
-			if (user.verification.isVerified) {
-				// shouldn't be possible that user verified but token defined
-				await resetVerification(user);
-				res.status(400).json({ message: "User is already verified." });
-				return;
-			}
-
-			const { verificationToken } = req.params;
-			const { verification } = user;
-			if (verification.token !== verificationToken) {
-				res.status(400).json({ message: "Invalid verification code." });
-				return;
-			}
-
-			if (verification.tokenExpires && verification.tokenExpires < Date.now()) {
-				await resetVerification(user);
-				res.status(400).json({
-					message: "Verification code has expired. Please request a new one.",
-				});
-				return;
-			}
-
-			user.verification.isVerified = true;
-			await resetVerification(user);
-
-			res.status(200).json({ message: "Verification successful." });
-		} catch (error) {
-			errorLog(error);
-			res.status(500).json({
-				message:
-					error.message || "An error occurred while verifying your account.",
-			});
+		const loggedInUser = req.user as IUser;
+		const user = await User.findById(loggedInUser._id).select("verification");
+		if (!user) {
+			res.status(404).json({ message: "User not found." });
+			return;
 		}
+
+		if (user.verification.isVerified) {
+			// shouldn't be possible that user verified but token defined
+			await resetVerification(user);
+			res.status(400).json({ message: "User is already verified." });
+			return;
+		}
+
+		const { verificationToken } = req.params;
+		const { verification } = user;
+		if (verification.token !== verificationToken) {
+			res.status(400).json({ message: "Invalid verification code." });
+			return;
+		}
+
+		if (verification.tokenExpires && verification.tokenExpires < Date.now()) {
+			await resetVerification(user);
+			res.status(400).json({
+				message: "Verification code has expired. Please request a new one.",
+			});
+			return;
+		}
+
+		user.verification.isVerified = true;
+		await resetVerification(user);
+
+		res.status(200).json({ message: "Verification successful." });
 	}),
 ];
 
@@ -446,43 +408,36 @@ export const getVerifyLink = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const { verificationToken } = req.params;
 
-		try {
-			const user = await User.findOne({
-				"verification.token": verificationToken,
-				isDeleted: false,
-			}).select("verification");
-			if (!user) {
-				res.status(401).json({ message: "Invalid verification link." });
-				return;
-			}
+		const user = await User.findOne({
+			"verification.token": verificationToken,
+			isDeleted: false,
+		}).select("verification");
+		if (!user) {
+			res.status(401).json({ message: "Invalid verification link." });
+			return;
+		}
 
-			if (user.verification.isVerified) {
-				await resetVerification(user);
-				res.status(400).json({ message: "User is already verified." });
-				return;
-			}
+		if (user.verification.isVerified) {
+			await resetVerification(user);
+			res.status(400).json({ message: "User is already verified." });
+			return;
+		}
 
-			const { verification } = user;
-			if (verification.tokenExpires && verification.tokenExpires < Date.now()) {
-				await resetVerification(user);
-
-				await user.save();
-				res.status(400).json({
-					message: "Verification link has expired. Please request a new one.",
-				});
-				return;
-			}
-
-			user.verification.isVerified = true;
+		const { verification } = user;
+		if (verification.tokenExpires && verification.tokenExpires < Date.now()) {
 			await resetVerification(user);
 
-			res.status(302).json({ message: "Verification successful." });
-		} catch (err) {
-			errorLog(err);
-			res
-				.status(500)
-				.json({ message: err.message || "An error occurred while verifying." });
+			await user.save();
+			res.status(400).json({
+				message: "Verification link has expired. Please request a new one.",
+			});
+			return;
 		}
+
+		user.verification.isVerified = true;
+		await resetVerification(user);
+
+		res.status(302).json({ message: "Verification successful." });
 	},
 );
 
@@ -503,19 +458,11 @@ export const postResendVerificationCode = [
 			return;
 		}
 
-		try {
-			await generateAndSendToken(user, "verification", type);
-			const destination = type === "email" ? user.email : user.phoneNumber;
-			res.status(200).json({
-				message: `Verification code sent to user's ${type}: ${destination}.`,
-			});
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({
-				message:
-					err.message || "An error occurred while sending verification code.",
-			});
-		}
+		await generateAndSendToken(user, "verification", type);
+		const destination = type === "email" ? user.email : user.phoneNumber;
+		res.status(200).json({
+			message: `Verification code sent to user's ${type}: ${destination}.`,
+		});
 	}),
 ];
 
@@ -539,29 +486,22 @@ export const postForgotPassword = [
 		const { usernameType, formattedUsername } =
 			validateAndFormatUsername(userId);
 
-		try {
-			const user = await User.findOne({
-				[usernameType]: formattedUsername,
-			});
-			if (!user) {
-				res.status(200).json({
-					message: "If the account exists, a reset password link was sent.",
-				});
-				return;
-			}
-
-			await generateAndSendToken(user, "resetPassword", usernameType);
+		const user = await User.findOne({
+			[usernameType]: formattedUsername,
+		});
+		if (!user) {
 			res.status(200).json({
 				message: "If the account exists, a reset password link was sent.",
-				// TODO add to test
-				userId,
 			});
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({
-				message: err.message || "Could not send reset password email.",
-			});
+			return;
 		}
+
+		await generateAndSendToken(user, "resetPassword", usernameType);
+		res.status(200).json({
+			message: "If the account exists, a reset password link was sent.",
+			// TODO add to test
+			userId,
+		});
 	}),
 ];
 
@@ -573,22 +513,15 @@ export const postFindAccount = expressAsyncHandler(async (req, res) => {
 	const { usernameType, formattedUsername } =
 		validateAndFormatUsername(username);
 
-	try {
-		const user = await User.findOne({
-			[usernameType]: formattedUsername,
-		}).select("firstName lastName userType avatarUrl phoneNumber email");
-		if (!user) {
-			res.status(404).json({ message: "User not found." });
-			return;
-		}
-
-		res.status(200).json({ message: "User found.", user });
-	} catch (err) {
-		errorLog(err);
-		res.status(500).json({
-			message: err.message || "An error occurred while finding user.",
-		});
+	const user = await User.findOne({
+		[usernameType]: formattedUsername,
+	}).select("firstName lastName userType avatarUrl phoneNumber email");
+	if (!user) {
+		res.status(404).json({ message: "User not found." });
+		return;
 	}
+
+	res.status(200).json({ message: "User found.", user });
 });
 
 // @route   POST /update-password/:token
@@ -614,48 +547,37 @@ export const updateForgottenPassword = [
 			return;
 		}
 
-		try {
-			const user = await User.findOne({
-				"resetPassword.token": req.params.token,
-			}).select("password resetPassword");
+		const user = await User.findOne({
+			"resetPassword.token": req.params.token,
+		}).select("password resetPassword");
 
-			if (!user) {
-				res.status(400).json({ message: "Invalid reset password token." });
-				return;
-			}
-
-			const { resetPassword } = user;
-			if (
-				resetPassword.tokenExpires &&
-				resetPassword.tokenExpires < Date.now()
-			) {
-				await resetResetPassword(user);
-				res.status(400).json({
-					message:
-						"Reset password token has expired. Please request a new one.",
-				});
-
-				return;
-			}
-
-			user.password = req.body.newPassword;
-			await resetResetPassword(user);
-
-			res.status(200).json({ message: "Password updated successfully." });
-
-			// TODO add
-			// const { email, phoneNumber } = user;
-			// if (email) {
-			// 	await sendPasswordUpdatedEmail(email);
-			// } else if (phoneNumber) {
-			// 	await sendPasswordUpdatedSMS(phoneNumber);
-			// }
-		} catch (err) {
-			errorLog(err);
-			res.status(500).json({
-				message: err.message || "An error occurred while updating password.",
-			});
+		if (!user) {
+			res.status(400).json({ message: "Invalid reset password token." });
+			return;
 		}
+
+		const { resetPassword } = user;
+		if (resetPassword.tokenExpires && resetPassword.tokenExpires < Date.now()) {
+			await resetResetPassword(user);
+			res.status(400).json({
+				message: "Reset password token has expired. Please request a new one.",
+			});
+
+			return;
+		}
+
+		user.password = req.body.newPassword;
+		await resetResetPassword(user);
+
+		res.status(200).json({ message: "Password updated successfully." });
+
+		// TODO add
+		// const { email, phoneNumber } = user;
+		// if (email) {
+		// 	await sendPasswordUpdatedEmail(email);
+		// } else if (phoneNumber) {
+		// 	await sendPasswordUpdatedSMS(phoneNumber);
+		// }
 	}),
 ];
 
@@ -692,18 +614,11 @@ const resetPassword = async (
 // @access  Public
 export const getResetPasswordCode = expressAsyncHandler(async (req, res) => {
 	const resetCode = req.params.resetCode;
-	try {
-		const user = (await User.findOne({
-			"resetPassword.code": resetCode,
-		}).select("resetPassword")) as IUser;
+	const user = (await User.findOne({
+		"resetPassword.code": resetCode,
+	}).select("resetPassword")) as IUser;
 
-		await resetPassword(user, res, "code");
-	} catch (err) {
-		errorLog(err);
-		res
-			.status(500)
-			.json({ message: "An error occurred while resetting your password." });
-	}
+	await resetPassword(user, res, "code");
 });
 
 // @route   GET /reset-password/link/:resetToken
@@ -711,18 +626,12 @@ export const getResetPasswordCode = expressAsyncHandler(async (req, res) => {
 // @access  Public
 export const getResetPasswordLink = expressAsyncHandler(async (req, res) => {
 	const resetToken = req.params.resetToken;
-	try {
-		const user = (await User.findOne({
-			"resetPassword.token": resetToken,
-		}).select("resetPassword")) as IUser;
 
-		await resetPassword(user, res, "token");
-	} catch (err) {
-		errorLog(err);
-		res
-			.status(500)
-			.json({ message: "An error occurred while resetting your password." });
-	}
+	const user = (await User.findOne({
+		"resetPassword.token": resetToken,
+	}).select("resetPassword")) as IUser;
+
+	await resetPassword(user, res, "token");
 });
 
 // @route   POST /reset-password/:resetToken
@@ -760,37 +669,28 @@ export const postResetPassword = [
 		const { newPassword } = req.body;
 
 		const { resetToken } = req.params;
-		try {
-			const user = await User.findOne({
-				"resetPassword.token": resetToken,
-			}).select("password resetPassword");
-			if (!user) {
-				res.status(400).json({ message: "Invalid reset password code." });
-				return;
-			}
 
-			const { resetPassword } = user;
-			if (
-				resetPassword.tokenExpires &&
-				resetPassword.tokenExpires < Date.now()
-			) {
-				await resetResetPassword(user);
-				res.status(400).json({
-					message: "Reset password code has expired. Please request a new one.",
-				});
-				return;
-			}
-
-			user.password = newPassword;
-			await resetResetPassword(user);
-
-			res.status(200).json({ message: "Password reset successfully." });
-		} catch (err) {
-			errorLog(err);
-			res
-				.status(500)
-				.json({ message: "An error occurred while resetting your password." });
+		const user = await User.findOne({
+			"resetPassword.token": resetToken,
+		}).select("password resetPassword");
+		if (!user) {
+			res.status(400).json({ message: "Invalid reset password code." });
+			return;
 		}
+
+		const { resetPassword } = user;
+		if (resetPassword.tokenExpires && resetPassword.tokenExpires < Date.now()) {
+			await resetResetPassword(user);
+			res.status(400).json({
+				message: "Reset password code has expired. Please request a new one.",
+			});
+			return;
+		}
+
+		user.password = newPassword;
+		await resetResetPassword(user);
+
+		res.status(200).json({ message: "Password reset successfully." });
 	}),
 ];
 
@@ -845,23 +745,16 @@ export const postChangePassword = [
 		}
 
 		const { oldPassword, newPassword } = req.body;
-		try {
-			const isMatch = await user.comparePassword(oldPassword);
-			if (!isMatch) {
-				res.status(400).json({ message: "Incorrect password." });
-				return;
-			}
-
-			user.password = newPassword;
-			await user.save();
-
-			res.status(200).json({ message: "Password changed successfully." });
-		} catch (err) {
-			errorLog(err);
-			res
-				.status(500)
-				.json({ message: "An error occurred while changing your password." });
+		const isMatch = await user.comparePassword(oldPassword);
+		if (!isMatch) {
+			res.status(400).json({ message: "Incorrect password." });
+			return;
 		}
+
+		user.password = newPassword;
+		await user.save();
+
+		res.status(200).json({ message: "Password changed successfully." });
 	}),
 ];
 

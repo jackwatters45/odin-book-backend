@@ -35,10 +35,10 @@ const refreshTokensMiddleware = async (
 			});
 		}
 
-		const user: IUser | null = await User.findOne(
-			{ _id: decoded._id, isDeleted: false },
-			{ password: 0 },
-		);
+		const user = (await User.findOne({
+			_id: decoded._id,
+			isDeleted: false,
+		}).select("refreshTokens")) as IUser;
 
 		if (!user || user.refreshTokens.indexOf(refreshToken) === -1) {
 			return res.status(200).json({
