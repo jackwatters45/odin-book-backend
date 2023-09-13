@@ -1,5 +1,10 @@
 import { Schema, model, Document, ObjectId } from "mongoose";
 import { LifeEventData } from "../../types/IUser";
+
+export interface PostMedia {
+	type: "image" | "video";
+	url: string;
+}
 export interface IPost extends Document {
 	content?: string;
 	author: ObjectId;
@@ -9,7 +14,7 @@ export interface IPost extends Document {
 	reactions: ObjectId[];
 	comments: ObjectId[];
 	sharedFrom?: ObjectId; // shared from another post
-	media?: string[];
+	media?: PostMedia[];
 	taggedUsers?: ObjectId[];
 	feeling?: string;
 	lifeEvent?: LifeEventData;
@@ -35,7 +40,21 @@ const postSchema = new Schema<IPost>(
 			default: [],
 		},
 		sharedFrom: { type: Schema.Types.ObjectId, ref: "Post" },
-		media: [{ type: String }],
+		media: [
+			{
+				type: new Schema(
+					{
+						type: {
+							type: String,
+							required: true,
+							enum: ["image", "video"],
+						},
+						url: { type: String, required: true },
+					},
+					{ _id: false },
+				),
+			},
+		],
 		feeling: { type: String },
 		lifeEvent: {
 			type: new Schema(

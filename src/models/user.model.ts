@@ -31,11 +31,35 @@ const UserSchema = new Schema<IUser>(
 			maxlength: 15,
 		},
 		birthday: { type: Date },
-		password: { type: String, trim: true, minlength: 8, maxlength: 100 },
+		password: {
+			type: String,
+			trim: true,
+			minlength: 8,
+			maxlength: 100,
+			select: false,
+		},
 		country: { type: String, trim: true, maxlength: 100 },
-		facebookId: { type: String, trim: true, unique: true, sparse: true },
-		googleId: { type: String, trim: true, unique: true, sparse: true },
-		githubId: { type: String, trim: true, unique: true, sparse: true },
+		facebookId: {
+			type: String,
+			trim: true,
+			unique: true,
+			sparse: true,
+			select: false,
+		},
+		googleId: {
+			type: String,
+			trim: true,
+			unique: true,
+			sparse: true,
+			select: false,
+		},
+		githubId: {
+			type: String,
+			trim: true,
+			unique: true,
+			sparse: true,
+			select: false,
+		},
 		gender: { type: String, trim: true },
 		pronouns: {
 			type: String,
@@ -64,7 +88,7 @@ const UserSchema = new Schema<IUser>(
 			followerCount: { type: Number, required: false },
 		},
 		validUntil: { type: Number, required: false },
-		refreshTokens: [{ type: String, trim: true }],
+		refreshTokens: [{ type: String, trim: true, select: false }],
 		verification: {
 			isVerified: { type: Boolean, default: false },
 			type: {
@@ -72,10 +96,11 @@ const UserSchema = new Schema<IUser>(
 				trim: true,
 				enum: ["email", "phoneNumber"],
 				default: "email",
+				select: false,
 			},
-			code: { type: String, trim: true },
-			token: { type: String, trim: true },
-			tokenExpires: { type: Number },
+			code: { type: String, trim: true, select: false },
+			token: { type: String, trim: true, select: false },
+			tokenExpires: { type: Number, select: false },
 		},
 		resetPassword: {
 			type: {
@@ -83,10 +108,11 @@ const UserSchema = new Schema<IUser>(
 				trim: true,
 				enum: ["email", "phoneNumber"],
 				default: "email",
+				select: false,
 			},
-			code: { type: String, trim: true },
-			token: { type: String, trim: true },
-			tokenExpires: { type: Number },
+			code: { type: String, trim: true, select: false },
+			token: { type: String, trim: true, select: false },
+			tokenExpires: { type: Number, select: false },
 		},
 		work: [
 			{
@@ -183,6 +209,7 @@ const UserSchema = new Schema<IUser>(
 				},
 			},
 		},
+		taggedPosts: [{ type: Schema.Types.ObjectId, ref: "Post" }],
 		lifeEvents: [
 			{
 				title: { type: String, required: true, trim: true, maxlength: 200 },
@@ -221,7 +248,7 @@ UserSchema.virtual("isVerified").get(function (this: IUser) {
 });
 
 UserSchema.virtual("friendCount").get(function (this: IUser) {
-	return this.friends.length;
+	return this.friends?.length;
 });
 
 UserSchema.pre("save", async function (this: IUser, next) {

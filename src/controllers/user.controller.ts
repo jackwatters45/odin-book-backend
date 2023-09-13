@@ -44,12 +44,22 @@ export const getUsers = expressAsyncHandler(
 export const getUserById = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		try {
+			// TODO turn into middleware
+			const isValidObjectId = (id: string) => {
+				return /^[a-fA-F0-9]{24}$/.test(id);
+			};
+
+			if (!isValidObjectId(req.params.id)) {
+				res.status(400).json({ message: "User not found" });
+				return;
+			}
 			// TODO: add other necessary fields, populate data
 			const [user, posts, comments] = await Promise.all([
 				User.findById(req.params.id, { password: 0 }),
 				Post.find({ published: true, author: req.params.id }),
 				Comment.find({ author: req.params.id }),
 			]);
+			log("getUserById");
 
 			if (user?.isDeleted) {
 				res
@@ -58,7 +68,13 @@ export const getUserById = expressAsyncHandler(
 				return;
 			}
 
-			res.status(200).json({ user, posts, comments });
+			if (!user) {
+				res.status(404).json({ message: "User not found" });
+				return;
+			}
+
+			const userWithCommentsPosts = { ...user?.toJSON(), posts, comments };
+			res.status(200).json(userWithCommentsPosts);
 		} catch (err) {
 			errorLog(err);
 			res.status(500).json({ message: err.message });
@@ -88,14 +104,6 @@ export const getDeletedUserById = [
 				}),
 				Post.find({ published: true, author: req.params.id }),
 				Comment.find({ author: req.params.id }),
-				// .populate({
-				// 	path: "post",
-				// 	select: "title",
-				// 	populate: {
-				// 		path: "author",
-				// 		select: "firstName lastName",
-				// 	},
-				// }),
 			]);
 
 			res.status(200).json({ user, posts, comments });
@@ -415,6 +423,42 @@ export const updateUserIntro = updateUserStandardField({
 	useBodyDirectly: true,
 });
 
+// @desc    Get user posts & tagged posts with photos
+// @route   GET /users/:id/photos
+// @access  Public
+export const getUserPhotos = expressAsyncHandler(
+	async (req: Request, res: Response) => {
+		try {
+			const userId = String(req.params.id);
+			const posts = await Post.find({
+				$or: [{ author: userId }, { taggedUsers: userId }],
+				media: {
+					$exists: true,
+					$ne: [] || null,
+					$elemMatch: { type: "image" },
+				},
+			})
+				.select("media")
+				.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
+
+			const photos = posts.reduce((acc, post) => {
+				if (post.media && post.media.length > 0) {
+					post.media.forEach((mediaItem) => {
+						if (mediaItem.type !== "image") return;
+						acc.push({ media: mediaItem.url, postId: post._id });
+					});
+				}
+				return acc;
+			}, [] as { media: string; postId: string }[]);
+
+			res.status(200).json(photos);
+		} catch (err) {
+			errorLog(err);
+			res.status(500).json({ message: err.message });
+		}
+	},
+);
+
 // @desc    Update user basic info
 // @route   PATCH /users/:id/basic
 // @access  Private
@@ -536,8 +580,9 @@ export const getUserFriends = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		try {
 			const user = await User.findById(req.params.id)
-				.populate("friends", "-password -email -phoneNumber")
-				.select("friends isDeleted");
+				.populate("friends", "avatarUrl firstName lastName")
+				.select("friends isDeleted")
+				.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
 
 			if (!user) {
 				res.status(404).json({ message: "User not found" });
@@ -549,11 +594,9 @@ export const getUserFriends = expressAsyncHandler(
 				return;
 			}
 
-			res.status(200).json({
-				friends: user.friends,
-				message: "Friends retrieved successfully",
-			});
+			res.status(200).json(user.friends);
 		} catch (err) {
+			log(err);
 			errorLog(err);
 			res.status(500).json({ message: err.message });
 		}

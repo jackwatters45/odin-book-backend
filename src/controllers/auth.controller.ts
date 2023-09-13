@@ -43,13 +43,11 @@ const loginUser = async (userId: string) => {
 
 		if (!updatedUser) throw new Error("User not found.");
 
-		const { password: _, ...userWithoutPassword } = updatedUser.toObject();
-
 		return {
 			jwtToken,
 			refreshToken,
 			message: "Logged in successfully.",
-			user: userWithoutPassword,
+			user: updatedUser.toObject(),
 		};
 	} catch (err) {
 		throw new Error(err.message);
@@ -153,7 +151,7 @@ export const postLoginForgotPassword = expressAsyncHandler(
 			const user = (await User.findOne({
 				"resetPassword.token": token,
 				isDeleted: false,
-			})) as IUser;
+			}).select("password resetPassword")) as IUser;
 
 			await resetResetPassword(user);
 
@@ -373,11 +371,7 @@ export const getCurrentUser = [
 		try {
 			const { _id } = jwt.verify(token, jwtSecret) as JwtPayload;
 
-			const user = await User.findOne(
-				{ _id, isDeleted: false },
-				{ password: 0 },
-			);
-
+			const user = await User.findOne({ _id, isDeleted: false });
 			if (!user) {
 				res
 					.status(401)
@@ -403,7 +397,7 @@ export const postVerifyCode = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		try {
 			const loggedInUser = req.user as IUser;
-			const user = await User.findById(loggedInUser._id);
+			const user = await User.findById(loggedInUser._id).select("verification");
 			if (!user) {
 				res.status(404).json({ message: "User not found." });
 				return;
@@ -456,7 +450,7 @@ export const getVerifyLink = expressAsyncHandler(
 			const user = await User.findOne({
 				"verification.token": verificationToken,
 				isDeleted: false,
-			});
+			}).select("verification");
 			if (!user) {
 				res.status(401).json({ message: "Invalid verification link." });
 				return;
@@ -546,7 +540,9 @@ export const postForgotPassword = [
 			validateAndFormatUsername(userId);
 
 		try {
-			const user = await User.findOne({ [usernameType]: formattedUsername });
+			const user = await User.findOne({
+				[usernameType]: formattedUsername,
+			});
 			if (!user) {
 				res.status(200).json({
 					message: "If the account exists, a reset password link was sent.",
@@ -621,7 +617,7 @@ export const updateForgottenPassword = [
 		try {
 			const user = await User.findOne({
 				"resetPassword.token": req.params.token,
-			});
+			}).select("password resetPassword");
 
 			if (!user) {
 				res.status(400).json({ message: "Invalid reset password token." });
@@ -699,7 +695,7 @@ export const getResetPasswordCode = expressAsyncHandler(async (req, res) => {
 	try {
 		const user = (await User.findOne({
 			"resetPassword.code": resetCode,
-		})) as IUser;
+		}).select("resetPassword")) as IUser;
 
 		await resetPassword(user, res, "code");
 	} catch (err) {
@@ -718,7 +714,7 @@ export const getResetPasswordLink = expressAsyncHandler(async (req, res) => {
 	try {
 		const user = (await User.findOne({
 			"resetPassword.token": resetToken,
-		})) as IUser;
+		}).select("resetPassword")) as IUser;
 
 		await resetPassword(user, res, "token");
 	} catch (err) {
@@ -765,7 +761,9 @@ export const postResetPassword = [
 
 		const { resetToken } = req.params;
 		try {
-			const user = await User.findOne({ "resetPassword.token": resetToken });
+			const user = await User.findOne({
+				"resetPassword.token": resetToken,
+			}).select("password resetPassword");
 			if (!user) {
 				res.status(400).json({ message: "Invalid reset password code." });
 				return;

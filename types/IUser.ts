@@ -145,6 +145,8 @@ export interface UserAboutData {
 
 	// TODO
 	intro: IntroData;
+
+	taggedPosts?: ObjectId[];
 }
 
 export interface IUser

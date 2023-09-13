@@ -120,7 +120,7 @@ export const createPost = [
 				const files = req.files;
 				const resizedImages = await resizeImages(files);
 				const imageLinks = await uploadFilesToCloudinary(resizedImages);
-				post.media = imageLinks;
+				// post.media = imageLinks;
 			}
 
 			await post.save();
@@ -178,7 +178,7 @@ export const updatePost = [
 				const files = req.files;
 				const resizedImages = await resizeImages(files);
 				const imageLinks = await uploadFilesToCloudinary(resizedImages);
-				post.media = imageLinks;
+				// post.media = imageLinks;
 			}
 
 			const updatedPost = await post.save();

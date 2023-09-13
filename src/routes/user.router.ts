@@ -5,6 +5,7 @@ import {
 	getDeletedUserById,
 	getUserById,
 	getUserFriends,
+	getUserPhotos,
 	getUserPosts,
 	getUserSavedPosts,
 	getUsers,
@@ -27,6 +28,9 @@ router.get("/", getUsers);
 
 // /users/:id
 router.get("/:id", getUserById);
+
+// /users/:id/photos
+router.get("/:id/photos", getUserPhotos);
 
 // /users/:id/deleted
 router.get("/:id/deleted", getDeletedUserById);
