@@ -4,7 +4,12 @@ import { ValidationChain, body, validationResult } from "express-validator";
 import debug from "debug";
 
 import User from "../models/user.model";
-import { IUser } from "../../types/IUser";
+import {
+	IUser,
+	LifeEventData,
+	PlaceLivedData,
+	WorkData,
+} from "../../types/IUser";
 import Post from "../models/post.model";
 import Comment from "../models/comment.model";
 import validateAndFormatUsername from "./utils/validateAndFormatUsername";
@@ -13,7 +18,28 @@ import { uploadFileToCloudinary } from "../utils/uploadToCloudinary";
 import { resizeImage } from "../utils/resizeImages";
 import upload from "../config/multer";
 import removeFromCloudinary from "../utils/removeFromCloudinary";
-import hobbiesBank from "../models/data/hobbies";
+import adjustEndDateForCurrent from "./utils/adjustEndDateForCurrent";
+import processDateValues from "./utils/processDateValues";
+import processEducationValues from "./utils/processEducationValues";
+import encodeWebsiteId from "./utils/encodeWebsiteId";
+import { IRelationshipStatus } from "../constants/VALID_RELATIONSHIP_STATUSES_ARRAY";
+import audienceSettingsValidation from "./validations/audienceSettingsValidation";
+import bioValidation from "./validations/bioValidation";
+import hobbiesValidation from "./validations/hobbiesValidation";
+import introValidation from "./validations/introValidation";
+import phoneNumberValidation from "./validations/phoneNumberValidation";
+import emailValidation from "./validations/emailValidation";
+import genderValidation from "./validations/genderValidation";
+import pronounsValidation from "./validations/pronounsValidation";
+import languagesValidation from "./validations/languagesValidation";
+import familyMemberValidations from "./validations/familyMemberValidations";
+import relationshipValidation from "./validations/relationshipValidations";
+import websiteValidation from "./validations/websiteValidation";
+import socialLinksValidation from "./validations/socialLinksValidation";
+import placesLivedValidation from "./validations/placesLivedValidation";
+import birthdayValidation from "./validations/birthdayValidation";
+import educationValidation from "./validations/educationValidation";
+import workValidation from "./validations/workValidation";
 
 const log = debug("log:user:controller");
 
@@ -32,6 +58,18 @@ export const getUsers = expressAsyncHandler(
 	},
 );
 
+// all user about routes use this projection
+const userDefaultPopulation = [
+	{
+		path: "familyMembers.user",
+		select: "avatarUrl fullName",
+	},
+	{
+		path: "relationshipStatus.user",
+		select: "avatarUrl fullName",
+	},
+];
+
 // @desc    Get user by id
 // @route   GET /users/:id
 // @access  Public
@@ -48,7 +86,7 @@ export const getUserById = expressAsyncHandler(
 		}
 		// TODO: add other necessary fields, populate data
 		const [user, posts, comments] = await Promise.all([
-			User.findById(req.params.id),
+			User.findById(req.params.id).populate(userDefaultPopulation),
 			Post.find({ published: true, author: req.params.id }),
 			Comment.find({ author: req.params.id }),
 		]);
@@ -69,6 +107,83 @@ export const getUserById = expressAsyncHandler(
 		res.status(200).json(userWithCommentsPosts);
 	},
 );
+
+// @desc    Search users friends by name
+// @route   GET /users/search/friends
+// @access  Private
+export const searchUserFriendsByName = [
+	authenticateJwt,
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "Unauthorized" });
+			return;
+		}
+
+		const { q } = req.query;
+		if (!q) {
+			res.status(400).json({ message: "Name is required" });
+			return;
+		}
+
+		const users = await User.find({
+			fullName: { $regex: q as string, $options: "i" },
+			_id: { $in: user.friends },
+		}).select("fullName avatarUrl");
+
+		res.status(200).json({ users });
+	}),
+];
+
+// @desc    Search users friends by name omitting family members
+// @route   GET /users/search/friends-not-family/
+// @access  Private
+export const searchUserFriendsExcludingFamily = [
+	authenticateJwt,
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "Unauthorized" });
+			return;
+		}
+
+		const { q } = req.query;
+		if (!q) {
+			res.status(400).json({ message: "Name is required" });
+			return;
+		}
+
+		const familyMemberIds = user.familyMembers.map(
+			(familyMember) => familyMember.user,
+		);
+
+		const users = await User.aggregate([
+			{
+				$match: {
+					$and: [
+						{
+							fullName: { $regex: q as string, $options: "i" },
+						},
+						{
+							_id: { $in: user.friends },
+						},
+						{
+							_id: { $nin: familyMemberIds },
+						},
+					],
+				},
+			},
+			{
+				$project: {
+					fullName: 1,
+					avatarUrl: 1,
+				},
+			},
+		]);
+
+		res.status(200).json({ users });
+	}),
+];
 
 // @desc    Get deleted user by id
 // @route   GET /users/:id/deleted
@@ -300,19 +415,57 @@ export const updateUserCoverPhoto = updateUserImage("coverPhotoUrl", {
 	height: 720,
 });
 
-type UserStandardField = "bio" | "hobbies" | "intro";
+// TODO use key of user?
+type UserStandardField =
+	| "bio"
+	| "hobbies"
+	| "intro"
+	| "audienceSettings"
+	| "relationshipStatus"
+	| "phoneNumber"
+	| "email"
+	| "work"
+	| "education"
+	| "placesLived"
+	| "websites"
+	| "socialLinks"
+	| "gender"
+	| "pronouns"
+	| "birthday"
+	| "languages"
+	| "familyMembers";
 
-interface UserStandardFieldParams {
+interface PopulateOption {
+	path: string;
+	select?: string;
+	match?: Record<string, unknown>;
+	options?: Record<string, unknown>;
+}
+
+interface UpdateFuncParams {
+	user: IUser;
+	body: Request["body"];
+	params: Request["params"];
+	res: Response;
+}
+
+type UpdateFuncType = (
+	params: UpdateFuncParams,
+) => void | boolean | never[] | Promise<false | undefined | void>;
+
+interface updateUserStandardFieldParams {
+	validationRules?: ValidationChain[];
 	fieldToUpdate: UserStandardField;
-	validationRules: ValidationChain[] | undefined;
-	useBodyDirectly?: boolean;
+	updateFunc: UpdateFuncType;
+	populateOptions?: PopulateOption[];
 }
 
 const updateUserStandardField = ({
 	fieldToUpdate,
 	validationRules = [],
-	useBodyDirectly,
-}: UserStandardFieldParams) => [
+	updateFunc,
+	populateOptions = userDefaultPopulation,
+}: updateUserStandardFieldParams) => [
 	authenticateJwt,
 	...validationRules,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -324,19 +477,27 @@ const updateUserStandardField = ({
 			return;
 		}
 
-		const user = (await User.findById(userId)) as IUser;
+		let user = await User.findById(userId);
 		if (!user) {
 			res.status(404).json({ message: "User not found" });
 			return;
 		}
 
-		user[fieldToUpdate] = useBodyDirectly ? req.body : req.body[fieldToUpdate];
+		const funcRes = await updateFunc({
+			user,
+			body: req.body,
+			params: req.params,
+			res,
+		});
 
-		log(user[fieldToUpdate]);
+		if (funcRes === false) return;
+
 		await user.save();
 
+		user = await User.findById(userId).populate(populateOptions).exec();
+
 		res
-			.status(201)
+			.status(200)
 			.json({ message: `${fieldToUpdate} updated successfully`, user });
 	}),
 ];
@@ -346,14 +507,9 @@ const updateUserStandardField = ({
 // @access  Private
 export const updateUserBio = updateUserStandardField({
 	fieldToUpdate: "bio",
-	validationRules: [
-		body("bio")
-			.trim()
-			.notEmpty()
-			.withMessage("Bio should not be empty")
-			.isLength({ max: 101 })
-			.withMessage("Bio should not be longer than 101 characters"),
-	],
+	validationRules: bioValidation,
+	updateFunc: ({ user, body: { bio } }) => (user.bio = bio),
+	populateOptions: userDefaultPopulation,
 });
 
 // @desc    Update user hobbies
@@ -361,17 +517,9 @@ export const updateUserBio = updateUserStandardField({
 // @access  Private
 export const updateUserHobbies = updateUserStandardField({
 	fieldToUpdate: "hobbies",
-	validationRules: [
-		body("hobbies")
-			.isArray({ min: 1 })
-			.withMessage("Hobbies should be an array of at least one hobby")
-			.custom((hobbies) =>
-				hobbies.every(
-					(hobby: string) => !!hobbiesBank.find((h) => h.name === hobby),
-				),
-			)
-			.withMessage("Hobbies should be valid hobbies"),
-	],
+	validationRules: hobbiesValidation,
+	updateFunc: ({ user, body: { hobbies } }) => (user.hobbies = hobbies),
+	populateOptions: userDefaultPopulation,
 });
 
 // @desc    Update user intro
@@ -379,8 +527,607 @@ export const updateUserHobbies = updateUserStandardField({
 // @access  Private
 export const updateUserIntro = updateUserStandardField({
 	fieldToUpdate: "intro",
-	validationRules: [],
-	useBodyDirectly: true,
+	validationRules: introValidation,
+	updateFunc: ({ user, body }) => {
+		user.intro = { ...user.intro, ...body };
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc		Update user audience settings
+// @route		PATCH /users/:id/audience
+// @access	Private
+export const updateUserAudienceSettings = updateUserStandardField({
+	fieldToUpdate: "audienceSettings",
+	validationRules: audienceSettingsValidation,
+	updateFunc: ({
+		user,
+		body: {
+			work,
+			education,
+			placesLived,
+			hometown,
+			currentCity,
+			websites,
+			familyMembers,
+			itemId,
+			...nonNestedBody
+		},
+	}) => {
+		if (work) {
+			user.audienceSettings.work[itemId] = work;
+		} else if (education) {
+			user.audienceSettings.education[itemId] = education;
+		} else if (hometown || currentCity) {
+			user.audienceSettings.placesLived[itemId] = hometown || currentCity;
+		} else if (placesLived) {
+			user.audienceSettings.placesLived[itemId] = placesLived[itemId];
+		} else if (websites) {
+			user.audienceSettings.websites[itemId] =
+				websites[encodeWebsiteId(itemId)];
+		} else if (familyMembers) {
+			user.audienceSettings.familyMembers[itemId] = familyMembers[itemId];
+		} else {
+			log("nonNestedBody", nonNestedBody);
+			user.audienceSettings = { ...user.audienceSettings, ...nonNestedBody };
+		}
+
+		user.markModified("audienceSettings");
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user phone number
+// @route   PATCH /users/:id/phone-number
+// @access  Private
+export const updateUserPhoneNumber = updateUserStandardField({
+	fieldToUpdate: "phoneNumber",
+	validationRules: phoneNumberValidation,
+	updateFunc: ({
+		user,
+		body: {
+			audience,
+			values: { phoneNumber },
+		},
+	}) => {
+		if (audience) user.audienceSettings.phoneNumber = audience;
+		user.phoneNumber = phoneNumber;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user phone number
+// @route   DELETE /users/:id/phone-number
+// @access	Private
+export const deleteUserPhoneNumber = updateUserStandardField({
+	fieldToUpdate: "phoneNumber",
+	updateFunc: ({ user }) => (user.phoneNumber = undefined),
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user email
+// @route   PATCH /users/:id/email
+// @access  Private
+export const updateUserEmail = updateUserStandardField({
+	fieldToUpdate: "email",
+	validationRules: emailValidation,
+	updateFunc: ({
+		user,
+		body: {
+			audience,
+			values: { email },
+		},
+	}) => {
+		if (audience) user.audienceSettings.email = audience;
+		user.email = email;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user gender
+// @route   PATCH /users/:id/gender
+// @access  Private
+export const updateUserGender = updateUserStandardField({
+	fieldToUpdate: "gender",
+	validationRules: genderValidation,
+	updateFunc: ({ user, body: { audience, values: gender } }) => {
+		if (audience) user.audienceSettings.gender = audience;
+		user.gender = gender;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user gender
+// @route   DELETE /users/:id/gender
+// @access	Private
+export const deleteUserGender = updateUserStandardField({
+	fieldToUpdate: "gender",
+	updateFunc: ({ user }) => (user.gender = undefined),
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user pronouns
+// @route   PATCH /users/:id/pronouns
+// @access  Private
+export const updateUserPronouns = updateUserStandardField({
+	fieldToUpdate: "pronouns",
+	validationRules: pronounsValidation,
+	updateFunc: ({ user, body: { audience, values: pronouns } }) => {
+		if (audience) user.audienceSettings.pronouns = audience;
+		user.pronouns = pronouns;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user pronouns
+// @route   DELETE /users/:id/pronouns
+// @access	Private
+export const deleteUserPronouns = updateUserStandardField({
+	fieldToUpdate: "pronouns",
+	updateFunc: ({ user }) => (user.pronouns = undefined),
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user languages
+// @route   PATCH /users/:id/languages
+// @access  Private
+export const updateUserLanguages = updateUserStandardField({
+	fieldToUpdate: "languages",
+	validationRules: languagesValidation,
+	updateFunc: ({ user, body: { audience, values: languages } }) => {
+		if (audience) user.audienceSettings.languages = audience;
+		user.languages = languages;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user languages
+// @route   DELETE /users/:id/languages
+// @access	Private
+export const deleteUserLanguages = updateUserStandardField({
+	fieldToUpdate: "languages",
+	updateFunc: ({ user }) => (user.languages = undefined),
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Create user family-members
+// @route   POST /users/:id/family-members
+// @access  Private
+export const createUserFamilyMembers = updateUserStandardField({
+	fieldToUpdate: "familyMembers",
+	validationRules: familyMemberValidations,
+	updateFunc: async ({ user, body: { audience, values: newFamilyMember } }) => {
+		user.familyMembers.push(newFamilyMember);
+
+		await user.save();
+
+		const familyMemberId = String(
+			user.familyMembers?.[user.familyMembers?.length - 1]._id,
+		);
+
+		if (audience) {
+			user.audienceSettings.familyMembers[familyMemberId] = audience;
+			user.markModified("audienceSettings.familyMembers");
+		}
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user family-members
+// @route   PATCH /users/:id/family-members/:familyMemberId
+// @access  Private
+export const updateUserFamilyMembers = updateUserStandardField({
+	fieldToUpdate: "familyMembers",
+	validationRules: familyMemberValidations,
+	updateFunc: ({
+		user,
+		body: { audience, values: newFamilyMemberData },
+		params: { familyMemberId },
+	}) => {
+		if (audience) {
+			user.audienceSettings.familyMembers[familyMemberId] = audience;
+			user.markModified("audienceSettings.familyMembers");
+		}
+
+		user.familyMembers = user.familyMembers?.map((familyMember) =>
+			String(familyMember._id) === familyMemberId
+				? { ...familyMember, ...newFamilyMemberData }
+				: familyMember,
+		);
+	},
+
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user family-members
+// @route   DELETE /users/:id/family-members/:familyMemberId
+// @access	Private
+export const deleteUserFamilyMembers = updateUserStandardField({
+	fieldToUpdate: "familyMembers",
+	updateFunc: ({ user, params: { familyMemberId } }) => {
+		user.familyMembers = user.familyMembers?.filter(
+			(familyMember) => String(familyMember._id) !== familyMemberId,
+		);
+
+		delete user.audienceSettings.familyMembers[familyMemberId];
+		user.markModified("audienceSettings.familyMembers");
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user relationship status
+// @route   PATCH /users/:id/relationship
+// @access  Private
+export const updateUserRelationshipStatus = updateUserStandardField({
+	fieldToUpdate: "relationshipStatus",
+	validationRules: relationshipValidation,
+	updateFunc: ({ user, body: { audience, values: relationshipStatus } }) => {
+		if (audience) user.audienceSettings.relationshipStatus = audience;
+
+		const processedRelationshipStatus =
+			processDateValues<IRelationshipStatus>(relationshipStatus);
+		user.relationshipStatus = processedRelationshipStatus;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user birthday
+// @route   PATCH /users/:id/birthday
+// @access  Private
+export const updateUserBirthday = updateUserStandardField({
+	fieldToUpdate: "birthday",
+	validationRules: birthdayValidation,
+	updateFunc: ({
+		user,
+		body: {
+			audience,
+			values: { day, month, year },
+		},
+		res,
+	}) => {
+		if (audience) user.audienceSettings.birthday = audience;
+
+		if (!day || !month || !year) {
+			res.status(400).json({
+				message: "Invalid date: birthday must include a day, month, and year",
+			});
+			return false;
+		}
+		const birthday = new Date(year, month, day);
+		user.birthday = birthday;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Create user websites
+// @route   POST /users/:id/websites
+// @access  Private
+export const createUserWebsites = updateUserStandardField({
+	fieldToUpdate: "websites",
+	validationRules: websiteValidation,
+	updateFunc: async ({
+		user,
+		body: {
+			audience,
+			values: { websites: newWebsite },
+		},
+		res,
+	}) => {
+		const websiteExists = user.websites?.some(
+			(website) => String(website) === newWebsite,
+		);
+
+		if (websiteExists) {
+			res.status(400).json({ message: "Website already exists" });
+			return false;
+		}
+
+		user.websites?.push(newWebsite);
+
+		if (audience) {
+			user.audienceSettings.websites[newWebsite] = audience;
+			user.markModified("audienceSettings.websites");
+		}
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user websites
+// @route   PATCH /users/:id/websites/:websiteId
+// @access  Private
+export const updateUserWebsites = updateUserStandardField({
+	fieldToUpdate: "websites",
+	validationRules: websiteValidation,
+	updateFunc: ({
+		user,
+		body: {
+			audience,
+			values: { websites: newWebsite },
+		},
+		params: { websiteId },
+	}) => {
+		if (audience) {
+			user.audienceSettings.websites[websiteId] = audience;
+			user.markModified("audienceSettings.websites");
+		}
+
+		user.websites = user.websites?.map((website) =>
+			String(website) === websiteId ? newWebsite : website,
+		);
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user websites
+// @route   DELETE /users/:id/websites/:websiteId
+// @access  Private
+export const deleteUserWebsites = updateUserStandardField({
+	fieldToUpdate: "websites",
+	updateFunc: ({ user, params: { websiteId } }) => {
+		user.websites = user.websites?.filter(
+			(website) => String(website) !== websiteId,
+		);
+
+		delete user.audienceSettings.websites[websiteId];
+		user.markModified("audienceSettings.websites");
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Create user social links
+// @route   POST /users/:id/social-links
+// @access  Private
+export const createUserSocialLinks = updateUserStandardField({
+	fieldToUpdate: "socialLinks",
+	validationRules: socialLinksValidation,
+	updateFunc: async ({ user, body: { audience, values: newSocialLink } }) => {
+		user.socialLinks?.push(newSocialLink);
+
+		await user.save();
+
+		const socialLinksId = String(
+			user.socialLinks?.[user.socialLinks?.length - 1]._id,
+		);
+
+		if (audience) {
+			user.audienceSettings.socialLinks[socialLinksId] = audience;
+			user.markModified("audienceSettings.socialLinks");
+		}
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user social links
+// @route   PATCH /users/:id/social-links/:socialLinkId
+// @access  Private
+export const updateUserSocialLinks = updateUserStandardField({
+	fieldToUpdate: "socialLinks",
+	validationRules: socialLinksValidation,
+	updateFunc: ({
+		user,
+		body: { audience, values: newSocialLink },
+		params: { socialLinkId },
+	}) => {
+		if (audience) {
+			user.audienceSettings.socialLinks[socialLinkId] = audience;
+			user.markModified("audienceSettings.socialLinks");
+		}
+
+		user.socialLinks = user.socialLinks?.map((socialLink) =>
+			String(socialLink._id) === socialLinkId ? newSocialLink : socialLink,
+		);
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user social links
+// @route   DELETE /users/:id/social-links/:socialLinkId
+// @access  Private
+export const deleteUserSocialLinks = updateUserStandardField({
+	fieldToUpdate: "socialLinks",
+	updateFunc: ({ user, params: { socialLinkId } }) => {
+		user.socialLinks = user.socialLinks?.filter(
+			(socialLink) => String(socialLink._id) !== socialLinkId,
+		);
+
+		delete user.audienceSettings.socialLinks[socialLinkId];
+		user.markModified("audienceSettings.socialLinks");
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Create user work
+// @route   POST /users/:id/work
+// @access  Private
+export const createUserWork = updateUserStandardField({
+	fieldToUpdate: "work",
+	validationRules: workValidation,
+	updateFunc: async ({ user, body: { audience, values } }) => {
+		const adjustedWork = adjustEndDateForCurrent<WorkData>(values);
+
+		user.work?.push(adjustedWork);
+
+		await user.save();
+
+		const workId = String(user.work?.[user.work?.length - 1]._id);
+		if (audience) {
+			user.audienceSettings.work[workId] = audience;
+			user.markModified("audienceSettings.work");
+		}
+	},
+
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user work
+// @route   PATCH /users/:id/work/:workId
+// @access  Private
+export const updateUserWork = updateUserStandardField({
+	fieldToUpdate: "work",
+	validationRules: workValidation,
+	updateFunc: ({ user, body: { audience, values }, params: { workId } }) => {
+		if (audience) {
+			user.audienceSettings.work[workId] = audience;
+			user.markModified("audienceSettings.work");
+		}
+
+		const adjustedWork = adjustEndDateForCurrent<WorkData>(values);
+
+		user.work = user.work?.map((work) =>
+			String(work._id) === workId ? { ...work, ...adjustedWork } : work,
+		);
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user work
+// @route   DELETE /users/:id/work/:workId
+// @access  Private
+export const deleteUserWork = updateUserStandardField({
+	fieldToUpdate: "work",
+	updateFunc: ({ user, params: { workId } }) => {
+		user.work = user.work?.filter((work) => String(work._id) !== workId);
+
+		delete user.audienceSettings.work[workId];
+		user.markModified("audienceSettings.work");
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Create user education
+// @route   POST /users/:id/education
+// @access  Private
+export const createUserEducation = updateUserStandardField({
+	fieldToUpdate: "education",
+	validationRules: educationValidation,
+	updateFunc: async ({ user, body: { audience, values } }) => {
+		const processedValues = processEducationValues(values);
+
+		user.education?.push(processedValues);
+
+		await user.save();
+
+		const educationId = String(
+			user.education?.[user.education?.length - 1]._id,
+		);
+
+		if (audience) {
+			user.audienceSettings.education[educationId] = audience;
+			user.markModified("audienceSettings.education");
+		}
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user education
+// @route   PATCH /users/:id/education/:educationId
+// @access  Private
+export const updateUserEducation = updateUserStandardField({
+	fieldToUpdate: "education",
+	validationRules: educationValidation,
+	updateFunc: ({
+		user,
+		body: { audience, values },
+		params: { educationId },
+	}) => {
+		if (audience) {
+			user.audienceSettings.education[educationId] = audience;
+			user.markModified("audienceSettings.education");
+		}
+
+		const processedValues = processEducationValues(values);
+
+		user.education = user.education?.map((education) =>
+			String(education._id) === educationId
+				? { ...education, ...processedValues }
+				: education,
+		);
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user education
+// @route   DELETE /users/:id/education/:educationId
+// @access  Private
+export const deleteUserEducation = updateUserStandardField({
+	fieldToUpdate: "education",
+	updateFunc: ({ user, params: { educationId } }) => {
+		user.education = user.education?.filter(
+			(education) => String(education._id) !== educationId,
+		);
+
+		delete user.audienceSettings.education[educationId];
+		user.markModified("audienceSettings.education");
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Create user places lived
+// @route   POST /users/:id/places-lived
+// @access  Private
+export const createUserPlacesLived = updateUserStandardField({
+	fieldToUpdate: "placesLived",
+	validationRules: placesLivedValidation,
+	updateFunc: async ({ user, body: { audience, values } }) => {
+		const processedValues = processDateValues<PlaceLivedData>(values);
+
+		user.placesLived?.push(processedValues);
+
+		await user.save();
+
+		const placeLivedId = String(
+			user.placesLived?.[user.placesLived?.length - 1]._id,
+		);
+
+		if (audience) {
+			user.audienceSettings.placesLived[placeLivedId] = audience;
+			user.markModified("audienceSettings.placesLived");
+		}
+	},
+	populateOptions: userDefaultPopulation, // maybe not necessary
+});
+
+// @desc    Update user places lived
+// @route   PATCH /users/:id/places-lived/:placeLivedId
+// @access  Private
+export const updateUserPlacesLived = updateUserStandardField({
+	fieldToUpdate: "placesLived",
+	validationRules: placesLivedValidation,
+	updateFunc: ({
+		user,
+		body: { audience, values },
+		params: { placeLivedId },
+	}) => {
+		if (audience) {
+			user.audienceSettings.placesLived[placeLivedId] = audience;
+			user.markModified("audienceSettings.placesLived");
+		}
+
+		const processedValues = processDateValues<PlaceLivedData>(values);
+
+		user.placesLived = user.placesLived?.map((place) =>
+			String(place._id) === placeLivedId
+				? { ...place, ...processedValues }
+				: place,
+		);
+	},
+	populateOptions: userDefaultPopulation, // maybe not necessary
+});
+
+// @desc    Delete user places lived
+// @route   DELETE /users/:id/places-lived/:placeLivedId
+// @access  Private
+export const deleteUserPlacesLived = updateUserStandardField({
+	fieldToUpdate: "placesLived",
+	updateFunc: ({ user, params: { placeLivedId } }) => {
+		user.placesLived = user.placesLived?.filter(
+			(place) => String(place._id) !== placeLivedId,
+		);
+
+		delete user.audienceSettings.placesLived[placeLivedId];
+		user.markModified("audienceSettings.placesLived");
+	},
+	populateOptions: userDefaultPopulation, // maybe not necessary
 });
 
 // @desc    Get user posts & tagged posts with photos
@@ -411,6 +1158,35 @@ export const getUserPhotos = expressAsyncHandler(
 		}, [] as { media: string; postId: string }[]);
 
 		res.status(200).json(photos);
+	},
+);
+
+// @desc Get user life events
+// @route GET /users/:id/life-events
+// @access Public
+export const getUserLifeEvents = expressAsyncHandler(
+	async (req: Request, res: Response) => {
+		const userId = String(req.params.id);
+		const lifeEvents = await Post.find({
+			author: userId,
+			lifeEvent: { $exists: true, $ne: null },
+		})
+			.select("lifeEvent")
+			.populate("lifeEvent")
+			.sort({ "lifeEvent.date": -1 })
+			.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
+
+		const formattedLifeEvents = lifeEvents.map((post) => {
+			const lifeEvent = post.lifeEvent as LifeEventData;
+			return {
+				_id: lifeEvent?._id,
+				postId: post._id,
+				title: lifeEvent?.title,
+				date: lifeEvent?.date,
+			};
+		});
+
+		res.status(200).json(formattedLifeEvents);
 	},
 );
 

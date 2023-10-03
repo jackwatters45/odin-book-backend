@@ -4,7 +4,7 @@ import { nodeEnv } from "../../config/envVariables";
 
 const log = debug("log:validateAndFormatUsername");
 
-const validateAndFormatPhoneNumber = (input: string) => {
+export const validateAndFormatPhoneNumber = (input: string) => {
 	const phoneNumber = parsePhoneNumberFromString(input, "US");
 
 	if (nodeEnv === "test") {

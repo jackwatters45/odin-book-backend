@@ -1,5 +1,15 @@
 import { ObjectId, Document } from "mongoose";
-import { ValidSocialPlatformsType } from "../src/constants";
+import {
+	AudienceStatusOptionsType,
+	ValidSocialPlatformsType,
+	attendedForType,
+	educationTypesType,
+	placesLivedType,
+} from "../src/constants";
+import { Gender } from "../src/constants/Gender";
+import { PronounsType } from "../src/constants/Pronouns";
+import { FamilyMember } from "../src/constants/FamilyMembers";
+import { IRelationshipStatus } from "../src/constants/VALID_RELATIONSHIP_STATUSES_ARRAY";
 
 // Basic User Info
 export interface BasicUserInfo {
@@ -7,9 +17,10 @@ export interface BasicUserInfo {
 	lastName: string;
 	fullName: string;
 	email: string;
-	gender?: string;
+	gender?: Gender;
 	birthday: Date;
-	pronouns?: "he/him" | "she/her" | "they/them";
+	languages?: string[];
+	pronouns?: PronounsType;
 	avatarUrl?: string;
 	coverPhotoUrl?: string;
 	description?: string;
@@ -66,44 +77,57 @@ export interface UserSystemData {
 	refreshTokens: string[];
 }
 
-export interface WorkData {
+export type IncludesStartDates = {
+	startYear: string | undefined;
+	startMonth: string | undefined;
+	startDay: string | undefined;
+};
+
+export type IncludesEndDates = {
+	endYear: string | undefined;
+	endMonth: string | undefined;
+	endDay: string | undefined;
+};
+
+export type IncludesStartEndDates = IncludesStartDates & IncludesEndDates;
+
+export interface WorkData extends IncludesStartEndDates {
+	_id: ObjectId;
+	current: boolean;
 	company: string;
 	position?: string;
 	city?: string;
 	description?: string;
-	startDate?: Date;
-	endDate?: Date | null;
 }
 
-export interface EducationData {
+export interface EducationData extends IncludesStartEndDates {
+	_id: ObjectId;
+	type: educationTypesType;
 	school: string;
-	type: "university" | "high school";
+	graduated: boolean;
 	degree?: string;
-	fieldOfStudy?: string;
-	city?: string;
+	attendedFor?: attendedForType;
+	concentrations?: string[];
 	description?: string;
-	startDate?: Date;
-	endDate?: Date | null;
-	concentration?: string;
-	secondaryConcentrations?: string[];
-	activities?: string[];
 }
 
-export interface PlaceLivedData {
+export interface PlaceLivedData extends IncludesStartDates {
+	_id: ObjectId;
+	type: placesLivedType;
 	city: string;
+	state: string;
 	country: string;
-	dateMovedIn?: Date;
-	dateMovedOut?: Date | null;
 }
 
 export interface SocialLinksData {
+	_id: ObjectId;
 	platform: ValidSocialPlatformsType;
 	username: string;
 }
 
 export interface LifeEventData {
+	_id: ObjectId;
 	title: string;
-	description?: string;
 	date: Date;
 }
 
@@ -112,6 +136,21 @@ export interface NamePronunciationData {
 	lastName: string;
 	fullName: string;
 }
+
+export const INTRO_FIELDS = [
+	"pronouns",
+	"work",
+	"education",
+	"currentCity",
+	"hometown",
+	"relationshipStatus",
+	"namePronunciation",
+	"joined",
+	"websites",
+	"socialLinks",
+] as const;
+
+export type IntroFieldsType = (typeof INTRO_FIELDS)[number];
 
 export type IntroField = Record<string, boolean>;
 
@@ -128,25 +167,64 @@ export interface IntroData {
 	socialLinks?: IntroField;
 }
 
+export const AUDIENCE_FIELDS = [
+	"work",
+	"education",
+	"currentCity",
+	"hometown",
+	"relationshipStatus",
+	"phoneNumber",
+] as const;
+
+export type AudienceFieldsType = (typeof AUDIENCE_FIELDS)[number];
+
+type AudienceStatusMultiple = { [key: string]: AudienceStatusOptionsType };
+
+export interface AudienceSettings {
+	currentCity: AudienceStatusOptionsType;
+	hometown: AudienceStatusOptionsType;
+	relationshipStatus: AudienceStatusOptionsType;
+	phoneNumber: AudienceStatusOptionsType;
+	email: AudienceStatusOptionsType;
+	gender: AudienceStatusOptionsType;
+	pronouns: AudienceStatusOptionsType;
+	birthday: AudienceStatusOptionsType;
+	languages: AudienceStatusOptionsType;
+	aboutYou: AudienceStatusOptionsType;
+
+	// multiple
+	familyMembers: AudienceStatusMultiple;
+	socialLinks: AudienceStatusMultiple;
+	websites: AudienceStatusMultiple;
+	work: AudienceStatusMultiple;
+	education: AudienceStatusMultiple;
+	placesLived: AudienceStatusMultiple;
+}
+
 // User About Data
 export interface UserAboutData {
-	work?: WorkData[];
-	education?: EducationData[];
-	placesLived?: PlaceLivedData[];
-	website?: string;
-	socialLinks?: SocialLinksData[];
-	nicknames?: string[];
-	lifeEvents?: LifeEventData[];
+	work: WorkData[];
+	education: EducationData[];
+	placesLived: PlaceLivedData[];
+	websites: string[];
+	socialLinks: SocialLinksData[];
+	nicknames: string[];
 
 	// edit profile
-	hobbies?: string[];
-	bio?: string;
+	hobbies: string[];
+	bio: string;
 	namePronunciation?: NamePronunciationData;
 
-	// TODO
 	intro: IntroData;
 
-	taggedPosts?: ObjectId[];
+	taggedPosts: ObjectId[];
+	relationshipStatus: IRelationshipStatus;
+
+	familyMembers: FamilyMember[];
+
+	aboutYou: string;
+
+	audienceSettings: AudienceSettings;
 }
 
 export interface IUser

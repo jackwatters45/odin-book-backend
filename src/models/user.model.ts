@@ -7,13 +7,122 @@ import { IUser } from "../../types/IUser";
 import { jwtSecret } from "../config/envVariables";
 import {
 	AUDIENCE_STATUS_OPTIONS,
+	PLACES_LIVED_TYPE,
+	VALID_RELATIONSHIP_STATUSES_ARRAY,
 	VALID_SOCIAL_PLATFORMS_ARRAY,
 } from "../constants";
+import {
+	VALID_ATTENDED_FOR,
+	VALID_EDUCATION_TYPES,
+} from "../constants/EducationConstants";
+import { DefaultGenderTypes } from "../constants/Gender";
+import { Pronouns } from "../constants/Pronouns";
+import { FamilyRelationshipOptions } from "../constants/FamilyMembers";
+
+const workSchema = new Schema({
+	company: { type: String, required: true, trim: true, maxlength: 100 },
+	position: { type: String, trim: true, maxlength: 100 },
+	city: { type: String, trim: true, maxlength: 100 },
+	description: { type: String, trim: true, maxlength: 500 },
+	current: { type: Boolean, default: false },
+	startYear: { type: String, default: undefined },
+	startMonth: { type: String, default: undefined },
+	startDay: { type: String, default: undefined },
+	endYear: { type: String, default: undefined },
+	endMonth: { type: String, default: undefined },
+	endDay: { type: String, default: undefined },
+});
+
+const educationSchema = new Schema({
+	type: { type: String, enum: VALID_EDUCATION_TYPES },
+	school: { type: String, required: true, trim: true, maxlength: 50 },
+	degree: { type: String, trim: true, maxlength: 50 },
+	attendedFor: {
+		type: String,
+		trim: true,
+		maxlength: 50,
+		enum: VALID_ATTENDED_FOR,
+	},
+	concentrations: [{ type: String, trim: true, maxlength: 50 }],
+	description: { type: String, trim: true, maxlength: 500 },
+	graduated: { type: Boolean, default: false },
+	startYear: { type: String, default: undefined },
+	startMonth: { type: String, default: undefined },
+	startDay: { type: String, default: undefined },
+	endYear: { type: String, default: undefined },
+	endMonth: { type: String, default: undefined },
+	endDay: { type: String, default: undefined },
+});
+
+const placesLivedSchema = new Schema({
+	type: {
+		type: String,
+		enum: PLACES_LIVED_TYPE,
+		default: "other",
+	},
+	city: { type: String, required: true, trim: true, maxlength: 100 },
+	state: { type: String, required: true, trim: true, maxlength: 100 },
+	country: { type: String, required: true, trim: true, maxlength: 100 },
+	startYear: { type: String, default: undefined },
+	startMonth: { type: String, default: undefined },
+	startDay: { type: String, default: undefined },
+});
+
+const socialLinksSchema = new Schema({
+	platform: {
+		type: String,
+		required: true,
+		trim: true,
+		lowercase: true,
+		enum: VALID_SOCIAL_PLATFORMS_ARRAY,
+	},
+	username: {
+		type: String,
+		required: true,
+		trim: true,
+		maxlength: 40,
+	},
+});
+
+const familyMemberSchema = new Schema({
+	user: { type: Schema.Types.ObjectId, ref: "User" },
+	relationship: {
+		type: String,
+		trim: true,
+		required: true,
+		enum: FamilyRelationshipOptions,
+	},
+});
+
+const relationshipStatusSchema = new Schema({
+	user: { type: Schema.Types.ObjectId, ref: "User" },
+	status: {
+		type: String,
+		trim: true,
+		enum: VALID_RELATIONSHIP_STATUSES_ARRAY,
+	},
+	startYear: { type: String, default: undefined },
+	startMonth: { type: String, default: undefined },
+	startDay: { type: String, default: undefined },
+});
+
+const defaultAudienceSetting = {
+	type: String,
+	enum: AUDIENCE_STATUS_OPTIONS,
+	default: "Friends",
+};
+
+const defaultAudienceSettingMultiple = {
+	type: Object,
+	of: defaultAudienceSetting,
+	default: {},
+};
 
 const UserSchema = new Schema<IUser>(
 	{
 		firstName: { type: String, required: true, trim: true, maxlength: 50 },
 		lastName: { type: String, required: true, trim: true, maxlength: 50 },
+		fullName: { type: String, required: true, trim: true, maxlength: 100 },
 		email: {
 			type: String,
 			trim: true,
@@ -60,12 +169,21 @@ const UserSchema = new Schema<IUser>(
 			sparse: true,
 			select: false,
 		},
-		gender: { type: String, trim: true },
+		gender: {
+			defaultType: {
+				type: String,
+				trim: true,
+				enum: DefaultGenderTypes,
+			},
+			other: { type: String, trim: true, maxlength: 50 },
+		},
 		pronouns: {
 			type: String,
 			trim: true,
-			enum: ["he/him", "she/her", "they/them"],
+			enum: Pronouns,
 		},
+		aboutYou: { type: String, trim: true, maxlength: 1000 },
+		familyMembers: [familyMemberSchema],
 		friends: [{ type: Schema.Types.ObjectId, ref: "User" }],
 		description: { type: String, trim: true, default: "" },
 		coverPhotoUrl: { type: String, trim: true, default: "" },
@@ -114,58 +232,12 @@ const UserSchema = new Schema<IUser>(
 			token: { type: String, trim: true, select: false },
 			tokenExpires: { type: Number, select: false },
 		},
-		work: [
-			{
-				company: { type: String, required: true, trim: true, maxlength: 100 },
-				position: { type: String, trim: true, maxlength: 100 },
-				city: { type: String, trim: true, maxlength: 100 },
-				description: { type: String, trim: true, maxlength: 500 },
-				startDate: { type: Date },
-				endDate: { type: Date },
-			},
-		],
-		education: [
-			{
-				school: { type: String, required: true, trim: true, maxlength: 100 },
-				degree: { type: String, trim: true, maxlength: 100 },
-				fieldOfStudy: { type: String, trim: true, maxlength: 100 },
-				concentration: { type: String, trim: true, maxlength: 100 },
-				secondaryConcentrations: [{ type: String, trim: true, maxlength: 100 }],
-				city: { type: String, trim: true, maxlength: 100 },
-				description: { type: String, trim: true, maxlength: 500 },
-				startDate: { type: Date },
-				endDate: { type: Date },
-				activities: [{ type: String, trim: true, maxlength: 500 }],
-			},
-		],
-		placesLived: [
-			{
-				city: { type: String, required: true, trim: true, maxlength: 100 },
-				country: { type: String, required: true, trim: true, maxlength: 100 },
-				dateMovedIn: { type: Date },
-				dateMovedOut: { type: Date },
-			},
-		],
-		website: { type: String, trim: true, maxlength: 200 },
-		socialLinks: [
-			{
-				platform: {
-					type: String,
-					required: true,
-					trim: true,
-					lowercase: true,
-					enum: VALID_SOCIAL_PLATFORMS_ARRAY,
-				},
-				username: {
-					type: String,
-					required: true,
-					trim: true,
-					minlength: 3,
-					maxlength: 40,
-				},
-				url: { type: String, trim: true, maxlength: 200 },
-			},
-		],
+		work: [workSchema],
+		education: [educationSchema],
+		placesLived: [placesLivedSchema],
+		websites: [{ type: String, trim: true, maxlength: 200 }],
+		socialLinks: [socialLinksSchema],
+		languages: [{ type: String, trim: true, maxlength: 50 }],
 		bio: { type: String, trim: true, maxlength: 101 },
 		hobbies: [{ type: String, trim: true }],
 		nicknames: [{ type: String, trim: true, maxlength: 50 }],
@@ -209,14 +281,27 @@ const UserSchema = new Schema<IUser>(
 				},
 			},
 		},
+		audienceSettings: {
+			hometown: defaultAudienceSetting,
+			relationshipStatus: defaultAudienceSetting,
+			phoneNumber: defaultAudienceSetting,
+			email: defaultAudienceSetting,
+			gender: defaultAudienceSetting,
+			pronouns: defaultAudienceSetting,
+			birthday: defaultAudienceSetting,
+			languages: defaultAudienceSetting,
+			aboutYou: defaultAudienceSetting,
+
+			// multiple
+			familyMembers: defaultAudienceSettingMultiple,
+			websites: defaultAudienceSettingMultiple,
+			work: defaultAudienceSettingMultiple,
+			education: defaultAudienceSettingMultiple,
+			placesLived: defaultAudienceSettingMultiple,
+			socialLinks: defaultAudienceSettingMultiple,
+		},
+		relationshipStatus: relationshipStatusSchema,
 		taggedPosts: [{ type: Schema.Types.ObjectId, ref: "Post" }],
-		lifeEvents: [
-			{
-				title: { type: String, required: true, trim: true, maxlength: 200 },
-				description: { type: String, trim: true, maxlength: 500 },
-				date: { type: Date, required: true },
-			},
-		],
 	},
 	{
 		timestamps: true,
@@ -236,11 +321,16 @@ UserSchema.path("education").default([]);
 UserSchema.path("placesLived").default([]);
 UserSchema.path("socialLinks").default([]);
 UserSchema.path("nicknames").default([]);
-UserSchema.path("lifeEvents").default([]);
 
-UserSchema.virtual("fullName").get(function (this: IUser) {
-	if (!this.firstName || !this.lastName) return "";
-	return `${this.firstName} ${this.lastName}`;
+UserSchema.pre("save", function (this: IUser, next) {
+	if (
+		(this.isModified("firstName") || this.isModified("lastName")) &&
+		typeof this.firstName === "string" &&
+		typeof this.lastName === "string"
+	) {
+		this.fullName = `${this.firstName} ${this.lastName}`;
+	}
+	next();
 });
 
 UserSchema.virtual("isVerified").get(function (this: IUser) {

@@ -41,6 +41,7 @@ const configErrorMiddleware = (app: Application) => {
 				res.status(500).json({ message: "Internal Server Error" });
 			}
 		} else if (err instanceof BadRequestError || err instanceof NotFoundError) {
+			log(err.message);
 			res.status(err.statusCode).json({ message: err.message });
 		} else if (err instanceof Error) {
 			res.status(500).json({ message: err.message || "Internal Server Error" });

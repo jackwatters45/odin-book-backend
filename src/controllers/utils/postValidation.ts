@@ -49,7 +49,7 @@ const postValidation = [
 	body("lifeEvent")
 		.optional()
 		.isObject()
-		.withMessage("LifeEvent must be an object")
+		.withMessage("Life Event must be an object")
 		.custom((value) => {
 			if (
 				typeof value.title !== "string" ||

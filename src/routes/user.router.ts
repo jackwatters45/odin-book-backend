@@ -5,6 +5,7 @@ import {
 	getDeletedUserById,
 	getUserById,
 	getUserFriends,
+	getUserLifeEvents,
 	getUserPhotos,
 	getUserPosts,
 	getUserSavedPosts,
@@ -12,6 +13,7 @@ import {
 	rejectFriendRequest,
 	sendFriendRequest,
 	unfriendUser,
+	updateUserAudienceSettings,
 	updateUserBasicInfo,
 	updateUserBio,
 	updateUserCoverPhoto,
@@ -19,12 +21,49 @@ import {
 	updateUserIntro,
 	updateUserPassword,
 	updateUserProfilePhoto,
+	updateUserPhoneNumber,
+	deleteUserPhoneNumber,
+	updateUserWork,
+	deleteUserWork,
+	updateUserEducation,
+	deleteUserEducation,
+	updateUserPlacesLived,
+	deleteUserPlacesLived,
+	createUserWork,
+	createUserEducation,
+	createUserPlacesLived,
+	updateUserEmail,
+	updateUserWebsites,
+	createUserWebsites,
+	deleteUserWebsites,
+	createUserSocialLinks,
+	updateUserSocialLinks,
+	deleteUserSocialLinks,
+	updateUserGender,
+	deleteUserGender,
+	updateUserPronouns,
+	deleteUserPronouns,
+	updateUserBirthday,
+	updateUserLanguages,
+	deleteUserLanguages,
+	updateUserFamilyMembers,
+	deleteUserFamilyMembers,
+	createUserFamilyMembers,
+	searchUserFriendsByName,
+	searchUserFriendsExcludingFamily,
+	updateUserRelationshipStatus,
 } from "../controllers/user.controller";
 
 const router = express.Router();
 
 // /users/
 router.get("/", getUsers);
+
+// /users/search/friends
+router.get("/search/friends", searchUserFriendsByName);
+
+// /users/search/friends-not-family
+router.get("/search/friends-not-family", searchUserFriendsExcludingFamily);
 
 // /users/:id
 router.get("/:id", getUserById);
@@ -34,6 +73,9 @@ router.get("/:id/photos", getUserPhotos);
 
 // /users/:id/deleted
 router.get("/:id/deleted", getDeletedUserById);
+
+// /users/:id/life-events
+router.get("/:id/life-events", getUserLifeEvents);
 
 // /users
 router.post("/", createUser);
@@ -55,6 +97,96 @@ router.patch("/:id/hobbies", updateUserHobbies);
 
 // /:id/intro
 router.patch("/:id/intro", updateUserIntro);
+
+// /:id/audience
+router.patch("/:id/audience", updateUserAudienceSettings);
+
+// /:id/phone-number
+router.patch("/:id/phone-number", updateUserPhoneNumber);
+
+// /:id/phone-number
+router.delete("/:id/phone-number", deleteUserPhoneNumber);
+
+// /:id/email
+router.patch("/:id/email", updateUserEmail);
+
+// /:id/websites
+router.post("/:id/websites", createUserWebsites);
+
+// /:id/websites/:websiteId
+router.patch("/:id/websites/:websiteId", updateUserWebsites);
+
+// /:id/websites/:websiteId
+router.delete("/:id/websites/:websiteId", deleteUserWebsites);
+
+// /:id/social-links
+router.post("/:id/social-links", createUserSocialLinks);
+
+// /:id/social-links/:socialLinkId
+router.patch("/:id/social-links/:socialLinkId", updateUserSocialLinks);
+
+// /:id/social-links/:socialLinkId
+router.delete("/:id/social-links/:socialLinkId", deleteUserSocialLinks);
+
+// /:id/gender
+router.patch("/:id/gender", updateUserGender);
+
+// /:id/gender
+router.delete("/:id/gender", deleteUserGender);
+
+// /:id/pronouns
+router.patch("/:id/pronouns", updateUserPronouns);
+
+// /:id/pronouns
+router.delete("/:id/pronouns", deleteUserPronouns);
+
+// /:id/birthday
+router.patch("/:id/birthday", updateUserBirthday);
+
+// /:id/languages
+router.patch("/:id/languages", updateUserLanguages);
+
+// /:id/languages
+router.delete("/:id/languages", deleteUserLanguages);
+
+// /:id/family-members
+router.post("/:id/family-members", createUserFamilyMembers);
+
+// /:id/family-members/:familyMemberId
+router.patch("/:id/family-members/:familyMemberId", updateUserFamilyMembers);
+
+// /:id/family-members/:familyMemberId
+router.delete("/:id/family-members/:familyMemberId", deleteUserFamilyMembers);
+
+// /:id/relationship
+router.patch("/:id/relationship", updateUserRelationshipStatus);
+
+// /:id/work
+router.post("/:id/work", createUserWork);
+
+// /:id/work/:workId
+router.patch("/:id/work/:workId", updateUserWork);
+
+// /:id/work/:workId
+router.delete("/:id/work/:workId", deleteUserWork);
+
+// /:id/education
+router.post("/:id/education", createUserEducation);
+
+// /:id/education/:educationId
+router.patch("/:id/education/:educationId", updateUserEducation);
+
+// /:id/education/:educationId
+router.delete("/:id/education/:educationId", deleteUserEducation);
+
+// /:id/places-lived
+router.post("/:id/places-lived", createUserPlacesLived);
+
+// /:id/places-lived/:placeLivedId
+router.patch("/:id/places-lived/:placeLivedId", updateUserPlacesLived);
+
+// /:id/places-lived/:placeLivedId
+router.delete("/:id/places-lived/:placeLivedId", deleteUserPlacesLived);
 
 // /:id/basic
 router.patch("/:id/basic", updateUserBasicInfo);

@@ -17,7 +17,7 @@ export interface IPost extends Document {
 	media?: PostMedia[];
 	taggedUsers?: ObjectId[];
 	feeling?: string;
-	lifeEvent?: LifeEventData;
+	lifeEvent?: ObjectId | LifeEventData;
 	checkIn?: { longitude: number; latitude: number };
 }
 
@@ -56,16 +56,7 @@ const postSchema = new Schema<IPost>(
 			},
 		],
 		feeling: { type: String },
-		lifeEvent: {
-			type: new Schema(
-				{
-					title: { type: String, required: true, trim: true, maxlength: 100 },
-					description: { type: String, trim: true, maxlength: 500 },
-					date: { type: Date, required: true },
-				},
-				{ _id: false },
-			),
-		},
+		lifeEvent: { type: Schema.Types.ObjectId, ref: "LifeEvent" },
 		checkIn: {
 			type: new Schema(
 				{

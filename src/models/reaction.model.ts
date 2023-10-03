@@ -1,6 +1,7 @@
 import { ObjectId, Schema, model } from "mongoose";
 
 export interface IReaction {
+	_id: ObjectId;
 	parent: ObjectId;
 	user: ObjectId;
 	type: string;

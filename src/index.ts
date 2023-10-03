@@ -2,6 +2,7 @@
 import express from "express";
 
 // Internal dependencies
+import "./models/index";
 import configAuthMiddleware from "./middleware/authConfig";
 import configOtherMiddleware from "./middleware/otherConfig";
 import { configDb } from "./config/database";
