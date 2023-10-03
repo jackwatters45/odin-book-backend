@@ -40,6 +40,10 @@ import placesLivedValidation from "./validations/placesLivedValidation";
 import birthdayValidation from "./validations/birthdayValidation";
 import educationValidation from "./validations/educationValidation";
 import workValidation from "./validations/workValidation";
+import aboutYouValidation from "./validations/aboutYouValidation";
+import namePronunciationValidation from "./validations/namePronunciationValidation";
+import favoriteQuotesValidation from "./validations/favoriteQuotesValidation";
+import otherNamesValidation from "./validations/otherNamesValidation";
 
 const log = debug("log:user:controller");
 
@@ -433,7 +437,11 @@ type UserStandardField =
 	| "pronouns"
 	| "birthday"
 	| "languages"
-	| "familyMembers";
+	| "familyMembers"
+	| "aboutYou"
+	| "namePronunciation"
+	| "favoriteQuotes"
+	| "otherNames";
 
 interface PopulateOption {
 	path: string;
@@ -534,6 +542,7 @@ export const updateUserIntro = updateUserStandardField({
 	populateOptions: userDefaultPopulation,
 });
 
+// TODO this is gross
 // @desc		Update user audience settings
 // @route		PATCH /users/:id/audience
 // @access	Private
@@ -550,6 +559,7 @@ export const updateUserAudienceSettings = updateUserStandardField({
 			currentCity,
 			websites,
 			familyMembers,
+			otherNames,
 			itemId,
 			...nonNestedBody
 		},
@@ -567,6 +577,8 @@ export const updateUserAudienceSettings = updateUserStandardField({
 				websites[encodeWebsiteId(itemId)];
 		} else if (familyMembers) {
 			user.audienceSettings.familyMembers[itemId] = familyMembers[itemId];
+		} else if (otherNames) {
+			user.audienceSettings.otherNames[itemId] = otherNames;
 		} else {
 			log("nonNestedBody", nonNestedBody);
 			user.audienceSettings = { ...user.audienceSettings, ...nonNestedBody };
@@ -795,6 +807,149 @@ export const updateUserBirthday = updateUserStandardField({
 		}
 		const birthday = new Date(year, month, day);
 		user.birthday = birthday;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user about you
+// @route   PATCH /users/:id/about-you
+// @access  Private
+export const updateUserAboutYou = updateUserStandardField({
+	fieldToUpdate: "aboutYou",
+	validationRules: aboutYouValidation,
+	updateFunc: ({ user, body: { audience, values: aboutYou } }) => {
+		if (audience) user.audienceSettings.aboutYou = audience;
+		user.aboutYou = aboutYou;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user about you
+// @route   DELETE /users/:id/about-you
+// @access	Private
+export const deleteUserAboutYou = updateUserStandardField({
+	fieldToUpdate: "aboutYou",
+	updateFunc: ({ user }) => (user.aboutYou = undefined),
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user name pronunciation
+// @route   PATCH /users/:id/name-pronunciation
+// @access  Private
+export const updateUserNamePronunciation = updateUserStandardField({
+	fieldToUpdate: "namePronunciation",
+	validationRules: namePronunciationValidation,
+	updateFunc: ({ user, body: { audience, values: namePronunciation } }) => {
+		if (audience) user.audienceSettings.namePronunciation = audience;
+		user.namePronunciation = namePronunciation;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user name pronunciation
+// @route   DELETE /users/:id/name-pronunciation
+// @access	Private
+export const deleteUserNamePronunciation = updateUserStandardField({
+	fieldToUpdate: "namePronunciation",
+	updateFunc: ({ user }) => (user.namePronunciation = undefined),
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user favorite quotes
+// @route   PATCH /users/:id/quotes
+// @access  Private
+export const updateUserFavoriteQuotes = updateUserStandardField({
+	fieldToUpdate: "favoriteQuotes",
+	validationRules: favoriteQuotesValidation,
+	updateFunc: ({ user, body: { audience, values: favoriteQuotes } }) => {
+		if (audience) user.audienceSettings.favoriteQuotes = audience;
+		user.favoriteQuotes = favoriteQuotes;
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user favorite quotes
+// @route   DELETE /users/:id/quotes
+// @access	Private
+export const deleteUserFavoriteQuotes = updateUserStandardField({
+	fieldToUpdate: "favoriteQuotes",
+	updateFunc: ({ user }) => (user.favoriteQuotes = undefined),
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Create user other names
+// @route   POST /users/:id/other-names
+// @access  Private
+export const createUserOtherNames = updateUserStandardField({
+	fieldToUpdate: "otherNames",
+	validationRules: otherNamesValidation,
+	updateFunc: async ({
+		user,
+		body: { audience, values: newOtherName },
+		res,
+	}) => {
+		const otherNameExists = user.otherNames?.some(
+			(otherName) => otherName.name === newOtherName.name,
+		);
+
+		if (otherNameExists) {
+			res.status(400).json({ message: "Other name already exists" });
+			return false;
+		}
+
+		user.otherNames?.push(newOtherName);
+
+		await user.save();
+
+		const otherNameId = String(
+			user.otherNames?.[user.otherNames?.length - 1]._id,
+		);
+
+		if (audience) {
+			log("audience", audience);
+			log("otherNameId", otherNameId);
+			log("user.audienceSettings.otherNames", user.audienceSettings.otherNames);
+			user.audienceSettings.otherNames[otherNameId] = audience;
+			user.markModified("audienceSettings.otherNames");
+		}
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Update user other names
+// @route   PATCH /users/:id/other-names
+// @access  Private
+export const updateUserOtherNames = updateUserStandardField({
+	fieldToUpdate: "otherNames",
+	validationRules: otherNamesValidation,
+	updateFunc: ({
+		user,
+		body: { audience, values: newOtherName },
+		params: { otherNameId },
+	}) => {
+		if (audience) user.audienceSettings.otherNames[otherNameId] = audience;
+
+		user.otherNames = user.otherNames?.map((otherName) =>
+			String(otherName._id) === otherNameId
+				? { ...otherName, ...newOtherName }
+				: otherName,
+		);
+	},
+	populateOptions: userDefaultPopulation,
+});
+
+// @desc    Delete user other names
+// @route   DELETE /users/:id/other-names/:otherNameId
+// @access	Private
+export const deleteUserOtherNames = updateUserStandardField({
+	fieldToUpdate: "otherNames",
+	updateFunc: ({ user, params: { otherNameId } }) => {
+		user.otherNames = user.otherNames?.filter(
+			(otherName) => String(otherName._id) !== otherNameId,
+		);
+
+		delete user.audienceSettings.otherNames[otherNameId];
+		user.markModified("audienceSettings.otherNames");
 	},
 	populateOptions: userDefaultPopulation,
 });

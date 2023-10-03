@@ -52,6 +52,15 @@ import {
 	searchUserFriendsByName,
 	searchUserFriendsExcludingFamily,
 	updateUserRelationshipStatus,
+	updateUserAboutYou,
+	deleteUserAboutYou,
+	deleteUserNamePronunciation,
+	updateUserNamePronunciation,
+	deleteUserFavoriteQuotes,
+	updateUserFavoriteQuotes,
+	createUserOtherNames,
+	updateUserOtherNames,
+	deleteUserOtherNames,
 } from "../controllers/user.controller";
 
 const router = express.Router();
@@ -160,6 +169,33 @@ router.delete("/:id/family-members/:familyMemberId", deleteUserFamilyMembers);
 
 // /:id/relationship
 router.patch("/:id/relationship", updateUserRelationshipStatus);
+
+// /:id/about-you
+router.patch("/:id/about-you", updateUserAboutYou);
+
+// /:id/about-you
+router.delete("/:id/about-you", deleteUserAboutYou);
+
+// /:id/name-pronunciation
+router.patch("/:id/name-pronunciation", updateUserNamePronunciation);
+
+// /:id/name-pronunciation
+router.delete("/:id/name-pronunciation", deleteUserNamePronunciation);
+
+// /:id/quotes
+router.patch("/:id/quotes", updateUserFavoriteQuotes);
+
+// /:id/quotes
+router.delete("/:id/quotes", deleteUserFavoriteQuotes);
+
+// /:id/other-names
+router.post("/:id/other-names", createUserOtherNames);
+
+// /:id/others-names/:otherNameId
+router.patch("/:id/other-names/:otherNameId", updateUserOtherNames);
+
+// /:id/others-names/:otherNameId
+router.delete("/:id/other-names/:otherNameId", deleteUserOtherNames);
 
 // /:id/work
 router.post("/:id/work", createUserWork);

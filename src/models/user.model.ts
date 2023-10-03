@@ -18,6 +18,7 @@ import {
 import { DefaultGenderTypes } from "../constants/Gender";
 import { Pronouns } from "../constants/Pronouns";
 import { FamilyRelationshipOptions } from "../constants/FamilyMembers";
+import { otherNameTypeOptions } from "../constants/OtherNames";
 
 const workSchema = new Schema({
 	company: { type: String, required: true, trim: true, maxlength: 100 },
@@ -104,6 +105,12 @@ const relationshipStatusSchema = new Schema({
 	startYear: { type: String, default: undefined },
 	startMonth: { type: String, default: undefined },
 	startDay: { type: String, default: undefined },
+});
+
+const otherNameSchema = new Schema({
+	name: { type: String, trim: true, maxlength: 50 },
+	type: { type: String, trim: true, enum: otherNameTypeOptions },
+	showAtTop: { type: Boolean, default: false },
 });
 
 const defaultAudienceSetting = {
@@ -242,10 +249,11 @@ const UserSchema = new Schema<IUser>(
 		hobbies: [{ type: String, trim: true }],
 		nicknames: [{ type: String, trim: true, maxlength: 50 }],
 		namePronunciation: {
-			firstName: { type: String, required: true, trim: true, maxlength: 50 },
-			lastName: { type: String, required: true, trim: true, maxlength: 50 },
-			fullName: { type: String, required: true, trim: true, maxlength: 100 },
+			firstName: { type: String, trim: true, maxlength: 50 },
+			lastName: { type: String, trim: true, maxlength: 50 },
 		},
+		favoriteQuotes: { type: String, trim: true, maxlength: 500 },
+		otherNames: [otherNameSchema],
 		intro: {
 			pronouns: { type: Map, of: Boolean, default: { pronouns: false } },
 			work: { type: Map, of: Boolean, default: {} },
@@ -291,6 +299,8 @@ const UserSchema = new Schema<IUser>(
 			birthday: defaultAudienceSetting,
 			languages: defaultAudienceSetting,
 			aboutYou: defaultAudienceSetting,
+			namePronunciation: defaultAudienceSetting,
+			favoriteQuotes: defaultAudienceSetting,
 
 			// multiple
 			familyMembers: defaultAudienceSettingMultiple,
@@ -299,6 +309,7 @@ const UserSchema = new Schema<IUser>(
 			education: defaultAudienceSettingMultiple,
 			placesLived: defaultAudienceSettingMultiple,
 			socialLinks: defaultAudienceSettingMultiple,
+			otherNames: defaultAudienceSettingMultiple,
 		},
 		relationshipStatus: relationshipStatusSchema,
 		taggedPosts: [{ type: Schema.Types.ObjectId, ref: "Post" }],

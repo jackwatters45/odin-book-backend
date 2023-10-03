@@ -10,6 +10,7 @@ import { Gender } from "../src/constants/Gender";
 import { PronounsType } from "../src/constants/Pronouns";
 import { FamilyMember } from "../src/constants/FamilyMembers";
 import { IRelationshipStatus } from "../src/constants/VALID_RELATIONSHIP_STATUSES_ARRAY";
+import { OtherNames } from "../src/constants/OtherNames";
 
 // Basic User Info
 export interface BasicUserInfo {
@@ -132,9 +133,8 @@ export interface LifeEventData {
 }
 
 export interface NamePronunciationData {
-	firstName: string;
-	lastName: string;
-	fullName: string;
+	firstName: string | undefined;
+	lastName: string | undefined;
 }
 
 export const INTRO_FIELDS = [
@@ -191,6 +191,8 @@ export interface AudienceSettings {
 	birthday: AudienceStatusOptionsType;
 	languages: AudienceStatusOptionsType;
 	aboutYou: AudienceStatusOptionsType;
+	namePronunciation: AudienceStatusOptionsType;
+	favoriteQuotes: AudienceStatusOptionsType;
 
 	// multiple
 	familyMembers: AudienceStatusMultiple;
@@ -199,6 +201,7 @@ export interface AudienceSettings {
 	work: AudienceStatusMultiple;
 	education: AudienceStatusMultiple;
 	placesLived: AudienceStatusMultiple;
+	otherNames: AudienceStatusMultiple;
 }
 
 // User About Data
@@ -222,9 +225,13 @@ export interface UserAboutData {
 
 	familyMembers: FamilyMember[];
 
-	aboutYou: string;
+	aboutYou?: string;
+
+	favoriteQuotes?: string;
 
 	audienceSettings: AudienceSettings;
+
+	otherNames: OtherNames;
 }
 
 export interface IUser
