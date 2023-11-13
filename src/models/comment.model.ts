@@ -12,6 +12,8 @@ export interface IComment extends Document {
 	isDeleted?: boolean;
 }
 
+
+
 const commentSchema = new Schema<IComment>(
 	{
 		content: { type: String, required: true, trim: true, maxlength: 8000 },

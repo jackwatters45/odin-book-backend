@@ -2,7 +2,7 @@ import multer, { MulterError } from "multer";
 
 const upload = multer({
 	limits: {
-		fileSize: 1024 * 1024 * 5, // limit file size to 5MB
+		fileSize: 1024 * 1024 * 50, // limit file size to 50MB
 	},
 	fileFilter: (req, file, cb) => {
 		if (file.mimetype.startsWith("image/")) {

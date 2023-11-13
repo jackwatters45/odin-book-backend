@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { ObjectId } from "mongoose";
 import debug from "debug";
 
-import Post from "../models/post.model";
+import Post, { IPost } from "../models/post.model";
 import User from "../models/user.model";
 import { IUser } from "../../types/IUser";
 import expressAsyncHandler from "express-async-handler";
@@ -12,7 +12,12 @@ import postValidation from "./utils/postValidation";
 import Reaction, { reactionTypes } from "../models/reaction.model";
 import resizeImages from "../utils/resizeImages";
 import { uploadFilesToCloudinary } from "../utils/uploadToCloudinary";
-import { authenticateJwt } from "../middleware/authenticateJwt";
+import authenticateJwt from "../middleware/authenticateJwt";
+import upload from "../config/multer";
+import defaultPostPopulation from "./utils/defaultPostPopulation";
+import getPostWithTopReactions from "./utils/getDocumentWithTopReactions";
+import { AUDIENCE_STATUS_OPTIONS } from "../constants";
+import getPostAndCommentsTopReactions from "./utils/getPostAndCommentsTopReactions";
 
 const log = debug("log:post:controller");
 
@@ -23,14 +28,15 @@ const log = debug("log:post:controller");
 // @access  Public
 export const getPosts = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		const match = { published: true };
-		const postsCount = await Post.countDocuments(match);
-		const postsQuery = Post.find(match)
-			.populate("author", "firstName lastName isDeleted")
+		const pageLength = 5;
+
+		const postsCount = await Post.countDocuments();
+		const postsQuery = Post.find()
+			.populate(defaultPostPopulation)
 			.sort({ createdAt: -1 });
 
-		if (req.query.offset) {
-			const offset = parseInt(req.query.offset as string);
+		if (req.query.page) {
+			const offset = parseInt(req.query.page as string) * pageLength;
 			postsQuery.skip(offset);
 		}
 		if (req.query.limit) {
@@ -43,81 +49,112 @@ export const getPosts = expressAsyncHandler(
 	},
 );
 
+// @desc    Get post by user friends
+// @route   GET /posts/friends
+// @access  Private
+export const getPostsByUserFriends = [
+	authenticateJwt,
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+
+		const pageLength = 5;
+
+		const fromQuery = {
+			$or: [
+				{ author: { $in: user.friends } },
+				{ to: { $in: user.friends } },
+				{ taggedUsers: { $elemMatch: { $in: user.friends } } },
+			],
+		};
+
+		const postsQuery = Post.find({
+			...fromQuery,
+			audience: { $in: ["Friends", "Public"] },
+		})
+			.populate(defaultPostPopulation)
+			.limit(pageLength);
+
+		if (req.query.page) {
+			const offset = parseInt(req.query.page as string) * pageLength;
+			postsQuery.skip(offset);
+		}
+
+		const posts = await postsQuery.exec();
+
+		const postsWithTopReactions = posts.map((post) =>
+			getPostWithTopReactions(post),
+		);
+
+		res.status(200).json(postsWithTopReactions);
+	}),
+];
+
 // @desc    Get post by id
 // @route   GET /posts/:id
 // @access  Public
 export const getPostById = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		const post = await Post.findById(req.params.id)
-			.populate(
-				"author",
-				"firstName lastName description followers isDeleted avatarUrl",
-			)
-			.populate({
-				path: "comments",
-				populate: {
-					path: "author",
-					select: "firstName lastName isDeleted avatarUrl",
-				},
-			});
+		const post = await Post.findById(req.params.id).populate(
+			defaultPostPopulation,
+		);
 
-		res.status(200).json({ post });
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
+		}
+
+		const postsWithTopReactions = getPostAndCommentsTopReactions(post);
+
+		res.status(200).json(postsWithTopReactions);
 	},
 );
-
-// TODO multer stuff
-// TODO other logics (check in, life event)
 
 // @desc    Create post
 // @route   POST /posts
 // @access  Private
 export const createPost = [
 	authenticateJwt,
+	upload.array("unsavedMedia[]"),
 	...postValidation,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
+			log(errors.array());
 			res.status(400).json({ errors: errors.array() });
 			return;
 		}
 
 		const author = req.user as IUser;
 
-		const {
-			published,
-			taggedUsers,
-			sharedFrom,
-			content,
-			feeling,
-			lifeEvent,
-			checkIn,
-		} = req.body;
-
+		log(req.body);
 		const post = new Post({
 			author: author._id,
-			published,
-			taggedUsers, // ObjectId[]
-			sharedFrom, // ObjectId
-			content, // string
-			feeling, // string
-			lifeEvent, // object
-			checkIn, // object
+			...req.body,
 		});
 
-		try {
-			if (req.files) {
-				const files = req.files;
-				const resizedImages = await resizeImages(files);
-				const imageLinks = await uploadFilesToCloudinary(resizedImages);
-				// post.media = imageLinks;
+		if (req.files) {
+			const files = req.files;
+
+			const filesLength = files.length as number;
+			if (filesLength > 10) {
+				res
+					.status(400)
+					.json({ message: "You can only upload up to 10 photos." });
+				return;
 			}
 
-			await post.save();
-			res.status(201).json({ post });
-		} catch (err) {
-			// TODO
-			res.status(500).json({ message: err.message, post });
+			const resizedImages = await resizeImages(files);
+			const imageLinks = await uploadFilesToCloudinary(resizedImages);
+			post.media = imageLinks;
 		}
+
+		await post.save();
+
+		const populatePost = await Post.findById(post._id).populate(
+			defaultPostPopulation,
+		);
+
+		res.status(201).json(populatePost);
 	}),
 ];
 
@@ -126,6 +163,7 @@ export const createPost = [
 // @access  Private
 export const updatePost = [
 	authenticateJwt,
+	upload.array("unsavedMedia[]"),
 	...postValidation,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
@@ -134,9 +172,10 @@ export const updatePost = [
 			return;
 		}
 
+
 		const user = req.user as IUser;
 
-		const { published, taggedUsers, content, feeling, lifeEvent, checkIn } =
+		const { audience, taggedUsers, content, feeling, sharedFrom, media } =
 			req.body;
 
 		const post = await Post.findById(req.params.id);
@@ -155,23 +194,94 @@ export const updatePost = [
 			return;
 		}
 
-		post.published = published;
+		post.checkIn = {
+			location: req.body?.["checkIn.location"],
+			city: req.body?.["checkIn.city"],
+			state: req.body?.["checkIn.state"],
+			country: req.body?.["checkIn.country"],
+		};
+
+		let imageLinks: string[] = [];
+		if (req.files) {
+			const files = req.files;
+
+			const filesLength = files.length as number;
+			if (filesLength > 10) {
+				res
+					.status(400)
+					.json({ message: "You can only upload up to 10 photos." });
+				return;
+			}
+
+			const resizedImages = await resizeImages(files);
+			imageLinks = await uploadFilesToCloudinary(resizedImages);
+			post.media = [...imageLinks, ...(media || [])];
+		}
+
+		post.audience = audience;
 		post.taggedUsers = taggedUsers;
 		post.content = content;
 		post.feeling = feeling;
-		post.lifeEvent = lifeEvent;
-		post.checkIn = checkIn;
+		post.sharedFrom = sharedFrom;
+		post.media = post.media || [];
 
-		if (req.files) {
-			const files = req.files;
-			const resizedImages = await resizeImages(files);
-			const imageLinks = await uploadFilesToCloudinary(resizedImages);
-			// post.media = imageLinks;
+		await post.save();
+
+		const populatePost = await Post.findByIdAndUpdate(post._id).populate(
+			defaultPostPopulation,
+		);
+
+		res.status(200).json(populatePost);
+	}),
+];
+
+// @desc    Update post audience
+// @route   PATCH /posts/:id/audience
+// @access  Private
+export const updatePostAudience = [
+	authenticateJwt,
+	body("audience")
+		.trim()
+		.isIn(AUDIENCE_STATUS_OPTIONS)
+		.withMessage("Invalid audience"),
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			log(errors.array());
+			res.status(400).json({ errors: errors.array() });
+			return;
 		}
 
-		const updatedPost = await post.save();
+		const user = req.user as IUser;
 
-		res.status(200).json({ post: updatedPost, message: "Post updated" });
+		log(req.body);
+		const { audience } = req.body;
+
+		const post = await Post.findById(req.params.id);
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
+		}
+
+		if (
+			post.author.toString() !== user._id.toString() &&
+			user.userType !== "admin"
+		) {
+			res.status(403).json({
+				message: "Only admin and the original author can update post",
+			});
+			return;
+		}
+
+		post.audience = audience;
+
+		await post.save();
+
+		const populatePost = await Post.findById(post._id).populate(
+			defaultPostPopulation,
+		);
+
+		res.status(200).json(populatePost);
 	}),
 ];
 
@@ -225,7 +335,7 @@ export const reactToPost = [
 
 		const existingReaction = await Reaction.findOne({
 			parent: post._id,
-			author: user._id,
+			user: user._id,
 		});
 
 		if (!existingReaction) {
@@ -237,7 +347,7 @@ export const reactToPost = [
 
 			const savedReaction = await reaction.save();
 
-			post.reactions.push(savedReaction._id as unknown as ObjectId);
+			post.reactions.push(savedReaction._id);
 		} else {
 			existingReaction.type = type;
 			await existingReaction.save();
@@ -245,7 +355,13 @@ export const reactToPost = [
 
 		await post.save();
 
-		res.status(201).json({ message: "Reaction added", post });
+		const populatedPost = (await Post.findById(req.params.id).populate(
+			defaultPostPopulation,
+		)) as IPost;
+
+		const postsWithTopReactions = getPostWithTopReactions(populatedPost);
+
+		res.status(201).json(postsWithTopReactions);
 	}),
 ];
 
@@ -277,11 +393,17 @@ export const unreactToPost = [
 
 		post.reactions = post.reactions.filter(
 			(reaction) => reaction.toString() !== existingReaction._id.toString(),
-		);
+		) as ObjectId[];
 
 		await post.save();
 
-		res.status(200).json({ message: "Reaction removed", post });
+		const populatedPost = (await Post.findById(req.params.id).populate(
+			defaultPostPopulation,
+		)) as IPost;
+
+		const postsWithTopReactions = getPostWithTopReactions(populatedPost);
+
+		res.status(200).json(postsWithTopReactions);
 	}),
 ];
 
@@ -297,7 +419,7 @@ export const getPostReactions = expressAsyncHandler(
 		}
 
 		const reactions = await Reaction.find({ parent: post._id })
-			.populate("user", "firstName lastName isDeleted avatarUrl")
+			.populate("user", "fullName isDeleted avatarUrl")
 			.sort({ createdAt: -1 });
 
 		res.status(200).json({ reactions });
@@ -305,7 +427,7 @@ export const getPostReactions = expressAsyncHandler(
 );
 
 // @desc    Toggle saved post
-// @route   PATCH /posts/saved-posts/:id
+// @route   PATCH /posts/:id/save
 // @access  Private
 export const toggleSavedPost = [
 	authenticateJwt,
@@ -318,9 +440,11 @@ export const toggleSavedPost = [
 			return;
 		}
 
-		const postId = post._id;
+		const postId = post._id as ObjectId;
 
-		const isPostSaved = user.savedPosts.includes(postId);
+		const isPostSaved = user.savedPosts.some(
+			(savedPost) => String(savedPost) === String(postId),
+		);
 
 		const updateOperation = isPostSaved
 			? { $pull: { savedPosts: postId } }
@@ -330,9 +454,9 @@ export const toggleSavedPost = [
 			user._id,
 			updateOperation,
 			{ new: true },
-		);
+		).select("savedPosts");
 
-		res.status(200).json({ savedPosts: userUpdated?.savedPosts });
+		res.status(200).json(userUpdated?.savedPosts);
 	}),
 ];
 
@@ -345,7 +469,7 @@ export const getSavedPosts = [
 		const user = req.user as IUser;
 
 		const posts = await Post.find({ _id: { $in: user.savedPosts } })
-			.populate("author", "firstName lastName isDeleted avatarUrl")
+			.populate("author", "fullName isDeleted avatarUrl")
 			.sort({ createdAt: -1 });
 
 		res.status(200).json({ posts });
@@ -376,35 +500,5 @@ export const sharePost = [
 		await sharedPost.save();
 
 		res.status(201).json({ message: "Post shared successfully", sharedPost });
-	}),
-];
-
-// @desc    Get posts by user's friends
-// @route   GET /posts/friends
-// @access  Private
-export const getPostsByFriends = [
-	authenticateJwt,
-	expressAsyncHandler(async (req: Request, res: Response) => {
-		const user = req.user as IUser;
-
-		const match = {
-			published: true,
-			author: { $in: user.friends },
-		};
-
-		const postsCount = await Post.countDocuments(match);
-		const { offset, limit } = req.query;
-		const posts = await Post.find(match)
-			.skip(parseInt(offset as string) || 0)
-			.limit(parseInt(limit as string) || 0)
-			.populate("author", "firstName lastName isDeleted")
-			.sort({ createdAt: -1 });
-
-		if (!posts) {
-			res.status(404).json({ message: "No posts found" });
-			return;
-		}
-
-		res.status(200).json({ posts, meta: { total: postsCount } });
 	}),
 ];

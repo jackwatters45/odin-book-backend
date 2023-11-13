@@ -186,7 +186,7 @@ describe("POST /posts", () => {
 
 		expect(res.body.errors).toHaveLength(1);
 		expect(res.body.errors[0].msg).toEqual(
-			"At least one of the fields 'content', 'media' 'feeling', 'lifeEvent', or 'checkIn' must be provided",
+			"At least one of the fields 'content', 'media' 'feeling', or 'checkIn' must be provided",
 		);
 	});
 
@@ -251,7 +251,7 @@ describe("PATCH /posts/:id", () => {
 
 		expect(res.body.errors).toHaveLength(1);
 		expect(res.body.errors[0].msg).toEqual(
-			"At least one of the fields 'content', 'media' 'feeling', 'lifeEvent', or 'checkIn' must be provided",
+			"At least one of the fields 'content', 'media' 'feeling', or 'checkIn' must be provided",
 		);
 	});
 

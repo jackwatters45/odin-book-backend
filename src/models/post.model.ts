@@ -1,67 +1,110 @@
 import { Schema, model, Document, ObjectId } from "mongoose";
-import { LifeEventData } from "../../types/IUser";
+import {
+	AUDIENCE_STATUS_OPTIONS,
+	AudienceStatusOptionsType,
+} from "../constants";
 
-export interface PostMedia {
-	type: "image" | "video";
-	url: string;
+export interface CheckInValues {
+	location: string;
+	city: string;
+	state: string;
+	country: string;
 }
-export interface IPost extends Document {
+
+export const reactionTypes = [
+	"like",
+	"dislike",
+	"love",
+	"haha",
+	"wow",
+	"sad",
+	"angry",
+	"hooray",
+	"confused",
+] as const;
+
+export type ReactionType = (typeof reactionTypes)[number];
+
+export interface IReaction {
+	_id: string;
+	parent: string;
+	user: ObjectId;
+	type: ReactionType;
+	updatedAt: Date;
+	createdAt: Date;
+}
+
+export const reactionTypeEmojis: Record<ReactionType, string> = {
+	like: "👍",
+	dislike: "👎",
+	love: "❤️",
+	haha: "😂",
+	wow: "😮",
+	sad: "😢",
+	angry: "😡",
+	hooray: "🎉",
+	confused: "😕",
+} as const;
+
+export const getReactionTypeEmoji = (type: ReactionType) =>
+	reactionTypeEmojis[type];
+
+export interface IPostObject {
 	content?: string;
 	author: ObjectId;
-	published: boolean;
 	createdAt: Date;
 	updatedAt: Date;
 	reactions: ObjectId[];
 	comments: ObjectId[];
+	// shares: ObjectId[];
+	audience: AudienceStatusOptionsType;
 	sharedFrom?: ObjectId; // shared from another post
-	media?: PostMedia[];
+	to: ObjectId; // post to another user
+	media?: string[];
 	taggedUsers?: ObjectId[];
 	feeling?: string;
-	lifeEvent?: ObjectId | LifeEventData;
-	checkIn?: { longitude: number; latitude: number };
+	checkIn?: CheckInValues;
 }
+
+export interface IPost extends Document, IPostObject {}
 
 const postSchema = new Schema<IPost>(
 	{
-		content: {
-			type: String,
-			trim: true,
-			maxlength: 63206,
-		},
 		author: { type: Schema.Types.ObjectId, ref: "User", required: true },
-		published: { type: Boolean, required: true, default: false },
 		reactions: [{ type: Schema.Types.ObjectId, ref: "Reaction" }],
+		sharedFrom: {
+			type: Schema.Types.ObjectId,
+			ref: "Post",
+			default: undefined,
+		},
+		to: { type: Schema.Types.ObjectId, ref: "User", default: undefined },
+		content: { type: String, trim: true, maxlength: 63206 },
+		media: [{ type: String, trim: true }],
+		feeling: { type: String },
+		audience: {
+			type: String,
+			default: "Friends",
+			enum: AUDIENCE_STATUS_OPTIONS,
+		},
 		comments: {
 			type: [{ type: Schema.Types.ObjectId, ref: "Comment" }],
 			default: [],
 		},
+		// shares: {
+		// 	type: [{ type: Schema.Types.ObjectId, ref: "Post" }],
+		// 	default: [],
+		// },
 		taggedUsers: {
 			type: [{ type: Schema.Types.ObjectId, ref: "User" }],
 			default: [],
 		},
-		sharedFrom: { type: Schema.Types.ObjectId, ref: "Post" },
-		media: [
-			{
-				type: new Schema(
-					{
-						type: {
-							type: String,
-							required: true,
-							enum: ["image", "video"],
-						},
-						url: { type: String, required: true },
-					},
-					{ _id: false },
-				),
-			},
-		],
-		feeling: { type: String },
-		lifeEvent: { type: Schema.Types.ObjectId, ref: "LifeEvent" },
 		checkIn: {
 			type: new Schema(
 				{
-					longitude: { type: Number, required: true },
-					latitude: { type: Number, required: true },
+					location: { type: String },
+					city: { type: String },
+					state: { type: String },
+					country: { type: String },
 				},
 				{ _id: false },
 			),
@@ -75,7 +118,6 @@ postSchema.path("content").validate(function (value: string) {
 	return (
 		this.sharedFrom ||
 		this.media ||
-		this.lifeEvent ||
 		this.checkIn ||
 		this.feeling ||
 		(value && value.trim() !== "")

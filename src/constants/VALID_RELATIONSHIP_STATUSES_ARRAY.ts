@@ -19,7 +19,7 @@ export type ValidRelationshipStatusesType =
 	(typeof VALID_RELATIONSHIP_STATUSES_ARRAY)[number];
 
 export interface IRelationshipStatus
-	extends IUserSearchBase,
+	extends Partial<IUserSearchBase>,
 		IncludesStartDates {
 	status: ValidRelationshipStatusesType;
 }

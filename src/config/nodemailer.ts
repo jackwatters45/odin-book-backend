@@ -6,6 +6,9 @@ import {
 	emailPassword,
 } from "../config/envVariables";
 import Mail from "nodemailer/lib/mailer";
+import debug from "debug";
+
+const log = debug("log:email");
 
 const transporter = nodemailer.createTransport({
 	service: "gmail",
@@ -97,9 +100,9 @@ export const getMailOptionsReset = (
 export const sendEmail = async (mailOptions: Mail.Options) => {
 	try {
 		const info = await transporter.sendMail(mailOptions);
-		console.log("Email sent: " + info.response);
+		log("Email sent: " + info.response);
 	} catch (error) {
-		console.log(error);
+		log(error);
 	}
 };
 

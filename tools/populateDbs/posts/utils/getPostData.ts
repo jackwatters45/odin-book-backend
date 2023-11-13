@@ -1,58 +1,79 @@
 import { faker } from "@faker-js/faker";
 import { ObjectId } from "mongoose";
+import debug from "debug";
 
 import {
 	getRandValueFromArray,
+	getRandValueFromArrayOfObjs,
 	getRandValuesFromArray,
 } from "../../utils/populateHelperFunctions";
-import ICreatePostOptions from "../../../../types/ICreatePostOptions";
+import Post from "../../../../src/models/post.model";
+import { IUser } from "../../../../types/IUser";
+import getRandAudienceSetting from "../../utils/getRandAudienceSetting";
+import { feelings } from "../../../../src/constants/Feelings";
 
-export const feelings = [
-	"Happy",
-	"Sad",
-	"Angry",
-	"Surprised",
-	"Silly",
-	"Confused",
-	"Excited",
-	"Nervous",
-	"In Love",
-	"Inspired",
-	"Bored",
-	"Sleepy",
-	"Anxious",
-	"Content",
-	"Optimistic",
-	"Pessimistic",
-	"Frustrated",
-	"Impressed",
-	"Nostalgic",
-	"Overwhelmed",
-	"Relieved",
-	"Shocked",
-];
+const log = debug("populateDbs:posts:getPostData");
 
-const getPostData = (users: ObjectId[], options?: ICreatePostOptions) => ({
-	content: faker.lorem.paragraph(),
-	published: options?.allPublished ? true : faker.datatype.boolean(0.8),
-	feeling: faker.datatype.boolean(0.2) ? getRandValueFromArray(feelings) : null,
-	media: faker.datatype.boolean(0.25) ? faker.image.urlLoremFlickr() : null,
-	checkIn: faker.datatype.boolean(0.1)
-		? {
-				longitude: faker.location.longitude(),
-				latitude: faker.location.latitude(),
-		  }
-		: null,
-	lifeEvent: faker.datatype.boolean(0.1)
-		? {
-				title: faker.lorem.sentence(),
-				description: faker.lorem.paragraph(),
-				date: faker.date.past(),
-		  }
-		: null,
-	author: options?.author || getRandValueFromArray(users),
-	likes: getRandValuesFromArray(users, 20),
-	taggedUsers: getRandValuesFromArray(users, 5),
+const getSharedPostData = async (user: IUser) => {
+	const createdAt = faker.date.past();
+	const sharedFrom = await Post.findOne({ author: { $ne: user._id } }).select(
+		"_id",
+	);
+
+	return {
+		content: faker.lorem.paragraph(),
+		author: user._id,
+		createdAt,
+		updatedAt: faker.datatype.boolean(0.95)
+			? createdAt
+			: faker.date.between({ from: createdAt, to: new Date() }),
+		audience: getRandAudienceSetting(),
+		sharedFrom: sharedFrom ?? undefined,
+		reactions: [],
+		comments: [],
+	};
+};
+
+const createCheckIn = () => ({
+	location: faker.company.name(),
+	city: faker.location.city(),
+	state: faker.location.state(),
+	country: faker.location.country(),
 });
+
+const getPostDataDefault = (user: IUser) => {
+	const createdAt = faker.date.past();
+	const friends = user.friends as ObjectId[];
+
+	return {
+		content: faker.lorem.paragraph(),
+		author: user._id,
+		createdAt,
+		updatedAt: faker.datatype.boolean(0.95)
+			? createdAt
+			: faker.date.between({ from: createdAt, to: new Date() }),
+		audience: getRandAudienceSetting(),
+		media: faker.datatype.boolean(0.25) ? faker.image.urlLoremFlickr() : null,
+		taggedUsers: faker.datatype.boolean(0.2)
+			? getRandValuesFromArray(friends)
+			: null,
+		feeling: faker.datatype.boolean(0.2)
+			? getRandValueFromArrayOfObjs(feelings, "name")
+			: null,
+		checkIn: faker.datatype.boolean(0.1) ? createCheckIn() : null,
+		to: faker.datatype.boolean(0.1) ? getRandValueFromArray(friends) : null,
+
+		reactions: [],
+		comments: [],
+		sharedFrom: null,
+	};
+};
+
+const getPostData = async (user: IUser) => {
+	log("user", user._id);
+	return faker.datatype.boolean(0.9)
+		? getPostDataDefault(user)
+		: await getSharedPostData(user);
+};
 
 export default getPostData;

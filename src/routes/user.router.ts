@@ -5,8 +5,6 @@ import {
 	getDeletedUserById,
 	getUserById,
 	getUserFriends,
-	getUserLifeEvents,
-	getUserPhotos,
 	getUserPosts,
 	getUserSavedPosts,
 	getUsers,
@@ -14,7 +12,6 @@ import {
 	sendFriendRequest,
 	unfriendUser,
 	updateUserAudienceSettings,
-	updateUserBasicInfo,
 	updateUserBio,
 	updateUserCoverPhoto,
 	updateUserHobbies,
@@ -61,12 +58,20 @@ import {
 	createUserOtherNames,
 	updateUserOtherNames,
 	deleteUserOtherNames,
+	getUserPhotosBy,
+	getUserPhotosOf,
+	cancelFriendRequest,
+	searchUsers,
+	getUserFriendsSuggestions,
 } from "../controllers/user.controller";
 
 const router = express.Router();
 
 // /users/
 router.get("/", getUsers);
+
+// /users/search
+router.get("/search", searchUsers);
 
 // /users/search/friends
 router.get("/search/friends", searchUserFriendsByName);
@@ -77,14 +82,14 @@ router.get("/search/friends-not-family", searchUserFriendsExcludingFamily);
 // /users/:id
 router.get("/:id", getUserById);
 
-// /users/:id/photos
-router.get("/:id/photos", getUserPhotos);
+// /users/:id/photos-of
+router.get("/:id/photos-of", getUserPhotosOf);
+
+// /users/:id/photos-by
+router.get("/:id/photos-by", getUserPhotosBy);
 
 // /users/:id/deleted
 router.get("/:id/deleted", getDeletedUserById);
-
-// /users/:id/life-events
-router.get("/:id/life-events", getUserLifeEvents);
 
 // /users
 router.post("/", createUser);
@@ -224,9 +229,6 @@ router.patch("/:id/places-lived/:placeLivedId", updateUserPlacesLived);
 // /:id/places-lived/:placeLivedId
 router.delete("/:id/places-lived/:placeLivedId", deleteUserPlacesLived);
 
-// /:id/basic
-router.patch("/:id/basic", updateUserBasicInfo);
-
 // TODO -> getUserActivity?
 // /users/:id/posts
 router.get("/:id/posts", getUserPosts);
@@ -234,19 +236,25 @@ router.get("/:id/posts", getUserPosts);
 // /users/:id/friends
 router.get("/:id/friends", getUserFriends);
 
+// /users/friends/suggestions
+router.get("/friends/suggestions", getUserFriendsSuggestions);
+
 // @route   GET /users/:id/saved-posts
 router.get("/:id/saved-posts", getUserSavedPosts);
 
-// @route   POST /users/:id/friend-requests
-router.post("/me/friend-requests/:id", sendFriendRequest);
-
 // @route   DELETE /users/me/friends/:friendId
 router.delete("/me/friends/:friendId", unfriendUser);
+
+// @route   POST /users/me/friend-requests/:id
+router.post("/me/friend-requests/:id", sendFriendRequest);
+
+// @route   DELETE /users/me/friend-requests/:id
+router.delete("/me/friend-requests/:id", cancelFriendRequest);
 
 // @route   POST /users/me/friend-requests/:requestId/accept
 router.post("/me/friend-requests/:requestId/accept", acceptFriendRequest);
 
 // @route   POST /users/me/friend-requests/:requestId/reject
-router.post("/me/friend-requests/:requestId/reject", rejectFriendRequest);
+router.delete("/me/friend-requests/:requestId/reject", rejectFriendRequest);
 
 export default router;

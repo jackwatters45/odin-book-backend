@@ -53,7 +53,7 @@ export interface UserResetPasswordData {
 
 // User Activity Data
 export interface UserActivityData {
-	friends: ObjectId[];
+	friends: ObjectId[] | Partial<IUser>[];
 	savedPosts: ObjectId[];
 	friendRequestsSent: ObjectId[];
 	friendRequestsReceived: ObjectId[];
@@ -76,6 +76,7 @@ export interface UserSystemData {
 	deletedData?: DeletedData;
 	validUntil?: number;
 	refreshTokens: string[];
+	expiresAt?: Date;
 }
 
 export type IncludesStartDates = {
@@ -126,12 +127,6 @@ export interface SocialLinksData {
 	username: string;
 }
 
-export interface LifeEventData {
-	_id: ObjectId;
-	title: string;
-	date: Date;
-}
-
 export interface NamePronunciationData {
 	firstName: string | undefined;
 	lastName: string | undefined;
@@ -163,22 +158,35 @@ export interface IntroData {
 	relationshipStatus?: IntroField;
 	namePronunciation?: IntroField;
 	joined: IntroField;
-	websites?: IntroField;
-	socialLinks?: IntroField;
+	websites?: Record<string, AudienceStatusOptionsType>;
+	socialLinks?: Record<string, AudienceStatusOptionsType>;
 }
 
-export const AUDIENCE_FIELDS = [
-	"work",
-	"education",
+export type AudienceStatusMultiple = {
+	[key: string]: AudienceStatusOptionsType;
+};
+
+export const AudienceSettingsFields = [
 	"currentCity",
 	"hometown",
 	"relationshipStatus",
 	"phoneNumber",
+	"email",
+	"gender",
+	"pronouns",
+	"birthday",
+	"languages",
+	"aboutYou",
+	"namePronunciation",
+	"favoriteQuotes",
+	"familyMembers",
+	"socialLinks",
+	"websites",
+	"work",
+	"education",
+	"placesLived",
+	"otherNames",
 ] as const;
-
-export type AudienceFieldsType = (typeof AUDIENCE_FIELDS)[number];
-
-type AudienceStatusMultiple = { [key: string]: AudienceStatusOptionsType };
 
 export interface AudienceSettings {
 	currentCity: AudienceStatusOptionsType;
@@ -204,6 +212,8 @@ export interface AudienceSettings {
 	otherNames: AudienceStatusMultiple;
 }
 
+export type AudienceSettingsKeys = keyof AudienceSettings;
+
 // User About Data
 export interface UserAboutData {
 	work: WorkData[];
@@ -211,7 +221,6 @@ export interface UserAboutData {
 	placesLived: PlaceLivedData[];
 	websites: string[];
 	socialLinks: SocialLinksData[];
-	nicknames: string[];
 
 	// edit profile
 	hobbies: string[];

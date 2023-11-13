@@ -1,13 +1,16 @@
 {
 	"cSpell.words": [
+		"birthdate",
 		"DMARC",
 		"fieldname",
 		"Geotechnical",
 		"haha",
 		"Juris",
 		"lcov",
+		"maxlength",
 		"unmock",
-		"Unreact"
+		"Unreact",
+		"Unrequest"
 	],
 	"cSpell.ignorePaths": [
 		"package-lock.json",

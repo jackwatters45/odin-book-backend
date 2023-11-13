@@ -1,24 +1,22 @@
 import { faker } from "@faker-js/faker";
-import debug from "debug";
 import { ObjectId } from "mongoose";
 
-const log = debug("log:populateHelperFunctions");
+export const getRandomInt = (max = 5, min = 1) =>
+	Math.floor(Math.random() * (max - min + 1)) + min;
 
-export const getRandomInt = (max = 5) => Math.floor(Math.random() * max);
+export const getRandValueFromArray = <T>(arr: T[]) =>
+	arr[getRandomInt(arr.length - 1)];
 
-export const getRandValueFromArray = <T>(arr: T[]) => {
-	return arr[getRandomInt(arr.length)];
-};
-
-interface objectWithId {
-	_id: ObjectId;
+// eslint-disable-next-line @typescript-eslint/ban-types
+interface objectWithId extends Object {
+	_id?: ObjectId;
 }
 
 export const getRandValueFromArrayOfObjs = <T extends objectWithId>(
 	arr: T[],
 	selectedValue?: keyof T,
 ) => {
-	const selectedItem = arr[getRandomInt(arr.length)];
+	const selectedItem = arr[getRandomInt(arr.length - 1)];
 
 	if (!selectedValue) return selectedItem._id;
 
@@ -42,7 +40,7 @@ export const getRandValuesFromArray = <T>(arr: T[], max = 3) => {
 export const getRandValuesFromArrayOfObjs = <T extends objectWithId>(
 	arr: T[],
 	max = 3,
-	selectedValue?: keyof T,
+	field?: keyof T,
 ) => {
 	const copyArr = [...arr];
 	for (let i = copyArr.length - 1; i > 0; i--) {
@@ -50,7 +48,7 @@ export const getRandValuesFromArrayOfObjs = <T extends objectWithId>(
 		[copyArr[i], copyArr[j]] = [copyArr[j], copyArr[i]];
 	}
 	return copyArr.slice(0, max).map((item) => {
-		return selectedValue ? item[selectedValue] : item._id;
+		return field ? item[field] : item._id;
 	});
 };
 

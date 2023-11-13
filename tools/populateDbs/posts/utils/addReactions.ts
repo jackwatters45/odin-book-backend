@@ -12,7 +12,7 @@ const addReactions = async (
 	users: ObjectId[],
 	maxReactions: number,
 ) => {
-	const numReactions = getRandomInt(maxReactions) || 1;
+	const numReactions = getRandomInt(maxReactions);
 	const usersReacting = getRandValuesFromArray(users, numReactions);
 
 	try {
@@ -24,12 +24,13 @@ const addReactions = async (
 					type: getRandValueFromArray(reactionTypes),
 				});
 
-				return (await reaction.save())._id;
+				await reaction.save();
+
+				return reaction._id;
 			}),
 		);
 	} catch (err) {
 		throw new Error(err);
 	}
 };
-
 export default addReactions;

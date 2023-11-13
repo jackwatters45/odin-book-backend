@@ -5,13 +5,14 @@ import {
 	getPostById,
 	getPostReactions,
 	getPosts,
-	getPostsByFriends,
+	getPostsByUserFriends,
 	getSavedPosts,
 	reactToPost,
 	sharePost,
 	toggleSavedPost,
 	unreactToPost,
 	updatePost,
+	updatePostAudience,
 } from "../controllers/post.controller";
 
 const router = express.Router();
@@ -25,8 +26,8 @@ router.delete("/:id/unreact", unreactToPost);
 // /posts/:id/reactions
 router.get("/:id/reactions", getPostReactions);
 
-// /posts/saved-posts/:postId
-router.patch("/saved-posts/:id", toggleSavedPost);
+// /posts/:id/save
+router.patch("/:id/save", toggleSavedPost);
 
 // /posts/saved-posts
 router.get("/saved-posts", getSavedPosts);
@@ -36,7 +37,7 @@ router.get("/saved-posts", getSavedPosts);
 router.post("/:id/share", sharePost);
 
 // /posts/friends
-router.get("/friends", getPostsByFriends);
+router.get("/friends", getPostsByUserFriends);
 
 // /posts
 router.get("/", getPosts);
@@ -49,6 +50,9 @@ router.post("/", createPost);
 
 // /posts/:id
 router.patch("/:id", updatePost);
+
+// /posts/:id/audience
+router.patch("/:id/audience", updatePostAudience);
 
 // /posts/:id
 router.delete("/:id", deletePost);

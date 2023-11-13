@@ -15,6 +15,9 @@ const birthdayValidation = [
 		.optional()
 		.isInt()
 		.withMessage("Day field must be an integer."),
+	body("birthday"),
 ];
+
+
 
 export default birthdayValidation;

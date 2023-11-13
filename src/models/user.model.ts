@@ -135,6 +135,7 @@ const UserSchema = new Schema<IUser>(
 			trim: true,
 			unique: true,
 			sparse: true,
+			lowercase: true,
 			minlength: 5,
 			maxlength: 253,
 		},
@@ -202,7 +203,7 @@ const UserSchema = new Schema<IUser>(
 			type: String,
 			required: true,
 			trim: true,
-			default: "user",
+			default: "user" as const,
 			enum: ["user", "admin", "guest"],
 		},
 		isDeleted: { type: Boolean, default: false },
@@ -247,7 +248,6 @@ const UserSchema = new Schema<IUser>(
 		languages: [{ type: String, trim: true, maxlength: 50 }],
 		bio: { type: String, trim: true, maxlength: 101 },
 		hobbies: [{ type: String, trim: true }],
-		nicknames: [{ type: String, trim: true, maxlength: 50 }],
 		namePronunciation: {
 			firstName: { type: String, trim: true, maxlength: 50 },
 			lastName: { type: String, trim: true, maxlength: 50 },
@@ -313,6 +313,7 @@ const UserSchema = new Schema<IUser>(
 		},
 		relationshipStatus: relationshipStatusSchema,
 		taggedPosts: [{ type: Schema.Types.ObjectId, ref: "Post" }],
+		expiresAt: { type: Date, expires: "0" },
 	},
 	{
 		timestamps: true,
@@ -331,7 +332,6 @@ UserSchema.path("work").default([]);
 UserSchema.path("education").default([]);
 UserSchema.path("placesLived").default([]);
 UserSchema.path("socialLinks").default([]);
-UserSchema.path("nicknames").default([]);
 
 UserSchema.pre("save", function (this: IUser, next) {
 	if (

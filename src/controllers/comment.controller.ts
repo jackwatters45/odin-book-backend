@@ -4,11 +4,13 @@ import debug from "debug";
 import expressAsyncHandler from "express-async-handler";
 import { ObjectId, startSession } from "mongoose";
 
-import Comment from "../models/comment.model";
+import Comment, { IComment } from "../models/comment.model";
 import Reaction, { reactionTypes } from "../models/reaction.model";
 import { IUser } from "../../types/IUser";
 import Post from "../models/post.model";
-import { authenticateJwt } from "../middleware/authenticateJwt";
+import authenticateJwt from "../middleware/authenticateJwt";
+import getDocumentWithTopReactions from "./utils/getDocumentWithTopReactions";
+import defaultCommentPopulation from "./utils/defaultCommentPopulation";
 
 const log = debug("log:comment:controller");
 
@@ -19,53 +21,16 @@ export const getComments = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const postId = req.params.post;
 
-		const [post, commentsCount, parentCommentsCount] = await Promise.all([
-			Post.findById(postId),
-			Comment.countDocuments({ post: postId }),
-			Comment.countDocuments({ post: postId, parentComment: null }),
-		]);
+		const comments = (await Comment.find({
+			post: postId,
+			parentComment: null,
+		}).populate(defaultCommentPopulation)) as IComment[];
 
-		if (!post) {
-			res.status(404).json({ message: "Post not found" });
-			return;
-		}
-
-		const commentsQuery = Comment.find({ post: postId, parentComment: null });
-
-		if (req.query.offset) {
-			const offset = parseInt(req.query.offset as string);
-			commentsQuery.skip(offset);
-		}
-
-		if (req.query.limit) {
-			const limit = parseInt(req.query.limit as string);
-			commentsQuery.limit(limit);
-		}
-
-		// TODO: adjust sortBy options
-		if (req.query.sortBy) {
-			const sort = req.query.sortBy as string;
-			if (sort === "likes") {
-				commentsQuery.sort({ likes: -1, updatedAt: -1 });
-			} else if (sort === "dislikes") {
-				commentsQuery.sort({ dislikes: -1, updatedAt: -1 });
-			} else if (sort === "reactions") {
-				commentsQuery.sort({ reactions: -1, updatedAt: -1 });
-			} else if (sort === "newest") {
-				commentsQuery.sort({ updatedAt: -1 });
-			} else if (sort === "replies") {
-				commentsQuery.sort({ replies: -1, updatedAt: -1 });
-			} else {
-				commentsQuery.sort({ [sort]: -1 });
-			}
-		}
-
-		const comments = await commentsQuery.exec();
-
-		res.status(200).json({
-			comments,
-			meta: { total: commentsCount, totalParent: parentCommentsCount },
+		const commentsWithTopReactions = comments.map((comment) => {
+			return getDocumentWithTopReactions(comment);
 		});
+
+		res.status(200).json(commentsWithTopReactions);
 	},
 );
 
@@ -89,16 +54,15 @@ export const getReplies = expressAsyncHandler(
 			return;
 		}
 
-		const { limit = 3, offset = 0 } = req.query;
-
 		const replies = await Comment.find({ parentComment: req.params.id })
 			.sort({ updatedAt: -1 })
-			.skip(Number(offset))
-			.limit(Number(limit))
-			.populate("author", "firstName lastName avatarUrl isDeleted")
-			.exec();
+			.populate(defaultCommentPopulation);
 
-		res.status(200).json({ replies });
+		const commentsWithTopReactions = replies.map((reply) => {
+			return getDocumentWithTopReactions(reply);
+		});
+
+		res.status(200).json(commentsWithTopReactions); // removed offset + limit
 	},
 );
 
@@ -111,7 +75,7 @@ export const getCommentById = expressAsyncHandler(
 			Post.findById(req.params.post),
 			Comment.findById(req.params.id).populate(
 				"author",
-				"firstName lastName avatarUrl isDeleted",
+				"fullName avatarUrl isDeleted",
 			),
 		]);
 
@@ -172,9 +136,8 @@ export const createComment = [
 				{ new: true, session },
 			);
 
-			const author = {
-				firstName: user.firstName,
-				lastName: user.lastName,
+			const authorPreview = {
+				fullName: user.fullName,
 				_id: user._id,
 				avatarUrl: user.avatarUrl,
 			};
@@ -185,18 +148,16 @@ export const createComment = [
 				_id: newComment._id,
 				createdAt: new Date(),
 				updatedAt: new Date(),
-				likes: [],
+				reactions: [],
 				replies: [],
 				isDeleted: false,
 				parentComment: null,
-				author,
+				author: authorPreview,
 			};
 
 			await session.commitTransaction();
 
-			res
-				.status(201)
-				.json({ message: "Comment created", comment: commentWithAuthor });
+			res.status(201).json(commentWithAuthor);
 		} catch (err) {
 			await session.abortTransaction();
 			throw new Error(err);
@@ -246,7 +207,14 @@ export const updateComment = [
 		comment.content = req.body.content;
 		await comment.save();
 
-		res.status(201).json({ message: "Comment updated", comment });
+		const updatedComment = (await Comment.findById(req.params.id).populate(
+			defaultCommentPopulation,
+		)) as IComment;
+
+		const updatedCommentWithTopReactions =
+			getDocumentWithTopReactions(updatedComment);
+
+		res.status(201).json(updatedCommentWithTopReactions);
 	}),
 ];
 
@@ -280,12 +248,15 @@ export const deleteComment = [
 
 		comment.content = "[deleted]";
 		comment.isDeleted = true;
-		const updatedComment = await comment.save();
+		const updatedComment = (await Comment.findByIdAndUpdate(
+			req.params.id,
+			comment,
+			{ new: true },
+		).populate(defaultCommentPopulation)) as IComment;
 
-		res.status(200).json({
-			message: "Comment deleted successfully",
-			comment: updatedComment,
-		});
+		const commentWithTopReactions = getDocumentWithTopReactions(updatedComment);
+
+		res.status(200).json(commentWithTopReactions);
 	}),
 ];
 
@@ -323,7 +294,7 @@ export const createCommentReply = [
 				content: req.body.content,
 				post: post,
 				author: user._id,
-				likes: [],
+				reactions: [],
 				replies: [],
 				isDeleted: false,
 				parentComment: _id,
@@ -344,7 +315,11 @@ export const createCommentReply = [
 
 			await session.commitTransaction();
 
-			res.status(201).json({ newComment });
+			const populatedNewComment = await Comment.findById(
+				newComment._id,
+			).populate(defaultCommentPopulation);
+
+			res.status(201).json(populatedNewComment);
 		} catch (err) {
 			await session.abortTransaction();
 			throw new Error(err);
@@ -388,7 +363,7 @@ export const reactToComment = [
 
 		const existingReaction = await Reaction.findOne({
 			parent: comment._id,
-			author: user._id,
+			user: user._id,
 		});
 
 		if (!existingReaction) {
@@ -408,7 +383,13 @@ export const reactToComment = [
 
 		await comment.save();
 
-		res.status(201).json({ message: "Reaction added", comment });
+		const updatedComment = (await Comment.findById(req.params.id).populate(
+			defaultCommentPopulation,
+		)) as IComment;
+
+		const commentWithTopReactions = getDocumentWithTopReactions(updatedComment);
+
+		res.status(201).json(commentWithTopReactions);
 	}),
 ];
 
@@ -436,8 +417,8 @@ export const unreactToComment = [
 		}
 
 		const existingReaction = await Reaction.findOne({
-			parent: comment._id.toString(),
-			user: user._id.toString(),
+			parent: comment._id,
+			user: user._id,
 		});
 
 		if (!existingReaction) {
@@ -453,6 +434,12 @@ export const unreactToComment = [
 
 		await comment.save();
 
-		res.status(201).json({ message: "Reaction removed", comment });
+		const updatedComment = (await Comment.findById(req.params.id).populate(
+			defaultCommentPopulation,
+		)) as IComment;
+
+		const commentWithTopReactions = getDocumentWithTopReactions(updatedComment);
+
+		res.status(201).json(commentWithTopReactions);
 	}),
 ];

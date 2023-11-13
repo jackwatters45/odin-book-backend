@@ -18,7 +18,8 @@ import { IUser } from "../../types/IUser";
 import useResetToken from "./utils/useResetToken";
 import validateAndFormatUsername from "./utils/validateAndFormatUsername";
 import refreshTokensMiddleware from "../middleware/refreshTokens";
-import { authenticateJwt } from "../middleware/authenticateJwt";
+import authenticateJwt from "../middleware/authenticateJwt";
+import validateBirthdayDate from "../utils/validateBirthdayDate";
 
 const log = debug("log:auth:controller");
 
@@ -38,7 +39,7 @@ const loginUser = async (userId: string) => {
 			userId,
 			{ refreshTokens: [refreshToken] },
 			{ new: true },
-		);
+		).select("verification");
 
 		if (!updatedUser) throw new Error("User not found.");
 
@@ -54,13 +55,8 @@ const loginUser = async (userId: string) => {
 };
 
 // TODO cookie options
-export const handleUserLogin = async (res: Response, user: IUser) => {
-	const {
-		jwtToken,
-		refreshToken,
-		message,
-		user: userWithoutPassword,
-	} = await loginUser(user._id);
+export const handleUserLogin = async (res: Response, userId: string) => {
+	const { jwtToken, refreshToken, message, user } = await loginUser(userId);
 
 	res.cookie("jwt", jwtToken, {
 		maxAge: 3600000,
@@ -76,16 +72,12 @@ export const handleUserLogin = async (res: Response, user: IUser) => {
 		// sameSite: "none",
 	});
 
-	const { isVerified, type } = userWithoutPassword.verification;
-	if (
-		!isVerified &&
-		nodeEnv === "production" &&
-		userWithoutPassword.userType !== "guest"
-	) {
+	const { isVerified, type } = user.verification;
+	if (!isVerified && nodeEnv === "production" && user.userType !== "guest") {
 		await generateAndSendToken(user, "verification", type);
 	}
 
-	res.status(200).json({ message, user: userWithoutPassword });
+	res.status(200).json({ message, user: user });
 };
 
 // @desc    Log in a user
@@ -118,7 +110,7 @@ export const postLogin = [
 							.json({ message: info.message || "Invalid credentials" });
 						return;
 					}
-					await handleUserLogin(res, user);
+					await handleUserLogin(res, user._id);
 				},
 			)(req, res, next);
 		},
@@ -144,7 +136,7 @@ export const postLoginForgotPassword = expressAsyncHandler(
 
 		await resetResetPassword(user);
 
-		await handleUserLogin(res, user);
+		await handleUserLogin(res, user._id);
 	},
 );
 
@@ -153,15 +145,15 @@ export const postLoginForgotPassword = expressAsyncHandler(
 // @access  Public
 export const postLoginGuest = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		const user = await User.create(
-			new User({
-				firstName: "guest",
-				lastName: "user",
-				userType: "guest",
-				validUntil: Date.now() + 1000 * 60 * 15,
-			}),
-		);
-		await handleUserLogin(res, user);
+		const user = await User.create({
+			firstName: "guest",
+			lastName: "user",
+			fullName: "guest user",
+			userType: "guest",
+			expiresAt: new Date(Date.now() + 900000),
+		});
+
+		await handleUserLogin(res, user._id);
 	},
 );
 
@@ -210,19 +202,7 @@ export const postSignUp = [
 		)
 		.custom((birthday) => {
 			const birthDate = new Date(birthday);
-			const currentDate = new Date();
-			let age = currentDate.getFullYear() - birthDate.getFullYear();
-			const m = currentDate.getMonth() - birthDate.getMonth();
-
-			if (m < 0 || (m === 0 && currentDate.getDate() < birthDate.getDate())) {
-				age--;
-			}
-
-			if (age < 13) {
-				throw new Error("User must be at least 13 years old to register.");
-			}
-
-			return true;
+			return validateBirthdayDate(birthDate);
 		}),
 	body("pronouns")
 		.optional()
@@ -263,6 +243,7 @@ export const postSignUp = [
 		const user = new User({
 			firstName,
 			lastName,
+			fullName: `${firstName} ${lastName}`,
 			password,
 			birthday,
 			pronouns: req.body?.pronouns ?? undefined,
@@ -276,7 +257,7 @@ export const postSignUp = [
 
 		await user.save();
 
-		await handleUserLogin(res, user);
+		await handleUserLogin(res, user._id);
 	}),
 ];
 
@@ -296,7 +277,7 @@ export const postLogout = expressAsyncHandler(
 			_id: string;
 		};
 
-		const user = await User.findById(_id);
+		const user = await User.findById(_id).select("refreshTokens");
 		if (!user) {
 			res.status(401).json({ message: "Invalid or expired token" });
 			return;
@@ -515,7 +496,7 @@ export const postFindAccount = expressAsyncHandler(async (req, res) => {
 
 	const user = await User.findOne({
 		[usernameType]: formattedUsername,
-	}).select("firstName lastName userType avatarUrl phoneNumber email");
+	}).select("fullName avatarUrl phoneNumber email");
 	if (!user) {
 		res.status(404).json({ message: "User not found." });
 		return;
@@ -781,7 +762,7 @@ export const getLoginFacebookCallback = (req: Request, res: Response) => {
 			const {
 				jwtToken,
 				refreshToken,
-				user: userWithoutPassword,
+				user: userObj,
 			} = await loginUser(user?._id);
 
 			res.cookie("jwt", jwtToken, {
@@ -798,11 +779,11 @@ export const getLoginFacebookCallback = (req: Request, res: Response) => {
 				// sameSite: "none",
 			});
 
-			const { isVerified, type } = userWithoutPassword.verification;
+			const { isVerified, type } = userObj.verification;
 			if (
 				!isVerified &&
 				nodeEnv === "production" &&
-				userWithoutPassword.userType !== "guest"
+				userObj.userType !== "guest"
 			) {
 				await generateAndSendToken(user, "verification", type);
 			}
@@ -835,7 +816,7 @@ export const getLoginGoogleCallback = (req: Request, res: Response) => {
 			const {
 				jwtToken,
 				refreshToken,
-				user: userWithoutPassword,
+				user: userObj,
 			} = await loginUser(user?._id);
 
 			res.cookie("jwt", jwtToken, {
@@ -852,11 +833,11 @@ export const getLoginGoogleCallback = (req: Request, res: Response) => {
 				// sameSite: "none",
 			});
 
-			const { isVerified, type } = userWithoutPassword.verification;
+			const { isVerified, type } = userObj.verification;
 			if (
 				!isVerified &&
 				nodeEnv === "production" &&
-				userWithoutPassword.userType !== "guest"
+				userObj.userType !== "guest"
 			) {
 				await generateAndSendToken(user, "verification", type);
 			}
@@ -889,7 +870,7 @@ export const getLoginGithubCallback = (req: Request, res: Response) => {
 			const {
 				jwtToken,
 				refreshToken,
-				user: userWithoutPassword,
+				user: userObj,
 			} = await loginUser(user?._id);
 
 			res.cookie("jwt", jwtToken, {
@@ -906,11 +887,11 @@ export const getLoginGithubCallback = (req: Request, res: Response) => {
 				// sameSite: "none",
 			});
 
-			const { isVerified, type } = userWithoutPassword.verification;
+			const { isVerified, type } = userObj.verification;
 			if (
 				!isVerified &&
 				nodeEnv === "production" &&
-				userWithoutPassword.userType !== "guest"
+				userObj.userType !== "guest"
 			) {
 				await generateAndSendToken(user, "verification", type);
 			}

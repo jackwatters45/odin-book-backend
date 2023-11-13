@@ -40,12 +40,15 @@ const configAuth = (app: Application) => {
 			try {
 				const { usernameType: loginType, formattedUsername } =
 					validateAndFormatUsername(username);
-				const user = await User.findOne({ [loginType]: formattedUsername });
+				const user = await User.findOne({
+					[loginType]: formattedUsername,
+				}).select("password");
 				if (!user)
 					return done(null, false, {
 						message: "User with this email/phone not found",
 					});
 
+				log(user);
 				if (!user.password)
 					return done(null, false, {
 						message: "User should be logging in with non-local strategy",
@@ -107,6 +110,7 @@ const configAuth = (app: Application) => {
 							email: email,
 							firstName: profile.name?.givenName,
 							lastName: profile.name?.familyName,
+							fullName: `${profile.name?.givenName} ${profile.name?.familyName}`,
 							facebookId: profile.id,
 							birthday: profile.birthday,
 							pronouns: profile.gender ?? undefined,
@@ -151,6 +155,7 @@ const configAuth = (app: Application) => {
 							email: email,
 							firstName: profile.name?.givenName,
 							lastName: profile.name?.familyName,
+							fullName: `${profile.name?.givenName} ${profile.name?.familyName}`,
 							googleId: profile.id,
 							avatarUrl: avatar,
 						});
@@ -202,6 +207,7 @@ const configAuth = (app: Application) => {
 							email: email,
 							firstName: firstName,
 							lastName: lastName,
+							fullName: `${firstName} ${lastName}`,
 							githubId: profile.id,
 							avatarUrl: avatar,
 						});

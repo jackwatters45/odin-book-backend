@@ -4,16 +4,11 @@ import { ValidationChain, body, validationResult } from "express-validator";
 import debug from "debug";
 
 import User from "../models/user.model";
-import {
-	IUser,
-	LifeEventData,
-	PlaceLivedData,
-	WorkData,
-} from "../../types/IUser";
+import { IUser, PlaceLivedData, WorkData } from "../../types/IUser";
 import Post from "../models/post.model";
 import Comment from "../models/comment.model";
 import validateAndFormatUsername from "./utils/validateAndFormatUsername";
-import { authenticateJwt } from "../middleware/authenticateJwt";
+import authenticateJwt from "../middleware/authenticateJwt";
 import { uploadFileToCloudinary } from "../utils/uploadToCloudinary";
 import { resizeImage } from "../utils/resizeImages";
 import upload from "../config/multer";
@@ -44,6 +39,11 @@ import aboutYouValidation from "./validations/aboutYouValidation";
 import namePronunciationValidation from "./validations/namePronunciationValidation";
 import favoriteQuotesValidation from "./validations/favoriteQuotesValidation";
 import otherNamesValidation from "./validations/otherNamesValidation";
+import { ObjectId, isValidObjectId } from "mongoose";
+import authenticateJwtOptional from "../middleware/authenticateJwtOptional";
+import validateBirthdayDate from "../utils/validateBirthdayDate";
+import defaultPostPopulation from "./utils/defaultPostPopulation";
+import getPostWithTopReactions from "./utils/getDocumentWithTopReactions";
 
 const log = debug("log:user:controller");
 
@@ -74,21 +74,26 @@ const userDefaultPopulation = [
 	},
 ];
 
+const getMutualFriends = (userA: IUser, userB: IUser) => {
+	const userAFriends = userA.friends as ObjectId[];
+	const userBFriends = userB.friends as ObjectId[];
+
+	return userAFriends.filter((friend) => userBFriends.includes(friend));
+};
+
 // @desc    Get user by id
 // @route   GET /users/:id
 // @access  Public
-export const getUserById = expressAsyncHandler(
-	async (req: Request, res: Response) => {
-		// TODO turn into middleware
-		const isValidObjectId = (id: string) => {
-			return /^[a-fA-F0-9]{24}$/.test(id);
-		};
+export const getUserById = [
+	authenticateJwtOptional,
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const reqUser = req.user as IUser;
 
 		if (!isValidObjectId(req.params.id)) {
 			res.status(400).json({ message: "User not found" });
 			return;
 		}
-		// TODO: add other necessary fields, populate data
+
 		const [user, posts, comments] = await Promise.all([
 			User.findById(req.params.id).populate(userDefaultPopulation),
 			Post.find({ published: true, author: req.params.id }),
@@ -107,10 +112,50 @@ export const getUserById = expressAsyncHandler(
 			return;
 		}
 
-		const userWithCommentsPosts = { ...user?.toJSON(), posts, comments };
+		const mutualFriends = reqUser ? getMutualFriends(reqUser, user) : [];
+
+		const userWithCommentsPosts = {
+			...user?.toJSON(),
+			posts,
+			comments,
+			mutualFriends,
+		};
 		res.status(200).json(userWithCommentsPosts);
-	},
-);
+	}),
+];
+
+// @desc    Search users
+// @route   GET /users/search
+// @access  Private
+export const searchUsers = [
+	authenticateJwt,
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const user = req.user as IUser;
+		if (!user) {
+			res.status(401).json({ message: "Unauthorized" });
+			return;
+		}
+
+		const { q } = req.query;
+
+		const query = q
+			? {
+					fullName: { $regex: q as string, $options: "i" },
+			  }
+			: {};
+
+		const users = await User.find(query).select("fullName avatarUrl friends");
+
+		const usersWithIsFriend = users.map((userResult) => ({
+			...userResult.toJSON(),
+			isFriend: user.friends.some((friend) => {
+				return String(friend as string) === String(userResult._id);
+			}),
+		}));
+
+		res.status(200).json(usersWithIsFriend);
+	}),
+];
 
 // @desc    Search users friends by name
 // @route   GET /users/search/friends
@@ -125,15 +170,17 @@ export const searchUserFriendsByName = [
 		}
 
 		const { q } = req.query;
-		if (!q) {
-			res.status(400).json({ message: "Name is required" });
-			return;
-		}
 
-		const users = await User.find({
-			fullName: { $regex: q as string, $options: "i" },
-			_id: { $in: user.friends },
-		}).select("fullName avatarUrl");
+		const query = q
+			? {
+					fullName: { $regex: q as string, $options: "i" },
+					_id: { $in: user.friends },
+			  }
+			: {
+					_id: { $in: user.friends },
+			  };
+
+		const users = await User.find(query).select("fullName avatarUrl");
 
 		res.status(200).json({ users });
 	}),
@@ -205,7 +252,7 @@ export const getDeletedUserById = [
 		const [user, posts, comments] = await Promise.all([
 			User.findById(req.params.id).populate({
 				path: "deletedData.deletedBy",
-				select: "firstName lastName",
+				select: "fullName",
 			}),
 			Post.find({ published: true, author: req.params.id }),
 			Comment.find({ author: req.params.id }),
@@ -294,6 +341,7 @@ export const createUser = [
 		const user = new User({
 			firstName,
 			lastName,
+			fullName: `${firstName} ${lastName}`,
 			password,
 			birthday: new Date(birthday),
 			pronouns: req.body?.pronouns ?? undefined,
@@ -631,6 +679,7 @@ export const updateUserEmail = updateUserStandardField({
 		},
 	}) => {
 		if (audience) user.audienceSettings.email = audience;
+
 		user.email = email;
 	},
 	populateOptions: userDefaultPopulation,
@@ -805,7 +854,11 @@ export const updateUserBirthday = updateUserStandardField({
 			});
 			return false;
 		}
+
 		const birthday = new Date(year, month, day);
+
+		validateBirthdayDate(birthday);
+
 		user.birthday = birthday;
 	},
 	populateOptions: userDefaultPopulation,
@@ -906,9 +959,6 @@ export const createUserOtherNames = updateUserStandardField({
 		);
 
 		if (audience) {
-			log("audience", audience);
-			log("otherNameId", otherNameId);
-			log("user.audienceSettings.otherNames", user.audienceSettings.otherNames);
 			user.audienceSettings.otherNames[otherNameId] = audience;
 			user.markModified("audienceSettings.otherNames");
 		}
@@ -1109,6 +1159,11 @@ export const createUserWork = updateUserStandardField({
 			user.audienceSettings.work[workId] = audience;
 			user.markModified("audienceSettings.work");
 		}
+
+		// intro
+		if (!user.intro.work) user.intro.work = {};
+		user.intro.work[workId] = false;
+		user.markModified("intro.work");
 	},
 
 	populateOptions: userDefaultPopulation,
@@ -1166,10 +1221,16 @@ export const createUserEducation = updateUserStandardField({
 			user.education?.[user.education?.length - 1]._id,
 		);
 
+		// audience
 		if (audience) {
 			user.audienceSettings.education[educationId] = audience;
 			user.markModified("audienceSettings.education");
 		}
+
+		// intro
+		if (!user.intro.education) user.intro.education = {};
+		user.intro.education[educationId] = false;
+		user.markModified("intro.education");
 	},
 	populateOptions: userDefaultPopulation,
 });
@@ -1285,143 +1346,69 @@ export const deleteUserPlacesLived = updateUserStandardField({
 	populateOptions: userDefaultPopulation, // maybe not necessary
 });
 
-// @desc    Get user posts & tagged posts with photos
-// @route   GET /users/:id/photos
+type PhotoConditions =
+	| [{ author: string }, { taggedUsers?: string }]
+	| [{ author: string }];
+
+const getUserPhotos = async (
+	req: Request,
+	res: Response,
+	conditions: PhotoConditions,
+) => {
+	const posts = await Post.find({
+		$or: conditions,
+		media: {
+			$exists: true,
+			$ne: [] || null,
+			$elemMatch: { type: "image" },
+		},
+	})
+		.select("media")
+		.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
+
+	const photos = posts.reduce((acc, post) => {
+		if (post.media && post.media.length > 0) {
+			post.media.forEach((mediaItem) => {
+				acc.push({ media: mediaItem, postId: post._id });
+			});
+		}
+		return acc;
+	}, [] as { media: string; postId: string }[]);
+
+	res.status(200).json(photos);
+};
+
+// @desc    Get user tagged + posted photos
+// @route   GET /users/:id/photos-of
 // @access  Public
-export const getUserPhotos = expressAsyncHandler(
+export const getUserPhotosOf = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const userId = String(req.params.id);
-		const posts = await Post.find({
-			$or: [{ author: userId }, { taggedUsers: userId }],
-			media: {
-				$exists: true,
-				$ne: [] || null,
-				$elemMatch: { type: "image" },
-			},
-		})
-			.select("media")
-			.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
-
-		const photos = posts.reduce((acc, post) => {
-			if (post.media && post.media.length > 0) {
-				post.media.forEach((mediaItem) => {
-					if (mediaItem.type !== "image") return;
-					acc.push({ media: mediaItem.url, postId: post._id });
-				});
-			}
-			return acc;
-		}, [] as { media: string; postId: string }[]);
-
-		res.status(200).json(photos);
+		await getUserPhotos(req, res, [
+			{ author: userId },
+			{ taggedUsers: userId },
+		]);
 	},
 );
 
-// @desc Get user life events
-// @route GET /users/:id/life-events
-// @access Public
-export const getUserLifeEvents = expressAsyncHandler(
+// @desc    Get user posted photos
+// @route   GET /users/:id/photos-by
+// @access  Public
+export const getUserPhotosBy = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const userId = String(req.params.id);
-		const lifeEvents = await Post.find({
-			author: userId,
-			lifeEvent: { $exists: true, $ne: null },
-		})
-			.select("lifeEvent")
-			.populate("lifeEvent")
-			.sort({ "lifeEvent.date": -1 })
-			.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
-
-		const formattedLifeEvents = lifeEvents.map((post) => {
-			const lifeEvent = post.lifeEvent as LifeEventData;
-			return {
-				_id: lifeEvent?._id,
-				postId: post._id,
-				title: lifeEvent?.title,
-				date: lifeEvent?.date,
-			};
-		});
-
-		res.status(200).json(formattedLifeEvents);
+		await getUserPhotos(req, res, [{ author: userId }]);
 	},
 );
-
-// @desc    Update user basic info
-// @route   PATCH /users/:id/basic
-// @access  Private
-export const updateUserBasicInfo = [
-	authenticateJwt,
-	body("firstName")
-		.trim()
-		.notEmpty()
-		.withMessage("First name is required and should not be empty"),
-	body("lastName")
-		.trim()
-		.notEmpty()
-		.withMessage("Last name is required and should not be empty"),
-	body("phoneNumber")
-		.optional()
-		.trim()
-		.notEmpty()
-		.withMessage(
-			"phoneNumber should not be empty if provided and should be a valid phone number",
-		),
-	body("email")
-		.optional()
-		.trim()
-		.notEmpty()
-		.withMessage(
-			"Email should not be empty if provided and should be a valid email",
-		),
-	body("birthday")
-		.trim()
-		.notEmpty()
-		.isISO8601()
-		.withMessage(
-			"Birthday is required and should be a valid date in ISO 8601 format",
-		),
-	body("pronouns")
-		.optional()
-		.trim()
-		.notEmpty()
-		.withMessage("Pronouns should not be empty if provided"),
-	body("userType")
-		.trim()
-		.isIn(["admin", "user"])
-		.withMessage("User type must be either admin or user"),
-	expressAsyncHandler(async (req: Request, res: Response) => {
-		const errors = validationResult(req);
-		if (!errors.isEmpty()) {
-			res.status(400).json({ errors: errors.array() });
-			return;
-		}
-
-		const reqUser = req.user as IUser;
-
-		const userId = String(req.params.id);
-		if (String(reqUser._id) !== userId && reqUser.userType !== "admin") {
-			res.status(403).json({ message: "Unauthorized" });
-			return;
-		}
-
-		const user = await User.findById(userId);
-
-		if (!user) {
-			res.status(404).json({ message: "User not found" });
-			return;
-		}
-
-		user.set(req.body);
-		const updatedUser = await user.save();
-
-		res.status(201).json({ updatedUser, message: "User updated successfully" });
-	}),
-];
 
 // @desc    Get user posts
 // @route   GET /users/:id/posts
 // @access  Public
-export const getUserPosts = expressAsyncHandler(
-	async (req: Request, res: Response) => {
+export const getUserPosts = [
+	authenticateJwt,
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const reqUser = req.user as IUser;
+
 		const user = await User.findById(req.params.id);
 		if (!user) {
 			res.status(404).json({ message: "User not found" });
@@ -1433,27 +1420,104 @@ export const getUserPosts = expressAsyncHandler(
 			return;
 		}
 
-		const postCount = await Post.countDocuments({ author: req.params.id });
-		const posts = await Post.find({ author: req.params.id })
+		const isSelf = String(reqUser._id) === String(user._id);
+
+		const isFriends = reqUser.friends.some(
+			(friend) => String(friend) === String(user._id),
+		);
+
+		const audienceQuery = isSelf
+			? {}
+			: isFriends
+			? {
+					$or: [{ audience: "Friends" }, { audience: "Public" }],
+			  }
+			: { audience: "Public" };
+
+		const fromQuery = {
+			$or: [
+				{ author: req.params.id },
+				{ to: req.params.id },
+				{ taggedUsers: { $elemMatch: { $eq: req.params.id } } },
+			],
+		};
+		const query = { ...fromQuery, ...audienceQuery };
+
+		const postCount = await Post.countDocuments(query);
+
+		const posts = await Post.find(query)
 			.skip(req.query.offset ? parseInt(req.query.offset as string) : 0)
 			.limit(req.query.limit ? parseInt(req.query.limit as string) : 0)
-			.sort({ createdAt: -1 });
+			.sort({ createdAt: -1 })
+			.populate(defaultPostPopulation);
+
+		const postsWithTopReactions = posts.map(getPostWithTopReactions);
 
 		res.status(200).json({
-			posts,
+			posts: postsWithTopReactions,
 			message: "Posts retrieved successfully",
 			meta: { total: postCount },
 		});
-	},
-);
+	}),
+];
 
-// @desc    Get user friends
+const getUserFriendsData = (user: IUser, reqUser: IUser) => {
+	const userFriends = user?.friends as IUser[];
+	const reqUserFriends = reqUser.friends as IUser[];
+
+	const reqUserFriendIdsSet = new Set(
+		reqUserFriends.map((friend) => friend._id.toString()),
+	);
+
+	const mutualAndReqUserFriends = userFriends?.map((friend) => {
+		const friendsFriends = friend.friends as IUser[];
+		const friendFriendIdsSet = new Set(
+			friendsFriends.map((f) => f._id.toString()),
+		);
+
+		const mutualFriends = [...reqUserFriendIdsSet].filter((id) =>
+			friendFriendIdsSet.has(id),
+		);
+
+		const isFriend = reqUserFriendIdsSet.has(friend._id.toString());
+
+		const requestSent = reqUser.friendRequestsSent.some(
+			(id) => String(id) === String(friend.id),
+		);
+		const requestReceived = reqUser.friendRequestsReceived.some(
+			(id) => String(id) === String(friend.id),
+		);
+
+		return {
+			...friend.toObject(),
+			mutualFriends,
+			isFriend,
+			requestSent,
+			requestReceived,
+		};
+	});
+
+	return mutualAndReqUserFriends;
+};
+
+const getReqUserUserFriendsData = (userFriends: IUser[]) => {
+	return userFriends?.map((friend) => ({
+		...friend.toObject(),
+		mutualFriends: userFriends.map((f) => f._id.toString()),
+		isFriend: true,
+	}));
+};
+
+// @desc    Get user friends all
 // @route   GET /users/:id/friends
 // @access  Public
-export const getUserFriends = expressAsyncHandler(
-	async (req: Request, res: Response) => {
+export const getUserFriends = [
+	authenticateJwt,
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const reqUser = req.user as IUser;
+
 		const user = await User.findById(req.params.id)
-			.populate("friends", "avatarUrl firstName lastName")
+			.populate("friends", "avatarUrl fullName friends education placesLived")
 			.select("friends isDeleted")
 			.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
 
@@ -1467,9 +1531,48 @@ export const getUserFriends = expressAsyncHandler(
 			return;
 		}
 
-		res.status(200).json(user.friends);
-	},
-);
+		const mutualAndReqUserFriends = getUserFriendsData(user, reqUser);
+
+		res.status(200).json(mutualAndReqUserFriends);
+	}),
+];
+
+// @desc    Get user friends suggestions
+// @route   GET /users/friends/suggestions
+// @access  Public
+export const getUserFriendsSuggestions = [
+	authenticateJwt,
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const pageLength = 12;
+
+		const reqUser = req.user as IUser;
+
+		const userFriendsIds = reqUser.friends as ObjectId[];
+
+		const usersWithMutualFriends = await User.find({
+			_id: { $nin: userFriendsIds, $ne: reqUser._id },
+			friends: { $in: userFriendsIds },
+		})
+			.populate("friends", "avatarUrl fullName ")
+			.select("friends avatarUrl fullName")
+			.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
+
+		log(usersWithMutualFriends);
+
+		const usersWithMutualFriendsCount = usersWithMutualFriends.map((user) => {
+			const meep = getMutualFriends(user as IUser, reqUser);
+			log(meep);
+			return meep;
+		});
+
+		log(usersWithMutualFriendsCount);
+
+		// if (req.query.page) {
+		// 		const offset = parseInt(req.query.page as string) * pageLength;
+		// 		postsQuery.skip(offset);
+		// 	}
+	}),
+];
 
 // @desc    Get user saved posts
 // @route   GET /users/:id/saved-posts
@@ -1527,15 +1630,16 @@ export const getUserSavedPosts = [
 ];
 
 // @desc    Send friend request
-// @route   POST /users/:id/friend-requests
+// @route   POST /users/me/friend-requests/:id
 // @access  Private
 export const sendFriendRequest = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
+		const reqUserId = String(reqUser._id);
 
 		const userId = String(req.params.id);
-		if (String(reqUser._id) === userId) {
+		if (reqUserId === userId) {
 			res
 				.status(400)
 				.json({ message: "You cannot send a friend request to yourself" });
@@ -1573,6 +1677,53 @@ export const sendFriendRequest = [
 	}),
 ];
 
+// @desc    Cancel friend request
+// @route   DELETE /users/me/friend-requests/:id
+// @access  Private
+export const cancelFriendRequest = [
+	authenticateJwt,
+	expressAsyncHandler(async (req: Request, res: Response) => {
+		const reqUser = req.user as IUser;
+		const reqUserId = String(reqUser._id);
+
+		const userId = String(req.params.id);
+		if (reqUserId === userId) {
+			res.status(400).json({ message: "Invalid request" });
+			return;
+		}
+
+		const userToUnrequest = (await User.findById(userId)) as IUser;
+		if (!userToUnrequest || userToUnrequest.isDeleted) {
+			res.status(404).json({ message: "User not found" });
+			return;
+		}
+
+		// Check if a friend request was sent
+		const userHasSentRequest =
+			userToUnrequest.friendRequestsReceived.includes(reqUser._id) &&
+			reqUser.friendRequestsSent.some(
+				(id) => String(id) === String(userToUnrequest.id),
+			);
+		if (!userHasSentRequest) {
+			res.status(400).json({ message: "No friend request to cancel" });
+			return;
+		}
+
+		// Remove the friend request
+		userToUnrequest.friendRequestsReceived =
+			userToUnrequest.friendRequestsReceived.filter(
+				(id) => String(id) !== String(reqUser._id),
+			);
+		await userToUnrequest.save();
+
+		await User.findByIdAndUpdate(reqUser._id, {
+			$pull: { friendRequestsSent: userToUnrequest._id },
+		});
+
+		res.status(200).json({ message: "Friend request cancelled successfully" });
+	}),
+];
+
 // @desc    Remove friend
 // @route   DELETE /users/me/friends/:friendId
 // @access  Private
@@ -1580,41 +1731,48 @@ export const unfriendUser = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
+		const reqUserId = String(reqUser._id);
+
 		const userToUnfriendId = String(req.params.friendId);
 
-		if (String(reqUser._id) === userToUnfriendId) {
+		if (reqUserId === userToUnfriendId) {
 			res.status(400).json({ message: "Cannot remove self as friend" });
 			return;
 		}
 
-		const userToRemove = await User.findById(userToUnfriendId);
+		// get user to unfriend
+		const userToRemove = (await User.findById(userToUnfriendId).populate(
+			"friends",
+			"avatarUrl fullName friends",
+		)) as IUser;
 
 		if (!userToRemove || userToRemove.isDeleted) {
 			res.status(404).json({ message: "User not found" });
 			return;
 		}
 
-		const userAlreadyRemoved = !userToRemove.friends.includes(reqUser._id);
-		if (userAlreadyRemoved) {
-			res.status(400).json({ message: "Already not friends with user" });
-			return;
-		}
+		// get user to unfriend's friends and remove reqUser
+		const userToRemoveFriends = userToRemove.friends as IUser[];
 
-		const userToRemoveIndex = userToRemove.friends.indexOf(reqUser._id);
-		userToRemove.friends.splice(userToRemoveIndex, 1);
+		userToRemove.friends = userToRemoveFriends.filter(
+			(friend) => String(friend._id) !== reqUserId,
+		);
 		await userToRemove.save();
 
-		const updatedFriendsList = await User.findByIdAndUpdate(
-			reqUser._id,
+		// remove user to unfriend from reqUser's friends
+		const updatedUser = (await User.findByIdAndUpdate(
+			reqUserId,
 			{
 				$pull: { friends: userToRemove._id },
 			},
 			{ new: true },
-		).select("friends");
+		).populate("friends", "avatarUrl fullName friends")) as IUser;
+
+		const user = getReqUserUserFriendsData(updatedUser.friends as IUser[]);
 
 		res.status(200).json({
 			message: "Friend removed successfully",
-			updatedFriendsList,
+			user,
 		});
 	}),
 ];
@@ -1636,56 +1794,48 @@ export const acceptFriendRequest = [
 		}
 
 		const userAlreadyFriended =
-			userToAccept.friends.includes(reqUser._id) ||
-			reqUser.friends.includes(userToAccept._id);
+			userToAccept.friends.some(
+				(friend) => String(friend) === String(reqUser._id),
+			) ||
+			reqUser.friends.some(
+				(friend) => String(friend) === String(userToAccept._id),
+			);
 		if (userAlreadyFriended) {
 			res.status(400).json({ message: "Already friends with user" });
 			return;
 		}
 
-		const userToAcceptRequestIndex = userToAccept.friendRequestsSent.findIndex(
+		const userToAcceptRequest = userToAccept.friendRequestsSent.some(
 			(request) => String(request) === reqUser.id,
 		);
 
-		const reqUserRequestIndex = reqUser.friendRequestsReceived.findIndex(
+		const reqUserRequest = reqUser.friendRequestsReceived.some(
 			(request) => String(request) === requestId,
 		);
 
-		if (userToAcceptRequestIndex === -1 || reqUserRequestIndex === -1) {
+		if (!userToAcceptRequest || !reqUserRequest) {
 			res.status(404).json({ message: "Friend request not found" });
 			return;
 		}
 
-		const updatedUser = (await User.findByIdAndUpdate(
-			reqUser._id,
-			{
-				$pull: { friendRequestsReceived: requestId },
-				$addToSet: { friends: userToAccept._id },
-			},
-			{ new: true },
-		).select("friends friendRequestsReceived")) as IUser;
+		await User.findByIdAndUpdate(reqUser._id, {
+			$pull: { friendRequestsReceived: requestId },
+			$addToSet: { friends: userToAccept._id },
+		});
 
-		const updatedOtherUser = (await User.findByIdAndUpdate(
-			userToAccept._id,
-			{
-				$pull: { friendRequestsSent: reqUser._id },
-				$addToSet: { friends: reqUser._id },
-			},
-			{ new: true },
-		).select("friends friendRequestsSent")) as IUser;
+		await User.findByIdAndUpdate(userToAccept._id, {
+			$pull: { friendRequestsSent: reqUser._id },
+			$addToSet: { friends: reqUser._id },
+		});
 
 		res.status(200).json({
 			message: "Friend request accepted successfully",
-			myUpdatedFriendsList: updatedUser.friends,
-			myUpdatedFriendRequestsReceived: updatedUser.friendRequestsReceived,
-			otherUserUpdatedFriendsList: updatedOtherUser.friends,
-			otherUserUpdatedFriendRequestsSent: updatedOtherUser.friendRequestsSent,
 		});
 	}),
 ];
 
 // @desc    Reject friend request
-// @route   POST /users/me/friend-requests/:requestId/reject
+// @route   DELETE /users/me/friend-requests/:requestId/reject
 // @access  Private
 export const rejectFriendRequest = [
 	authenticateJwt,
@@ -1700,45 +1850,50 @@ export const rejectFriendRequest = [
 		}
 
 		const userAlreadyFriended =
-			userToReject.friends.includes(reqUser._id) ||
-			reqUser.friends.includes(userToReject._id);
+			userToReject.friends.some(
+				(friend) => String(friend) === String(reqUser._id),
+			) ||
+			reqUser.friends.some(
+				(friend) => String(friend) === String(userToReject._id),
+			);
 		if (userAlreadyFriended) {
 			res.status(400).json({ message: "Already friends with user" });
 			return;
 		}
 
-		const userToRejectRequestIndex = userToReject.friendRequestsSent.findIndex(
-			(request) => String(request) === reqUser.id,
+		const userToRejectRequest = userToReject.friendRequestsSent.some(
+			(request) => String(request) === String(reqUser.id),
 		);
-		const reqUserRequestIndex = reqUser.friendRequestsReceived.findIndex(
+
+		const reqUserRequest = reqUser.friendRequestsReceived.some(
 			(request) => String(request) === requestId,
 		);
-		if (userToRejectRequestIndex === -1 || reqUserRequestIndex === -1) {
+
+		if (!userToRejectRequest || !reqUserRequest) {
 			res.status(404).json({ message: "Friend request not found" });
 			return;
 		}
 
-		const myUpdatedFriendRequestsReceived = await User.findByIdAndUpdate(
+		// TODO
+		await User.findByIdAndUpdate(
 			reqUser._id,
 			{
 				$pull: { friendRequestsReceived: requestId },
 			},
 			{ new: true },
-		).select("friendRequestsReceived");
-		const otherUserUpdatedFriendRequestsSent = await User.findByIdAndUpdate(
+		);
+
+		// TODO
+		await User.findByIdAndUpdate(
 			userToReject._id,
 			{
 				$pull: { friendRequestsSent: reqUser._id },
 			},
 			{ new: true },
-		).select("friendRequestsSent");
+		);
 
 		res.status(200).json({
 			message: "Friend request rejected successfully",
-			myUpdatedFriendRequestsReceived,
-			myUpdatedFriendsList: reqUser.friends,
-			otherUserUpdatedFriendRequestsSent,
-			otherUserUpdatedFriendsList: userToReject.friends,
 		});
 	}),
 ];

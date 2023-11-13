@@ -1,39 +1,20 @@
 import { body } from "express-validator";
 import { Types } from "mongoose";
-import multer from "multer";
-import { reactionTypes } from "../../models/reaction.model";
-
-const upload = multer({
-	limits: {
-		fileSize: 1024 * 1024 * 5, // limit file size to 5MB
-	},
-	fileFilter: (req, file, cb) => {
-		if (
-			file.mimetype === "image/png" ||
-			file.mimetype === "image/jpg" ||
-			file.mimetype === "image/jpeg"
-		) {
-			cb(null, true);
-		} else {
-			cb(null, false);
-			cb(new Error("Invalid file type. Only jpg, jpeg, and png are allowed."));
-		}
-	},
-});
+import { feelingNames } from "../../constants/Feelings";
 
 const postValidation = [
-	upload.array("media"), // figure out facebook max files
-	body("published").isBoolean().withMessage("Published must be a boolean"),
 	body("content")
 		.optional()
 		.isString()
 		.withMessage("Content must be a string")
-		.isLength({ max: 63206 })
-		.withMessage("Content must be less than 63206 characters"),
-	body("taggedUsers")
+		.isLength({ max: 5280 })
+		.withMessage("Content must be less than 5280 characters"),
+	body("taggedUsers[]")
 		.optional()
 		.isArray()
 		.withMessage("Tagged users must be an array")
+		.isLength({ max: 10 })
+		.withMessage("Tagged users must be less than or equal to 10 users")
 		.custom((value) => value.every((id: string) => Types.ObjectId.isValid(id)))
 		.withMessage("Tagged users must be an array of valid user ids"),
 	body("sharedFrom")
@@ -44,35 +25,31 @@ const postValidation = [
 		.optional()
 		.isString()
 		.withMessage("Feeling must be an object")
-		.isIn([reactionTypes])
+		.isIn([...feelingNames, ""])
 		.withMessage("Feeling must be a valid Feeling type"),
-	body("lifeEvent")
-		.optional()
-		.isObject()
-		.withMessage("Life Event must be an object")
-		.custom((value) => {
-			if (
-				typeof value.title !== "string" ||
-				typeof value.description !== "string" ||
-				Object.prototype.toString.call(value.date) !== "[object Date]"
-			) {
-				throw new Error("Invalid lifeEvent object");
-			}
-			return true;
-		}),
+	body("to").optional().isMongoId().withMessage("To must be a valid ObjectId"),
 	body("checkIn")
 		.optional()
 		.isObject()
-		.withMessage("CheckIn must be an object")
-		.custom((value) => {
-			if (
-				typeof value.longitude !== "number" ||
-				typeof value.latitude !== "number"
-			) {
-				throw new Error("Invalid checkIn object");
-			}
-			return true;
-		}),
+		.withMessage("CheckIn must be an object"),
+	body("checkIn.location")
+		.optional()
+		.isString()
+		.withMessage("CheckIn location must be a string"),
+	body("checkIn.city")
+		.optional()
+		.isString()
+		.withMessage("CheckIn city must be a string")
+		.isLength({ max: 50 })
+		.withMessage("CheckIn city must be less than 50 characters"),
+	body("checkIn.state")
+		.optional()
+		.isString()
+		.withMessage("CheckIn state must be a string"),
+	body("checkIn.country")
+		.optional()
+		.isString()
+		.withMessage("CheckIn country must be a string"),
 	body()
 		.custom((value, { req }) => {
 			return !(
@@ -80,12 +57,12 @@ const postValidation = [
 				!req.body.content &&
 				!req.body.media &&
 				!req.body.feeling &&
-				!req.body.lifeEvent &&
-				!req.body.checkIn
+				!req.body.checkIn &&
+				req.body.sharedFrom
 			);
 		})
 		.withMessage(
-			"At least one of the fields 'content', 'media' 'feeling', 'lifeEvent', or 'checkIn' must be provided",
+			"At least one of the fields 'content', 'media' 'feeling', or 'checkIn' must be provided",
 		),
 ];
 

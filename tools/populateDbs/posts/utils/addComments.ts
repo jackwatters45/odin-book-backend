@@ -3,43 +3,78 @@ import { ObjectId } from "mongoose";
 
 import addReactions from "./addReactions";
 import Comment, { IComment } from "../../../../src/models/comment.model";
-import { getRandValuesFromArray } from "../../utils/populateHelperFunctions";
+import {
+	getRandValuesFromArray,
+	getRandomInt,
+} from "../../utils/populateHelperFunctions";
+import { IPost } from "../../../../src/models/post.model";
 
-export const getComments = (userIds: ObjectId[], max = 3, post: ObjectId) => {
+export const getComments = (
+	userIds: ObjectId[],
+	max = 3,
+	post: Partial<IPost>,
+	parentComment?: ObjectId,
+): IComment[] => {
 	const users = getRandValuesFromArray(userIds, max);
-	return users.map((user) => ({
-		author: user,
-		content: faker.lorem.sentence(),
-		post,
-		likes: getRandValuesFromArray(users, 5),
-	}));
+	return users.map(
+		(user) =>
+			new Comment({
+				author: user,
+				content: faker.lorem.sentence(),
+				post,
+				reactions: [],
+				parentComment: parentComment ?? undefined,
+			}),
+	);
 };
 
 const addComment = async (
-	commentData: Partial<IComment>,
+	comment: IComment,
 	users: ObjectId[],
+	post: Partial<IPost>,
+	maxReplyDepth = 2,
+	currentDepth = 0,
 ): Promise<ObjectId> => {
-	const comment = new Comment(commentData);
-
 	try {
-		comment.reactions = (await addReactions(
-			comment._id,
-			users,
-			5,
-		)) as unknown as ObjectId[];
+		const numReactions = getRandomInt(8 - currentDepth * 3, 0);
+		comment.reactions = await addReactions(comment._id, users, numReactions);
 
-		return (await comment.save())._id;
+		if (currentDepth < maxReplyDepth) {
+			comment.replies = await addComments(
+				users,
+				post,
+				maxReplyDepth,
+				currentDepth + 1,
+				comment._id,
+			);
+		}
+
+		await comment.save();
+
+		return comment._id;
 	} catch (err) {
 		throw new Error(err);
 	}
 };
 
-const addComments = async (users: ObjectId[], savedPostId: ObjectId) => {
-	const commentData = getComments(users, 10, savedPostId);
+const addComments = async (
+	users: ObjectId[],
+	post: Partial<IPost>,
+	maxReplyDepth = 2,
+	currentDepth = 0,
+	parentCommentId?: ObjectId,
+) => {
+	const commentNum =
+		currentDepth === 0 || faker.datatype.boolean()
+			? getRandomInt(5 - currentDepth * 2, 0)
+			: 0;
+	const comments = getComments(users, commentNum, post, parentCommentId);
 
 	try {
 		return await Promise.all(
-			commentData.map((commentData) => addComment(commentData, users)),
+			comments.map((comment) =>
+				addComment(comment, users, post, maxReplyDepth, currentDepth),
+			),
 		);
 	} catch (err) {
 		throw new Error(err);

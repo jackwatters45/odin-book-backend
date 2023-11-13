@@ -6,11 +6,7 @@ import { IUser } from "../../types/IUser";
 
 const log = debug("log:authenticateJwt");
 
-export const authenticateJwt = (
-	req: Request,
-	res: Response,
-	next: NextFunction,
-) => {
+const authenticateJwt = (req: Request, res: Response, next: NextFunction) => {
 	passport.authenticate(
 		"jwt",
 		{ session: false },
@@ -31,3 +27,5 @@ export const authenticateJwt = (
 		},
 	)(req, res, next);
 };
+
+export default authenticateJwt;

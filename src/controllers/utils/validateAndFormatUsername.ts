@@ -36,13 +36,15 @@ export const getUsernameType = (input: string) => {
 	return input.includes("@") ? "email" : "phoneNumber";
 };
 
+type UsernameType = "email" | "phoneNumber";
+
 interface IValidateUsername {
-	usernameType: "email" | "phoneNumber";
+	usernameType: UsernameType;
 	formattedUsername: string | null;
 }
 
-const validateAndFormatUsername = (input: string): IValidateUsername => {
-	const usernameType = getUsernameType(input);
+const validateAndFormatUsername = (input: string, type?: UsernameType): IValidateUsername => {
+	const usernameType = type ?? getUsernameType(input);
 	const formattedUsername =
 		usernameType === "email"
 			? validateAndFormatEmail(input)
