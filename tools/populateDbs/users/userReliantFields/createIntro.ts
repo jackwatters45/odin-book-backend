@@ -1,6 +1,6 @@
 import { faker } from "@faker-js/faker";
 
-import { IUser, IntroData } from "../../../../types/IUser";
+import { IUser, IntroData } from "../../../../types/user";
 import getRandAudienceSetting from "../../utils/getRandAudienceSetting";
 
 const createIntro = (user: IUser): IntroData => {

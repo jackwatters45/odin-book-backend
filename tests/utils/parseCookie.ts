@@ -1,7 +1,5 @@
 import debug from "debug";
 
-const log = debug("log:parseCookie");
-
 interface CookieObject {
 	Expires: Date;
 	Path: string;

@@ -1,22 +1,26 @@
 import { faker } from "@faker-js/faker";
 
-import { PlaceLivedData } from "../../../../types/IUser";
-import { getRandomInt } from "../../utils/populateHelperFunctions";
+import { PlaceLivedData } from "../../../../types/user";
+import { getRandomInt } from "../../utils/helperFunctions";
 
 const createPlaceLived = (
 	type: "hometown" | "current" | "default",
-	birthDay?: Date,
+	from?: Date,
 ): Partial<PlaceLivedData> => {
+	const isValidFromDate = from && !isNaN(from.getTime()) && from < new Date();
+
+	const validFromDate = isValidFromDate ? from : faker.date.past();
+
 	return {
 		type,
 		city: faker.location.city(),
 		state: faker.location.state(),
 		country: faker.location.country(),
-		startDay: birthDay ? faker.date.past().getDate().toString() : undefined,
-		startMonth: birthDay ? faker.date.past().getMonth().toString() : undefined,
-		startYear: birthDay
+		startDay: from ? faker.date.past().getDate().toString() : undefined,
+		startMonth: from ? faker.date.past().getMonth().toString() : undefined,
+		startYear: from
 			? faker.date
-					.between({ from: birthDay, to: new Date() })
+					.between({ from: validFromDate, to: new Date() })
 					.getFullYear()
 					.toString()
 			: undefined,
@@ -26,15 +30,42 @@ const createPlaceLived = (
 const createPlacesLivedData = (
 	birthday: Date,
 ): Record<"placesLived", Partial<PlaceLivedData>[]> => {
+	const hometown = createPlaceLived("hometown", birthday);
 	const otherPlacesLived = Array.from({ length: getRandomInt(5) }, () =>
-		createPlaceLived("default", birthday),
+		createPlaceLived(
+			"default",
+			new Date(
+				hometown.startYear
+					? parseInt(hometown.startYear) + 1
+					: birthday.getFullYear(),
+				faker.date.past().getMonth(),
+				faker.date.past().getDate(),
+			),
+		),
+	).sort((a, b) => {
+		if (a.startYear && b.startYear) {
+			return parseInt(a.startYear) - parseInt(b.startYear);
+		} else if (a.startYear) {
+			return -1;
+		} else if (b.startYear) {
+			return 1;
+		} else {
+			return 0;
+		}
+	});
+
+	const current = createPlaceLived(
+		"current",
+		new Date(
+			otherPlacesLived?.[0].startYear
+				? parseInt(otherPlacesLived[0].startYear) + 1
+				: birthday.getFullYear(),
+			faker.date.past().getMonth(),
+			faker.date.past().getDate(),
+		),
 	);
 
-	const placesLived = [
-		createPlaceLived("hometown", birthday),
-		createPlaceLived("current", birthday),
-		...otherPlacesLived,
-	];
+	const placesLived = [hometown, ...otherPlacesLived, current];
 
 	return { placesLived };
 };

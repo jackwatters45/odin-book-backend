@@ -1,24 +1,42 @@
-import { Schema, model } from "mongoose";
+import { Schema, model, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-import { IUser } from "../../types/IUser";
-
-import { jwtSecret } from "../config/envVariables";
 import {
-	AUDIENCE_STATUS_OPTIONS,
-	PLACES_LIVED_TYPE,
-	VALID_RELATIONSHIP_STATUSES_ARRAY,
-	VALID_SOCIAL_PLATFORMS_ARRAY,
-} from "../constants";
+	BasicUserInfo,
+	UserLoginData,
+	UserActivityData,
+	UserSystemData,
+	UserAboutData,
+	UserVerificationData,
+	UserResetPasswordData,
+} from "../../types/user";
 import {
 	VALID_ATTENDED_FOR,
 	VALID_EDUCATION_TYPES,
-} from "../constants/EducationConstants";
-import { DefaultGenderTypes } from "../constants/Gender";
-import { Pronouns } from "../constants/Pronouns";
-import { FamilyRelationshipOptions } from "../constants/FamilyMembers";
-import { otherNameTypeOptions } from "../constants/OtherNames";
+} from "../../types/education";
+import { DEFAULT_GENDER_TYPES } from "../../types/gender";
+import { PRONOUNS } from "../../types/pronouns";
+import { FAMILY_RELATIONSHIPS } from "../../types/familyMembers";
+import { OTHER_NAME_TYPES } from "../../types/otherNames";
+import { AUDIENCE_STATUS_OPTIONS } from "../../types/audience";
+import { VALID_RELATIONSHIP_STATUSES_ARRAY } from "../../types/relationshipStatus";
+import { PLACES_LIVED_TYPE } from "../../types/placesLived";
+import { VALID_SOCIAL_PLATFORMS_ARRAY } from "../../types/socialLinks";
+import { jwtSecret } from "../config/envVariables";
+
+export interface IUser
+	extends Document,
+		BasicUserInfo,
+		UserLoginData,
+		UserActivityData,
+		UserSystemData,
+		UserAboutData {
+	verification: UserVerificationData;
+	resetPassword: UserResetPasswordData;
+	comparePassword: (password: string) => Promise<boolean>;
+	generateJwtToken: () => string;
+}
 
 const workSchema = new Schema({
 	company: { type: String, required: true, trim: true, maxlength: 100 },
@@ -36,7 +54,7 @@ const workSchema = new Schema({
 
 const educationSchema = new Schema({
 	type: { type: String, enum: VALID_EDUCATION_TYPES },
-	school: { type: String, required: true, trim: true, maxlength: 50 },
+	school: { type: String, required: true, trim: true, maxlength: 100 },
 	degree: { type: String, trim: true, maxlength: 50 },
 	attendedFor: {
 		type: String,
@@ -91,7 +109,7 @@ const familyMemberSchema = new Schema({
 		type: String,
 		trim: true,
 		required: true,
-		enum: FamilyRelationshipOptions,
+		enum: FAMILY_RELATIONSHIPS,
 	},
 });
 
@@ -109,7 +127,7 @@ const relationshipStatusSchema = new Schema({
 
 const otherNameSchema = new Schema({
 	name: { type: String, trim: true, maxlength: 50 },
-	type: { type: String, trim: true, enum: otherNameTypeOptions },
+	type: { type: String, trim: true, enum: OTHER_NAME_TYPES },
 	showAtTop: { type: Boolean, default: false },
 });
 
@@ -181,14 +199,14 @@ const UserSchema = new Schema<IUser>(
 			defaultType: {
 				type: String,
 				trim: true,
-				enum: DefaultGenderTypes,
+				enum: DEFAULT_GENDER_TYPES,
 			},
 			other: { type: String, trim: true, maxlength: 50 },
 		},
 		pronouns: {
 			type: String,
 			trim: true,
-			enum: Pronouns,
+			enum: PRONOUNS,
 		},
 		aboutYou: { type: String, trim: true, maxlength: 1000 },
 		familyMembers: [familyMemberSchema],
@@ -367,7 +385,5 @@ UserSchema.methods.comparePassword = async function (password: string) {
 UserSchema.methods.generateJwtToken = function () {
 	return jwt.sign({ _id: this._id }, jwtSecret, { expiresIn: "1h" });
 };
-
-// TODO Indexes
 
 export default model<IUser>("User", UserSchema);

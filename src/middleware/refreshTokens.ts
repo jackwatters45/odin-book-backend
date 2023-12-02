@@ -1,12 +1,8 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
+
 import User from "../models/user.model";
-import debug from "debug";
-
 import { jwtSecret, refreshTokenSecret } from "../config/envVariables";
-import { IUser } from "../../types/IUser";
-
-const log = debug("log:refreshTokens");
 
 const refreshTokensMiddleware = async (
 	req: Request,
@@ -35,10 +31,10 @@ const refreshTokensMiddleware = async (
 			});
 		}
 
-		const user = (await User.findOne({
+		const user = await User.findOne({
 			_id: decoded._id,
 			isDeleted: false,
-		}).select("refreshTokens")) as IUser;
+		}).select("refreshTokens");
 
 		if (!user || user.refreshTokens.indexOf(refreshToken) === -1) {
 			return res.status(200).json({

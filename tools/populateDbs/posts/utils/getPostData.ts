@@ -1,20 +1,17 @@
 import { faker } from "@faker-js/faker";
 import { ObjectId } from "mongoose";
-import debug from "debug";
 
 import {
 	getRandValueFromArray,
 	getRandValueFromArrayOfObjs,
 	getRandValuesFromArray,
-} from "../../utils/populateHelperFunctions";
+} from "../../utils/helperFunctions";
 import Post from "../../../../src/models/post.model";
-import { IUser } from "../../../../types/IUser";
+import { IUser } from "../../../../types/user";
 import getRandAudienceSetting from "../../utils/getRandAudienceSetting";
-import { feelings } from "../../../../src/constants/Feelings";
+import { FEELINGS } from "../../../../types/feelings";
 
-const log = debug("populateDbs:posts:getPostData");
-
-const getSharedPostData = async (user: IUser) => {
+export const getSharedPostData = async (user: IUser) => {
 	const createdAt = faker.date.past();
 	const sharedFrom = await Post.findOne({ author: { $ne: user._id } }).select(
 		"_id",
@@ -41,7 +38,7 @@ const createCheckIn = () => ({
 	country: faker.location.country(),
 });
 
-const getPostDataDefault = (user: IUser) => {
+export const getPostData = (user: IUser) => {
 	const createdAt = faker.date.past();
 	const friends = user.friends as ObjectId[];
 
@@ -58,7 +55,7 @@ const getPostDataDefault = (user: IUser) => {
 			? getRandValuesFromArray(friends)
 			: null,
 		feeling: faker.datatype.boolean(0.2)
-			? getRandValueFromArrayOfObjs(feelings, "name")
+			? getRandValueFromArrayOfObjs(FEELINGS, "name")
 			: null,
 		checkIn: faker.datatype.boolean(0.1) ? createCheckIn() : null,
 		to: faker.datatype.boolean(0.1) ? getRandValueFromArray(friends) : null,
@@ -68,12 +65,3 @@ const getPostDataDefault = (user: IUser) => {
 		sharedFrom: null,
 	};
 };
-
-const getPostData = async (user: IUser) => {
-	log("user", user._id);
-	return faker.datatype.boolean(0.9)
-		? getPostDataDefault(user)
-		: await getSharedPostData(user);
-};
-
-export default getPostData;

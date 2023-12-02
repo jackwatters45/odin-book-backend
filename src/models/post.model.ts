@@ -2,7 +2,7 @@ import { Schema, model, Document, ObjectId } from "mongoose";
 import {
 	AUDIENCE_STATUS_OPTIONS,
 	AudienceStatusOptionsType,
-} from "../constants";
+} from "../../types/audience";
 
 export interface CheckInValues {
 	location: string;
@@ -56,7 +56,6 @@ export interface IPostObject {
 	updatedAt: Date;
 	reactions: ObjectId[];
 	comments: ObjectId[];
-	// shares: ObjectId[];
 	audience: AudienceStatusOptionsType;
 	sharedFrom?: ObjectId; // shared from another post
 	to: ObjectId; // post to another user
@@ -90,10 +89,6 @@ const postSchema = new Schema<IPost>(
 			type: [{ type: Schema.Types.ObjectId, ref: "Comment" }],
 			default: [],
 		},
-		// shares: {
-		// 	type: [{ type: Schema.Types.ObjectId, ref: "Post" }],
-		// 	default: [],
-		// },
 		taggedUsers: {
 			type: [{ type: Schema.Types.ObjectId, ref: "User" }],
 			default: [],

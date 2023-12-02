@@ -59,13 +59,14 @@ export const twilioPhoneNumber = checkEnvVariableString("TWILIO_PHONE_NUMBER");
 
 export const nodeEnv = checkEnvVariableString("NODE_ENV");
 
-// TODO: change this to be more dynamic
-export const appUrl =
+export const appPort =
 	nodeEnv === "production"
 		? checkEnvVariableString("PROD_APP_URL")
 		: checkEnvVariableString("DEV_APP_URL");
 
 export const apiPath = checkEnvVariableString("API_PATH");
+
+export const appUrl = `${appPort}${apiPath}`;
 
 export const mongoDbUri =
 	nodeEnv === "production"
@@ -73,3 +74,7 @@ export const mongoDbUri =
 		: nodeEnv === "development"
 		? checkEnvVariableString("DEV_DB_URI")
 		: checkEnvVariableString("TEST_DB_URI");
+
+export const redisPassword = checkEnvVariableString("REDIS_PASSWORD");
+export const redisHost = checkEnvVariableString("REDIS_HOST");
+export const redisPort = parseInt(checkEnvVariableString("REDIS_PORT"));

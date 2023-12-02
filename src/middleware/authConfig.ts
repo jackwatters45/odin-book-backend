@@ -1,9 +1,14 @@
 import passport from "passport";
 import passportLocal from "passport-local";
-import User from "../models/user.model";
-import { IUser } from "../../types/IUser";
 import passportJwt from "passport-jwt";
 import { Request, Application } from "express";
+import passportFacebook from "passport-facebook";
+import passportGoogle from "passport-google-oauth20";
+import passportGithub, { Profile as GithubProfile } from "passport-github2";
+import { VerifyCallback } from "passport-oauth2";
+import debug from "debug";
+
+import User, { IUser } from "../models/user.model";
 import {
 	appUrl,
 	facebookAppId,
@@ -14,13 +19,7 @@ import {
 	googleClientSecret,
 	jwtSecret,
 } from "../config/envVariables";
-import passportFacebook from "passport-facebook";
-import passportGoogle from "passport-google-oauth20";
-import passportGithub, { Profile as GithubProfile } from "passport-github2";
-import { VerifyCallback } from "passport-oauth2";
-
-import debug from "debug";
-import validateAndFormatUsername from "../controllers/utils/validateAndFormatUsername";
+import validateAndFormatUsername from "../utils/validateAndFormatUsername";
 
 const log = debug("log:authConfig");
 
@@ -75,9 +74,7 @@ const configAuth = (app: Application) => {
 					const user = await User.findById(jwtPayload._id);
 					if (!user) return done(null, false);
 
-					const { password: _, ...userWithoutPassword } = user.toObject();
-
-					return done(null, userWithoutPassword);
+					return done(null, user);
 				} catch (err) {
 					return done(err);
 				}
@@ -119,8 +116,7 @@ const configAuth = (app: Application) => {
 						await user.save();
 					}
 
-					const { password: _, ...userWithoutPassword } = user.toObject();
-					return done(null, userWithoutPassword);
+					return done(null, user);
 				} catch (err) {
 					return done(err);
 				}
@@ -163,8 +159,7 @@ const configAuth = (app: Application) => {
 						await user.save();
 					}
 
-					const { password: _, ...userWithoutPassword } = user.toObject();
-					return done(null, userWithoutPassword);
+					return done(null, user);
 				} catch (err) {
 					return done(err);
 				}
@@ -215,8 +210,7 @@ const configAuth = (app: Application) => {
 						await user.save();
 					}
 
-					const { password: _, ...userWithoutPassword } = user.toObject();
-					return done(null, userWithoutPassword);
+					return done(null, user);
 				} catch (err) {
 					return done(err);
 				}

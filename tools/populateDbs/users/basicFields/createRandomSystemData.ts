@@ -1,9 +1,9 @@
-import {faker} from "@faker-js/faker";
+import { faker } from "@faker-js/faker";
 
-import { UserSystemData } from "../../../../types/IUser";
+import { UserSystemData } from "../../../../types/user";
 
 const createRandomSystemData = ({
-	userType = "user",
+	userType = "guest",
 	isDeleted = false,
 	deletedData = undefined,
 	refreshTokens = [],

@@ -11,6 +11,7 @@ import {
 	getResetPasswordLink,
 	getVerifyLink,
 	postChangePassword,
+	postCreateNewGuestUser,
 	postFindAccount,
 	postForgotPassword,
 	postLogin,
@@ -22,7 +23,7 @@ import {
 	postSignUp,
 	postVerifyCode,
 	updateForgottenPassword,
-} from "../controllers/auth.controller";
+} from "../controllers/auth/auth.controller";
 
 const router = express.Router();
 
@@ -34,6 +35,9 @@ router.post("/login/forgot-password", postLoginForgotPassword);
 
 // /login-guest
 router.post("/login-guest", postLoginGuest);
+
+// /guest-user
+router.post("/guest-user", postCreateNewGuestUser);
 
 // /signup
 router.post("/signup", postSignUp);

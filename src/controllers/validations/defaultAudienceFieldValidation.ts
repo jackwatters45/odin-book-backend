@@ -1,7 +1,6 @@
 import { body } from "express-validator";
-import { AUDIENCE_STATUS_OPTIONS } from "../../constants";
+import { AUDIENCE_STATUS_OPTIONS } from "../../../types/audience";
 
-// default audience validation rules
 const defaultAudienceFieldValidation = body("audience")
 	.optional()
 	.trim()

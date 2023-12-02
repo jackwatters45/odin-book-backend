@@ -1,22 +1,37 @@
 // External dependencies
 import express from "express";
+import { createServer } from "http";
+import debug from "debug";
 
 // Internal dependencies
 import "./models/index";
 import configAuthMiddleware from "./middleware/authConfig";
 import configOtherMiddleware from "./middleware/otherConfig";
 import { configDb } from "./config/database";
+import { configSocket, initSocket } from "./config/socket";
 import configRoutes from "./routes";
 // import configProdMiddleware from "./middleware/prodConfig";
 import configErrorMiddleware from "./middleware/errorConfig";
 import configCloudinary from "./config/cloudinary";
-import { port, appUrl } from "./config/envVariables";
+import { port, appPort } from "./config/envVariables";
+import { initRedis } from "./config/redis";
+
+const log = debug("log:index");
 
 const app = express();
 
+const server = createServer(app);
+
 const configApp = async () => {
-	// config middleware + mongoDB
+	// config mongoDB
 	await configDb();
+
+	// config socket + redis
+	await initSocket(server);
+	await initRedis();
+	await configSocket();
+
+	// config middleware
 	configAuthMiddleware(app);
 	configOtherMiddleware(app);
 	// configProdMiddleware(app);
@@ -29,10 +44,10 @@ const configApp = async () => {
 	configErrorMiddleware(app);
 };
 
-configApp();
+configApp().catch(console.error);
 
-app.listen(port, () => {
-	console.log(`Server is running on port ${appUrl}`);
+server.listen(port, () => {
+	log(`Server is running on port ${appPort}`);
 });
 
 export default app;

@@ -3,6 +3,7 @@ import {
 	createPost,
 	deletePost,
 	getPostById,
+	getPostPhotos,
 	getPostReactions,
 	getPosts,
 	getPostsByUserFriends,
@@ -13,7 +14,7 @@ import {
 	unreactToPost,
 	updatePost,
 	updatePostAudience,
-} from "../controllers/post.controller";
+} from "../controllers/post/post.controller";
 
 const router = express.Router();
 
@@ -26,13 +27,15 @@ router.delete("/:id/unreact", unreactToPost);
 // /posts/:id/reactions
 router.get("/:id/reactions", getPostReactions);
 
+// /posts/:id/photos
+router.get("/:id/photos", getPostPhotos);
+
 // /posts/:id/save
 router.patch("/:id/save", toggleSavedPost);
 
 // /posts/saved-posts
 router.get("/saved-posts", getSavedPosts);
 
-// TODO
 // /posts/:id/share
 router.post("/:id/share", sharePost);
 
@@ -56,7 +59,5 @@ router.patch("/:id/audience", updatePostAudience);
 
 // /posts/:id
 router.delete("/:id", deletePost);
-
-// TODO probably comments preview in other router
 
 export default router;

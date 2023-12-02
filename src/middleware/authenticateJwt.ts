@@ -1,8 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import passport from "passport";
 import debug from "debug";
-
-import { IUser } from "../../types/IUser";
+import { IUser } from "../models/user.model";
 
 const log = debug("log:authenticateJwt");
 
@@ -22,7 +21,7 @@ const authenticateJwt = (req: Request, res: Response, next: NextFunction) => {
 					.json({ message: "You must be logged in to perform this action" });
 				return;
 			}
-			req.user = user;
+			req.user = user as IUser;
 			next();
 		},
 	)(req, res, next);

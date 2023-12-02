@@ -1,6 +1,7 @@
 import { Schema, model, Document, ObjectId } from "mongoose";
 
 export interface IComment extends Document {
+	comment: Promise<Schema.Types.ObjectId[]>;
 	content: string;
 	author: ObjectId;
 	createdAt: Date;
@@ -11,8 +12,6 @@ export interface IComment extends Document {
 	reactions: ObjectId[];
 	isDeleted?: boolean;
 }
-
-
 
 const commentSchema = new Schema<IComment>(
 	{

@@ -1,90 +1,101 @@
+import debug from "debug";
+
 import User from "../../../../src/models/user.model";
 import {
-	FamilyRelationshipOptions,
-	femaleFamilyRelationships,
-	genderNeutralFamilyRelationships,
+	FAMILY_RELATIONSHIPS,
+	FEMALE_FAMILY_RELATIONSHIPS,
+	GENDER_NEUTRAL_FAMILY_RELATIONSHIPS,
 	getReciprocalRelationship,
-	maleFamilyRelationships,
-} from "../../../../src/constants/FamilyMembers";
-import { GenderTypesType } from "../../../../src/constants/Gender";
-import { IUser } from "../../../../types/IUser";
+	MALE_FAMILY_RELATIONSHIPS,
+} from "../../../../types/familyMembers";
+import { GenderTypesType } from "../../../../types/gender";
+import { IUser } from "../../../../types/user";
 import {
 	getRandValueFromArray,
 	getRandomInt,
-} from "../../utils/populateHelperFunctions";
+} from "../../utils/helperFunctions";
 
-const getRelationshipBank = (gender: GenderTypesType | undefined) =>
+const log = debug("log:populateUsers");
+
+export const AddFamilyMembersToUser = async (user: IUser) => {
+	const singularRelationshipTypes = new Set<string>(["Father", "Mother"]);
+
+	const users: IUser[] = await User.find({ _id: { $ne: user._id } })
+		.select("_id")
+		.lean();
+
+	const userSingularRelationships = new Set<string>();
+	const numberOfFamilyMembers = getRandomInt(6);
+
+	const familyMemberUpdates: Promise<unknown>[] = []; // Batch updates
+
+	for (let i = 0; i < numberOfFamilyMembers; i++) {
+		const potentialFamilyMembers = users.filter(
+			(u) => !userSingularRelationships.has(u._id.toString()),
+		);
+
+		if (potentialFamilyMembers.length === 0) break;
+
+		const familyMember: IUser = getRandValueFromArray(potentialFamilyMembers);
+
+		const relationshipBank: string[] = getRelationshipBank(
+			familyMember.gender?.defaultType,
+		);
+
+		let relationship: string;
+		do {
+			relationship = getRandValueFromArray(relationshipBank);
+		} while (
+			singularRelationshipTypes.has(relationship) &&
+			userSingularRelationships.has(relationship) &&
+			!relationship
+		);
+
+		userSingularRelationships.add(relationship);
+
+		const familyMemberRecord = {
+			user: familyMember._id,
+			relationship,
+		};
+
+		user.familyMembers.push(familyMemberRecord);
+
+		const reciprocalRelationship = getReciprocalRelationship(
+			relationship as keyof typeof FAMILY_RELATIONSHIPS,
+			familyMember.gender,
+		);
+
+		const familyMemberRelationship = {
+			user: user._id,
+			relationship: reciprocalRelationship,
+		};
+
+		// Queue update operations for batch execution
+		familyMemberUpdates.push(
+			User.findByIdAndUpdate(familyMember._id, {
+				$addToSet: { familyMembers: familyMemberRelationship },
+			}),
+		);
+	}
+
+	// Execute all update operations in a batch
+	await Promise.all(familyMemberUpdates);
+
+	log(`Added ${user.familyMembers.length} family members to user ${user._id}`);
+
+	await user.save();
+};
+
+export const getRelationshipBank = (gender: GenderTypesType | undefined) =>
 	gender === "Male"
-		? maleFamilyRelationships
+		? MALE_FAMILY_RELATIONSHIPS
 		: gender === "Female"
-		? femaleFamilyRelationships
-		: genderNeutralFamilyRelationships;
+		? FEMALE_FAMILY_RELATIONSHIPS
+		: GENDER_NEUTRAL_FAMILY_RELATIONSHIPS;
 
 const addFamilyMembers = async (users: IUser[]) => {
 	try {
-		const globalRelationships = new Map();
-		const singularRelationshipTypes = new Set(["Father", "Mother"]);
-
-		await Promise.all(
-			users.map(async (user) => {
-				const userSingularRelationships = new Set();
-				const numberOfFamilyMembers = getRandomInt(5);
-
-				for (let i = 0; i < numberOfFamilyMembers; i++) {
-					const potentialFamilyMembers = users.filter((u) => {
-						return (
-							u._id !== user?._id &&
-							!globalRelationships.has(`${user?._id}_${u?._id}`) &&
-							!globalRelationships.has(`${u?._id}_${user?._id}`)
-						);
-					});
-
-					if (potentialFamilyMembers.length === 0) break;
-
-					const familyMember = getRandValueFromArray(potentialFamilyMembers);
-
-					const relationshipBank = getRelationshipBank(
-						familyMember?.gender?.defaultType,
-					);
-
-					let relationship;
-					do {
-						relationship = getRandValueFromArray(relationshipBank);
-					} while (
-						singularRelationshipTypes.has(relationship) &&
-						userSingularRelationships.has(relationship)
-					);
-
-					userSingularRelationships.add(relationship);
-
-					const familyMemberRecord = {
-						user: familyMember?._id,
-						relationship: relationship,
-					};
-
-					user.familyMembers.push(familyMemberRecord);
-
-					const reciprocalRelationship = getReciprocalRelationship(
-						relationship as keyof typeof FamilyRelationshipOptions,
-						familyMember.gender,
-					);
-
-					const familyMemberRelationship = {
-						user: user._id,
-						relationship: reciprocalRelationship,
-					};
-
-					await User.findByIdAndUpdate(familyMember._id, {
-						$addToSet: { familyMembers: familyMemberRelationship },
-					});
-
-					globalRelationships.set(`${user?._id}_${familyMember?._id}`, true);
-					globalRelationships.set(`${familyMember?._id}_${user?._id}`, true);
-				}
-
-				await user.save();
-			}),
-		);
+		await Promise.all(users.map(AddFamilyMembersToUser));
 	} catch (error) {
 		throw new Error(error);
 	}

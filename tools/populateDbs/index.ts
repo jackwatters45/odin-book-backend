@@ -1,59 +1,35 @@
-import mongoose from "mongoose";
-import debug from "debug";
-
+import User from "../../src/models/user.model";
 import { configDb, disconnectFromDatabase } from "../../src/config/database";
-import populateUsers from "./users/populateUsers";
+import { populateUsers } from "./users";
 import addFieldsThatRequireOtherUsers from "./users/usersReliantFields/Index";
-import createUsersPosts from "./posts";
+import { createUsersPosts, createUsersPostsSharedFrom } from "./posts";
 import { addSavedPosts } from "./posts/utils/addSavedPosts";
-
-const log = debug("log:populateDbs");
-
-export const dropCollections = async () => {
-	log("Dropping collections");
-	const collections = await mongoose.connection.db.collections();
-	if (collections?.length === 0) {
-		log("No collections to drop");
-		return;
-	}
-
-	for (const collection of collections) {
-		await collection.drop();
-	}
-	log("Done dropping collections");
-};
-
-export const closeConnection = async () => {
-	await mongoose.connection.close();
-	log("Connection closed");
-};
+import { removePostsWithRemovedAuthors } from "./utils/removePostsWithRemovedAuthors";
+import { removeFriendsThatNoLongerExist } from "./utils/removeFriendsThatNoLongerExist";
+import clearDatabase from "./utils/clearDatabase";
 
 const run = async () => {
 	await configDb();
-	await dropCollections(); // remove once switch to dev!!!!!!
 
-	const newUsers = await populateUsers(20); // TODO change to 100
+	await clearDatabase();
+	await removeFriendsThatNoLongerExist();
+	await removePostsWithRemovedAuthors();
 
-	const usersWithFriends = await addFieldsThatRequireOtherUsers(newUsers);
+	await populateUsers(1000);
 
-	await createUsersPosts(usersWithFriends);
+	const users = await User.find({}).select(
+		"friends birthday relationshipStatus familyMembers",
+	);
 
-	log("Finished populating users");
+	await addFieldsThatRequireOtherUsers(users);
 
-	await addSavedPosts(usersWithFriends);
+	await createUsersPosts(users);
 
-	log("Finished adding saved posts");
+	await createUsersPostsSharedFrom(users);
+
+	await addSavedPosts(users);
 
 	await disconnectFromDatabase();
 };
 
 run().catch(console.error);
-
-
-// TODO close search on click
-// TODO search needs a limit
-// TODO fix other modals
-
-// TODO comment -> display reaction count (just on left side of emojis !)
-
-// TODO fix dashboard to add popular posts

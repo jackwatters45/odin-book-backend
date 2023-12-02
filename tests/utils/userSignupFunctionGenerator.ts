@@ -1,12 +1,7 @@
-import debug from "debug";
-
-import User from "../../src/models/user.model";
-import { IUser } from "../../types/IUser";
+import User, { IUser } from "../../src/models/user.model";
 import generateUser from "./generateUser";
 import { usernameType } from "./generateUsername";
-import { getUsernameType } from "../../src/controllers/utils/validateAndFormatUsername";
-
-const log = debug("log:userSignupFunctionGenerator");
+import { getUsernameType } from "../../src/utils/validateAndFormatUsername";
 
 export const userSignupFunctionGenerator = () => {
 	return async (

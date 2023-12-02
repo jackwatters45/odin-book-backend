@@ -1,13 +1,13 @@
 import { faker } from "@faker-js/faker";
 
-import { WorkData } from "../../../../types/IUser";
-import { getRandomInt } from "../../utils/populateHelperFunctions";
+import { WorkData } from "../../../../types/user";
+import { getRandomInt } from "../../utils/helperFunctions";
 
 const createRandomWorkData = (data: Partial<WorkData>): Partial<WorkData> => {
 	return {
 		company: data.company || faker.company.name(),
 		position: data.position || faker.person.jobTitle(),
-		current: data.current || faker.datatype.boolean(),
+		current: data.current || faker.datatype.boolean(0.25),
 		city: data.city || faker.location.city(),
 		description: data.description || faker.lorem.paragraph(),
 		startDay: data.startDay || faker.date.past().getDate().toString(),

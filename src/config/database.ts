@@ -12,6 +12,10 @@ export const configDb = async () => {
 			log("Mongoose connected");
 		});
 
+		mongoose.connection.on("disconnected", () => {
+			log("Mongoose disconnected");
+		});
+
 		mongoose.connection.on("error", (err) => {
 			log("Mongoose connection error:", err);
 			console.error("Mongoose connection error:", err);
@@ -32,6 +36,8 @@ export const disconnectFromDatabase = async () => {
 	try {
 		log("Disconnecting from MongoDB...");
 		await mongoose.disconnect();
+
+		process.exit(0);
 	} catch (err) {
 		console.error(err);
 	}

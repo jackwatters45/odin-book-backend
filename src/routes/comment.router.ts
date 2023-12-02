@@ -9,7 +9,7 @@ import {
 	createCommentReply,
 	reactToComment,
 	unreactToComment,
-} from "../controllers/comment.controller";
+} from "../controllers/comment/comment.controller";
 
 const router = express.Router({ mergeParams: true });
 

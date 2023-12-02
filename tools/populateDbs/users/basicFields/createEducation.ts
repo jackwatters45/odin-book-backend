@@ -1,10 +1,10 @@
 import { faker } from "@faker-js/faker";
 
-import { EducationData } from "../../../../types/IUser";
+import { EducationData } from "../../../../types/user";
 import {
 	getRandValueFromArray,
 	getRandValuesFromArray,
-} from "../../utils/populateHelperFunctions";
+} from "../../utils/helperFunctions";
 import { fieldsOfStudy } from "../utils/userOptions";
 
 const createRandomPrimaryEducationData = (
@@ -36,7 +36,7 @@ const createRandomSecondaryEducationData = (
 		type: "college",
 		school: `${faker.company.name()} University`,
 		degree: field,
-		graduated: faker.datatype.boolean(0.95),
+		graduated: faker.datatype.boolean(0.9),
 		description: faker.lorem.paragraph(),
 		concentrations: getRandValuesFromArray(concentrations),
 		attendedFor: faker.datatype.boolean(0.8)

@@ -1,6 +1,5 @@
 import { faker } from "@faker-js/faker";
-
-import { AudienceStatusOptionsType } from "../../../src/constants";
+import { AudienceStatusOptionsType } from "../../../types/audience";
 
 const getRandAudienceSetting = (): AudienceStatusOptionsType =>
 	faker.datatype.boolean() ? "Public" : "Friends";
