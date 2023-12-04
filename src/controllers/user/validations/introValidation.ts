@@ -1,5 +1,5 @@
 import { body } from "express-validator";
-import { INTRO_FIELDS, IntroFieldsType } from "../../../../types/user";
+import { INTRO_FIELDS, IntroFieldsType } from "../../../../types/intro";
 
 const introValidation = [
 	body("intro")

@@ -7,9 +7,9 @@ import {
 	getRandValuesFromArray,
 } from "../../utils/helperFunctions";
 import Post from "../../../../src/models/post.model";
-import { IUser } from "../../../../types/user";
 import getRandAudienceSetting from "../../utils/getRandAudienceSetting";
 import { FEELINGS } from "../../../../types/feelings";
+import { IUser } from "../../../../src/models/user.model";
 
 export const getSharedPostData = async (user: IUser) => {
 	const createdAt = faker.date.past();

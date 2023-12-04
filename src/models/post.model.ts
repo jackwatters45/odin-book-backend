@@ -108,7 +108,6 @@ const postSchema = new Schema<IPost>(
 	{ timestamps: true },
 );
 
-// TODO this looks wrong
 postSchema.path("content").validate(function (value: string) {
 	return (
 		this.sharedFrom ||
@@ -117,6 +116,6 @@ postSchema.path("content").validate(function (value: string) {
 		this.feeling ||
 		(value && value.trim() !== "")
 	);
-}, "Content is required when sharedFrom is not provided");
+}, "Content is required when sharedFrom, media, checkIn or feeling is not provided");
 
 export default model<IPost>("Post", postSchema);

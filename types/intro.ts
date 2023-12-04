@@ -17,7 +17,7 @@ export type IntroFieldsType = (typeof INTRO_FIELDS)[number];
 
 export type IntroField = Record<string, boolean>;
 
-export interface IIntroData {
+export interface IIntro {
 	pronouns?: IntroField;
 	work?: IntroField;
 	education?: IntroField;

@@ -1,4 +1,5 @@
-import { AudienceStatusMultiple, IUser } from "../../../../types/user";
+import { IUser } from "../../../../src/models/user.model";
+import { AudienceStatusMultiple } from "../../../../types/audience";
 import getRandAudienceSetting from "../../utils/getRandAudienceSetting";
 
 const getAudienceSettingArr = <T>(

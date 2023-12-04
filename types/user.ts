@@ -4,11 +4,11 @@ import { PronounsType } from "./pronouns";
 import { IFamilyMember } from "./familyMembers";
 import { IRelationshipStatus } from "./relationshipStatus";
 import { OtherNames } from "./otherNames";
-import { EducationData } from "./education";
+import { IEducation } from "./education";
 import { IPlaceLived } from "./placesLived";
 import { ISocialLinks } from "./socialLinks";
 import { AudienceSettings } from "./audience";
-import { IIntroData } from "./intro";
+import { IIntro } from "./intro";
 import { IWork } from "./work";
 import { INamePronunciationData } from "./namePronunciation";
 import { IUser } from "../src/models/user.model";
@@ -79,14 +79,14 @@ export interface UserSystemData {
 
 export interface UserAboutData {
 	work: IWork[];
-	education: EducationData[];
+	education: IEducation[];
 	placesLived: IPlaceLived[];
 	websites: string[];
 	socialLinks: ISocialLinks[];
 	hobbies: string[];
 	bio: string;
 	namePronunciation?: INamePronunciationData;
-	intro: IIntroData;
+	intro: IIntro;
 	taggedPosts: ObjectId[];
 	relationshipStatus: IRelationshipStatus;
 	familyMembers: IFamilyMember[];

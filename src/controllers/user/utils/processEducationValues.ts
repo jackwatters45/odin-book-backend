@@ -1,7 +1,7 @@
-import { EducationData } from "../../../../types/user";
+import { IEducation } from "../../../../types/education";
 import processDateValues from "./processDateValues";
 
-type EducationDataWithConcentrationsArr = EducationData & {
+type EducationDataWithConcentrationsArr = IEducation & {
 	concentrations1: string;
 	concentrations2: string;
 	concentrations3: string;
@@ -19,7 +19,7 @@ const processEducationValues = (values: EducationDataWithConcentrationsArr) => {
 		concentrations: [...concentrationsArr],
 	};
 
-	return processDateValues<EducationData>(valuesWithFormattedConcentrations);
+	return processDateValues<IEducation>(valuesWithFormattedConcentrations);
 };
 
 export default processEducationValues;

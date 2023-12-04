@@ -1,12 +1,12 @@
 import { faker } from "@faker-js/faker";
 
-import { PlaceLivedData } from "../../../../types/user";
 import { getRandomInt } from "../../utils/helperFunctions";
+import { IPlaceLived } from "../../../../types/placesLived";
 
 const createPlaceLived = (
 	type: "hometown" | "current" | "default",
 	from?: Date,
-): Partial<PlaceLivedData> => {
+): Partial<IPlaceLived> => {
 	const isValidFromDate = from && !isNaN(from.getTime()) && from < new Date();
 
 	const validFromDate = isValidFromDate ? from : faker.date.past();
@@ -29,7 +29,7 @@ const createPlaceLived = (
 
 const createPlacesLivedData = (
 	birthday: Date,
-): Record<"placesLived", Partial<PlaceLivedData>[]> => {
+): Record<"placesLived", Partial<IPlaceLived>[]> => {
 	const hometown = createPlaceLived("hometown", birthday);
 	const otherPlacesLived = Array.from({ length: getRandomInt(5) }, () =>
 		createPlaceLived(

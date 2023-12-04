@@ -1,10 +1,10 @@
 import debug from "debug";
-import { IUser } from "../../../../types/user";
 import addFamilyMembers from "./addFamily";
 
 import { addRelationshipStatuses } from "./addRelationship";
 import { addFriendsAndRequests } from "./addFriends";
 import { addBirthdayNotificationsToAllUsers } from "./addBirthdayNotifications";
+import { IUser } from "../../../../src/models/user.model";
 
 const log = debug("log:addFieldsThatRequireOtherUsers");
 

@@ -1,8 +1,7 @@
 import { faker } from "@faker-js/faker";
 import debug from "debug";
 
-import User from "../../../src/models/user.model";
-import { IUser } from "../../../types/user";
+import User, { IUser } from "../../../src/models/user.model";
 import createEducation from "./basicFields/createEducation";
 import createIntro from "./userReliantFields/createIntro";
 import createAudienceSettings from "./userReliantFields/createAudienceSettings";

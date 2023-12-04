@@ -1,19 +1,18 @@
 import debug from "debug";
 
-import User from "../../../../src/models/user.model";
+import User, { IUser } from "../../../../src/models/user.model";
 import {
 	FAMILY_RELATIONSHIPS,
 	FEMALE_FAMILY_RELATIONSHIPS,
 	GENDER_NEUTRAL_FAMILY_RELATIONSHIPS,
-	getReciprocalRelationship,
 	MALE_FAMILY_RELATIONSHIPS,
 } from "../../../../types/familyMembers";
 import { GenderTypesType } from "../../../../types/gender";
-import { IUser } from "../../../../types/user";
 import {
 	getRandValueFromArray,
 	getRandomInt,
 } from "../../utils/helperFunctions";
+import { getReciprocalRelationship } from "../../../../src/utils/getReciprocalRelationship";
 
 const log = debug("log:populateUsers");
 

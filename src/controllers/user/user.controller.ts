@@ -293,7 +293,6 @@ export const getDeletedUserById = [
 			return;
 		}
 
-		// TODO adjust populate
 		const [user, posts, comments] = await Promise.all([
 			User.findById(req.params.id).populate({
 				path: "deletedData.deletedBy",
@@ -512,30 +511,6 @@ export const updateUserCoverPhoto = updateUserImage("coverPhotoUrl", {
 	height: 720,
 });
 
-// TODO use key of user?
-type UserStandardField =
-	| "bio"
-	| "hobbies"
-	| "intro"
-	| "audienceSettings"
-	| "relationshipStatus"
-	| "phoneNumber"
-	| "email"
-	| "work"
-	| "education"
-	| "placesLived"
-	| "websites"
-	| "socialLinks"
-	| "gender"
-	| "pronouns"
-	| "birthday"
-	| "languages"
-	| "familyMembers"
-	| "aboutYou"
-	| "namePronunciation"
-	| "favoriteQuotes"
-	| "otherNames";
-
 interface PopulateOption {
 	path: string;
 	select?: string;
@@ -556,7 +531,7 @@ type UpdateFuncType = (
 
 interface updateUserStandardFieldParams {
 	validationRules?: ValidationChain[];
-	fieldToUpdate: UserStandardField;
+	fieldToUpdate: keyof IUser;
 	updateFunc: UpdateFuncType;
 	populateOptions?: PopulateOption[];
 }
@@ -636,7 +611,6 @@ export const updateUserIntro = updateUserStandardField({
 	populateOptions: userDefaultPopulation,
 });
 
-// TODO this is gross
 // @desc		Update user audience settings
 // @route		PATCH /users/:id/audience
 // @access	Private
@@ -664,15 +638,15 @@ export const updateUserAudienceSettings = updateUserStandardField({
 			user.audienceSettings.education[itemId] = education;
 		} else if (hometown || currentCity) {
 			user.audienceSettings.placesLived[itemId] = hometown || currentCity;
+		} else if (otherNames) {
+			user.audienceSettings.otherNames[itemId] = otherNames;
 		} else if (placesLived) {
 			user.audienceSettings.placesLived[itemId] = placesLived[itemId];
+		} else if (familyMembers) {
+			user.audienceSettings.familyMembers[itemId] = familyMembers[itemId];
 		} else if (websites) {
 			user.audienceSettings.websites[itemId] =
 				websites[encodeWebsiteId(itemId)];
-		} else if (familyMembers) {
-			user.audienceSettings.familyMembers[itemId] = familyMembers[itemId];
-		} else if (otherNames) {
-			user.audienceSettings.otherNames[itemId] = otherNames;
 		} else {
 			log("nonNestedBody", nonNestedBody);
 			user.audienceSettings = { ...user.audienceSettings, ...nonNestedBody };

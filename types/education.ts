@@ -9,7 +9,7 @@ export const VALID_ATTENDED_FOR = ["undergraduate", "graduate school"] as const;
 
 export type attendedForType = (typeof VALID_ATTENDED_FOR)[number];
 
-export interface EducationData extends IncludesStartEndDates {
+export interface IEducation extends IncludesStartEndDates {
 	_id: ObjectId;
 	type: educationTypesType;
 	school: string;

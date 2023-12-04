@@ -1,10 +1,5 @@
 import nodemailer from "nodemailer";
-import {
-	appUrl,
-	corsOrigin,
-	emailHost,
-	emailPassword,
-} from "../config/envVariables";
+import { corsOrigin, emailHost, emailPassword } from "../config/envVariables";
 import Mail from "nodemailer/lib/mailer";
 import debug from "debug";
 
@@ -18,9 +13,8 @@ const transporter = nodemailer.createTransport({
 	},
 });
 
-// TODO change to frontend url
 const getVerificationLink = (token: string) =>
-	`${appUrl}/auth/verify/link/${token}`;
+	`${corsOrigin}/auth/verify/link/${token}`;
 
 export const getMailOptionsVerify = (
 	email: string,
@@ -123,5 +117,3 @@ export const sendResetPasswordEmail = async (
 	const mailOptions = getMailOptionsReset(email, code, token);
 	await sendEmail(mailOptions);
 };
-
-// TODO verify domain: Ensure that your domain is properly verified and authenticated with Sender Policy Framework (SPF), DomainKeys Identified Mail (DKIM), and Domain-Based Message Authentication, Reporting, and Conformance (DMARC) records. This will help to prove the email was not altered during transit and that it does originate from your domain.

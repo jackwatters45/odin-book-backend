@@ -1,9 +1,9 @@
 import { faker } from "@faker-js/faker";
 
-import { WorkData } from "../../../../types/user";
 import { getRandomInt } from "../../utils/helperFunctions";
+import { IWork } from "../../../../types/work";
 
-const createRandomWorkData = (data: Partial<WorkData>): Partial<WorkData> => {
+const createRandomWorkData = (data: Partial<IWork>): Partial<IWork> => {
 	return {
 		company: data.company || faker.company.name(),
 		position: data.position || faker.person.jobTitle(),
@@ -21,13 +21,13 @@ const createRandomWorkData = (data: Partial<WorkData>): Partial<WorkData> => {
 
 const createWorkHistory = (
 	birthday: Date,
-): Record<"work", Partial<WorkData>[]> => {
+): Record<"work", Partial<IWork>[]> => {
 	const numJobs = getRandomInt(5);
 
 	if (new Date(birthday.getFullYear() + 18, 0, 1) > new Date())
 		return { work: [] };
 
-	const workHistory: Partial<WorkData>[] = [];
+	const workHistory: Partial<IWork>[] = [];
 	for (let i = 0; i < numJobs; i++) {
 		const startYear = faker.date
 			.between({

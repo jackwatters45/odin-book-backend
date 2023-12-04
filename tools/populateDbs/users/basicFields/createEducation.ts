@@ -1,15 +1,15 @@
 import { faker } from "@faker-js/faker";
 
-import { EducationData } from "../../../../types/user";
 import {
 	getRandValueFromArray,
 	getRandValuesFromArray,
 } from "../../utils/helperFunctions";
 import { fieldsOfStudy } from "../utils/userOptions";
+import { IEducation } from "../../../../types/education";
 
 const createRandomPrimaryEducationData = (
 	birthday: Date,
-): Partial<EducationData> => {
+): Partial<IEducation> => {
 	return {
 		type: "high school",
 		school: `${faker.company.name()} High School`,
@@ -26,7 +26,7 @@ const createRandomPrimaryEducationData = (
 
 const createRandomSecondaryEducationData = (
 	birthday: Date,
-): Partial<EducationData> => {
+): Partial<IEducation> => {
 	const { field, concentrations } = getRandValueFromArray(fieldsOfStudy);
 	const startYear = faker.datatype.boolean()
 		? (birthday.getFullYear() + 18).toString()
@@ -52,7 +52,7 @@ const createRandomSecondaryEducationData = (
 };
 
 const createEducation = (birthday: Date) => {
-	const education: Partial<EducationData>[] = [];
+	const education: Partial<IEducation>[] = [];
 
 	if (faker.datatype.boolean(0.95)) {
 		education.push(createRandomPrimaryEducationData(birthday));

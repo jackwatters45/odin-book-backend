@@ -1,6 +1,5 @@
 import Notification from "../../../../src/models/notification.model";
-import User from "../../../../src/models/user.model";
-import { IUser } from "../../../../types/user";
+import User, { IUser } from "../../../../src/models/user.model";
 
 const getMostRecentBirthday = (birthday: Date, userId: string) => {
 	const today = new Date();

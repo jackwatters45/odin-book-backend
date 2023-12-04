@@ -8,9 +8,9 @@ import {
 	getRandomInt,
 } from "../../utils/helperFunctions";
 import { IPost } from "../../../../src/models/post.model";
-import { IUser } from "../../../../types/user";
 import { createNotificationWithMultipleFrom } from "../../../../src/controllers/notifications/notification.controller";
 import { getNotificationBetweenDates } from "../../utils/getNotificationBetweenDates";
+import { IUser } from "../../../../src/models/user.model";
 
 interface GetCommentsParams {
 	users: IUser[];

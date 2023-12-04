@@ -2,13 +2,12 @@ import { ObjectId } from "mongoose";
 import debug from "debug";
 
 import Post from "../../../../src/models/post.model";
-import User from "../../../../src/models/user.model";
+import User, { IUser } from "../../../../src/models/user.model";
 
 import {
 	getRandValuesFromArray,
 	getRandomInt,
 } from "../../utils/helperFunctions";
-import { IUser } from "../../../../types/user";
 import { AnyBulkWriteOperation } from "mongodb";
 
 const log = debug("log:populatePosts");

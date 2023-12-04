@@ -1,4 +1,4 @@
-import { IncludesStartDates } from "../../../../types/user";
+import { IncludesStartDates } from "../../../../types/includesStartEndDates";
 
 type DateValues = IncludesStartDates & {
 	endYear?: string;
@@ -7,23 +7,21 @@ type DateValues = IncludesStartDates & {
 };
 
 const processDateValues = <T extends DateValues>(values: T) => {
-	const updatedValues = { ...values };
-
-	if (!updatedValues.startYear) {
-		updatedValues.startMonth = undefined;
-		updatedValues.startDay = undefined;
-	} else if (!updatedValues.startMonth || updatedValues.startMonth === "0") {
-		updatedValues.startDay = undefined;
+	if (!values.startYear) {
+		values.startMonth = undefined;
+		values.startDay = undefined;
+	} else if (!values.startMonth || values.startMonth === "0") {
+		values.startDay = undefined;
 	}
 
-	if (!updatedValues.endYear) {
-		updatedValues.endMonth = undefined;
-		updatedValues.endDay = undefined;
-	} else if (!updatedValues.endMonth || updatedValues.endMonth === "0") {
-		updatedValues.endDay = undefined;
+	if (!values.endYear) {
+		values.endMonth = undefined;
+		values.endDay = undefined;
+	} else if (!values.endMonth || values.endMonth === "0") {
+		values.endDay = undefined;
 	}
 
-	return updatedValues;
+	return values;
 };
 
 export default processDateValues;

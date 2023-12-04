@@ -3,8 +3,7 @@ import debug from "debug";
 import Notification, {
 	INotification,
 } from "../../../../src/models/notification.model";
-import User from "../../../../src/models/user.model";
-import { IUser } from "../../../../types/user";
+import User, { IUser } from "../../../../src/models/user.model";
 import {
 	getRandValuesFromArrayOfObjs,
 	getRandomInt,
