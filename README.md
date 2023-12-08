@@ -1,9 +1,5 @@
 # Odin Book Backend
 
-## Next
-
-- make sure tests are up to date
-
 ## Should implement at some point
 
 - actuakky save profile img from google (maybe others but google is giving 403 occasionally)

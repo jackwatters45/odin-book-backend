@@ -15,7 +15,6 @@ const resizeImages = async (
 	files: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] },
 	size = { width: 1280, height: 720 },
 ) => {
-	// Convert the files into a flat array
 	let fileList: Express.Multer.File[];
 
 	if (Array.isArray(files)) {
@@ -24,7 +23,6 @@ const resizeImages = async (
 		fileList = ([] as Express.Multer.File[]).concat(...Object.values(files));
 	}
 
-	// Resize each file
 	return await Promise.all(
 		fileList.map(async (file) => resizeImage(file, size)),
 	);

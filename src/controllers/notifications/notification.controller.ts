@@ -2,6 +2,8 @@ import cron from "node-cron";
 import { Request, Response } from "express";
 import expressAsyncHandler from "express-async-handler";
 import { faker } from "@faker-js/faker";
+import { FilterQuery } from "mongoose";
+import debug from "debug";
 
 import authenticateJwt from "../../middleware/authenticateJwt";
 import User, { IUser } from "../../models/user.model";
@@ -16,7 +18,9 @@ import {
 } from "../../../tools/populateDbs/utils/helperFunctions";
 import { getIO } from "../../config/socket";
 import { getRedis } from "../../config/redis";
-import { FilterQuery } from "mongoose";
+import { ObjectId } from "mongodb";
+
+const log = debug("log:notificationsController");
 
 export const createRandomNotification = async (userId: string) => {
 	const users = await User.find({
@@ -67,7 +71,7 @@ export const createRandomNotification = async (userId: string) => {
 
 // 	@desc    Get notification count
 // 	@route   GET /notifications/count
-// 	@access  Public
+// 	@access  Private
 export const getNotificationCount = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -91,7 +95,7 @@ export const getNotificationCount = [
 
 // @desc    Get all notifications
 // @route   GET /notifications/all
-// @access  Public
+// @access  Private
 export const getNotifications = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -122,7 +126,7 @@ export const getNotifications = [
 
 // 	@desc    Get all unread notifications
 // 	@route   GET /notifications/unread
-// 	@access  Public
+// 	@access  Private
 export const getUnreadNotifications = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -146,7 +150,7 @@ export const getUnreadNotifications = [
 
 //  @desc    Read a notification
 //  @route   PATCH /notifications/:id/read
-//  @access  Public
+//  @access  Private
 export const readNotification = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -185,7 +189,7 @@ export const readNotification = [
 
 //  @desc    Read all notifications
 //  @route   PATCH /notifications/read/all
-//  @access  Public
+//  @access  Private
 export const readAllNotifications = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -206,7 +210,7 @@ export const readAllNotifications = [
 	}),
 ];
 
-export const updateNotificationCount = async (userId: string) => {
+export const updateNotificationCount = async (userId: string | ObjectId) => {
 	const io = getIO();
 	const redisClient = getRedis();
 
@@ -215,7 +219,7 @@ export const updateNotificationCount = async (userId: string) => {
 		isRead: false,
 	});
 
-	const userSocketId = await redisClient.get(userId);
+	const userSocketId = await redisClient.get(String(userId));
 	if (userSocketId) {
 		io.to(userSocketId).emit("notificationCount", userNotificationCount);
 	}
@@ -294,7 +298,7 @@ export const createNotificationWithMultipleFrom = async ({
 		});
 	}
 
-	if (includeSocket) await updateNotificationCount(query.to as string);
+	if (includeSocket) await updateNotificationCount(query.to);
 };
 
 interface IRemoveNotification {

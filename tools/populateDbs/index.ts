@@ -5,14 +5,14 @@ import addFieldsThatRequireOtherUsers from "./users/usersReliantFields/Index";
 import { createUsersPosts, createUsersPostsSharedFrom } from "./posts";
 import { addSavedPosts } from "./posts/utils/addSavedPosts";
 import { removePostsWithRemovedAuthors } from "./utils/removePostsWithRemovedAuthors";
-import { removeFriendsThatNoLongerExist } from "./utils/removeFriendsThatNoLongerExist";
+import { removeUserDataThatNoLongerExists } from "./utils/removeFriendsThatNoLongerExist";
 import clearDatabase from "./utils/clearDatabase";
 
 const run = async () => {
 	await configDb();
 
 	await clearDatabase();
-	await removeFriendsThatNoLongerExist();
+	await removeUserDataThatNoLongerExists();
 	await removePostsWithRemovedAuthors();
 
 	await populateUsers(1000);

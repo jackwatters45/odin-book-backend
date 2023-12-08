@@ -504,7 +504,7 @@ export const postFindAccount = expressAsyncHandler(async (req, res) => {
 
 // @route   POST /update-password/:token
 // @desc    Update password
-// @access  Private
+// @access  Public
 export const updateForgottenPassword = [
 	body("newPassword")
 		.notEmpty()

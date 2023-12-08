@@ -53,7 +53,7 @@ export interface UserResetPasswordData {
 }
 
 export interface UserActivityData {
-	friends: ObjectId[] | Partial<IUser>[];
+	friends: (ObjectId | Partial<IUser>)[];
 	savedPosts: ObjectId[];
 	friendRequestsSent: ObjectId[];
 	friendRequestsReceived: ObjectId[];

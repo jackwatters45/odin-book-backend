@@ -1,18 +1,17 @@
 import { IPost } from "../../../models/post.model";
-import getDocumentWithTopReactions, {
-	DocumentWithReactions,
-} from "../../../utils/getDocumentWithTopReactions";
+import getDocumentWithTopReactions from "../../../utils/getDocumentWithTopReactions";
+import getOtherPostData from "./getOtherPostData";
+import { IComment } from "../../../models/comment.model";
 
-const getPostAndCommentsTopReactions = (post: IPost) => {
-	const postWithTopReactions = getDocumentWithTopReactions(post);
+const getPostAndCommentsTopReactions = async (post: IPost) => {
+	const otherPostData = await getOtherPostData(post);
 
-	const commentsWithTopReactions = post.comments.map((comment) => {
-		return getDocumentWithTopReactions(
-			comment as unknown as DocumentWithReactions,
-		);
+	const postCommentsPopulated = post.comments as IComment[];
+	const commentsWithTopReactions = postCommentsPopulated.map((comment) => {
+		return getDocumentWithTopReactions(comment);
 	});
 
-	return { ...postWithTopReactions, comments: commentsWithTopReactions };
+	return { ...otherPostData, comments: commentsWithTopReactions };
 };
 
 export default getPostAndCommentsTopReactions;

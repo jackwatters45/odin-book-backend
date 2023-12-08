@@ -33,7 +33,7 @@ const configErrorMiddleware = (app: Application) => {
 	) => {
 		if (err instanceof MulterError) {
 			if (err.code === "LIMIT_UNEXPECTED_FILE") {
-				log("File too large");
+				log("Invalid file type. Only image types are allowed.");
 				res.status(400).json({
 					message: "Invalid file type. Only image types are allowed.",
 				});

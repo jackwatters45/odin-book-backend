@@ -3,6 +3,8 @@ import {
 	AUDIENCE_STATUS_OPTIONS,
 	AudienceStatusOptionsType,
 } from "../../types/audience";
+import { IUser } from "./user.model";
+import { IComment } from "./comment.model";
 
 export interface CheckInValues {
 	location: string;
@@ -25,8 +27,7 @@ export const reactionTypes = [
 
 export type ReactionType = (typeof reactionTypes)[number];
 
-export interface IReaction {
-	_id: string;
+export interface IReaction extends Document {
 	parent: string;
 	user: ObjectId;
 	type: ReactionType;
@@ -51,16 +52,16 @@ export const getReactionTypeEmoji = (type: ReactionType) =>
 
 export interface IPostObject {
 	content?: string;
-	author: ObjectId;
+	author: ObjectId | IUser;
 	createdAt: Date;
 	updatedAt: Date;
-	reactions: ObjectId[];
-	comments: ObjectId[];
+	reactions: (ObjectId | IReaction)[];
+	comments: (ObjectId | IComment)[];
 	audience: AudienceStatusOptionsType;
-	sharedFrom?: ObjectId; // shared from another post
-	to: ObjectId; // post to another user
+	sharedFrom?: ObjectId | IPost;
+	to: ObjectId | IUser;
 	media?: string[];
-	taggedUsers?: ObjectId[];
+	taggedUsers?: (ObjectId | IUser)[];
 	feeling?: string;
 	checkIn?: CheckInValues;
 }

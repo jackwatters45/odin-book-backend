@@ -20,7 +20,7 @@ export const reactionTypes = [
 	"hooray",
 	"confused",
 	"heart",
-];
+] as const;
 
 const reactionSchema = new Schema<IReaction>(
 	{

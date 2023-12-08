@@ -59,7 +59,7 @@ const log = debug("log:user:controller");
 
 // @desc    Get all users
 // @route   GET /users
-// @access  Public
+// @access  Private
 export const getUsers = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const usersTotal = await User.countDocuments({ isDeleted: false });
@@ -98,7 +98,7 @@ const getMutualFriendIds = (userA: IUser, userB: IUser) => {
 
 // @desc    Get user by id
 // @route   GET /users/:id
-// @access  Public
+// @access  Private
 export const getUserById = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -151,31 +151,38 @@ export const searchUsers = [
 			return;
 		}
 
-		const { q } = req.query;
-
-		const query = q
-			? {
-					fullName: { $regex: q as string, $options: "i" },
-			  }
+		const query = req.query.q
+			? { fullName: { $regex: req.query.q as string, $options: "i" } }
 			: {};
 
-		const users = await User.find(query).select("fullName avatarUrl friends");
+		const friendsQuery = { ...query, _id: { $in: user.friends } };
+		const friendsResults = await User.find(friendsQuery)
+			.select("fullName avatarUrl friends")
+			.limit(10)
+			.lean();
 
-		const usersWithIsFriend = users.map((userResult) => {
-			const isFriend = user.friends.some(
-				(friendId) => String(friendId as string) === String(userResult._id),
-			);
-			return {
-				...userResult.toJSON(),
-				isFriend: isFriend,
-			};
-		});
+		const friendUsers = friendsResults.map((userResult) => ({
+			...userResult,
+			isFriend: true,
+		}));
 
-		const sortedAndLimitedUsers = usersWithIsFriend
-			.sort((a, b) => Number(b.isFriend) - Number(a.isFriend))
-			.slice(0, 10);
+		if (friendsResults.length >= 10) {
+			res.status(200).json(friendUsers);
+			return;
+		}
 
-		res.status(200).json(sortedAndLimitedUsers);
+		const nonFriendsQuery = { ...query, _id: { $nin: user.friends } };
+		const nonFriendsResults = await User.find(nonFriendsQuery)
+			.select("fullName avatarUrl friends")
+			.limit(10 - friendsResults.length)
+			.lean();
+
+		const nonFriendsUsers = nonFriendsResults.map((userResult) => ({
+			...userResult,
+			isFriend: false,
+		}));
+
+		res.status(200).json([...friendUsers, ...nonFriendsUsers]);
 	}),
 ];
 
@@ -197,21 +204,22 @@ export const searchUserFriendsByName = [
 			return;
 		}
 
-		const { q } = req.query;
+		const { q, exclude } = req.query;
+		const excludeIds = exclude ? (exclude as string).split(",") : [];
 
 		const query = q
 			? {
 					fullName: { $regex: q as string, $options: "i" },
-					_id: { $in: user.friends },
+					_id: { $in: user.friends, $nin: excludeIds },
 			  }
 			: {
-					_id: { $in: user.friends },
+					_id: { $in: user.friends, $nin: excludeIds },
 			  };
 
 		const users = await User.find(query)
 			.select("fullName avatarUrl friends")
-			.limit(limit)
-			.skip(page * pageLength);
+			.limit(limit + excludeIds.length)
+			.skip(page);
 
 		if (!users) {
 			res.status(200).json([]);
@@ -604,8 +612,6 @@ export const updateUserIntro = updateUserStandardField({
 	fieldToUpdate: "intro",
 	validationRules: introValidation,
 	updateFunc: ({ user, body }) => {
-		log("body", body);
-		log("user", user);
 		user.intro = { ...user.intro, ...body };
 	},
 	populateOptions: userDefaultPopulation,
@@ -1399,7 +1405,7 @@ const getUserPhotos = async (
 
 // @desc    Get user tagged + posted photos
 // @route   GET /users/:id/photos-of
-// @access  Public
+// @access  Private
 export const getUserPhotosOf = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const userId = String(req.params.id);
@@ -1412,7 +1418,7 @@ export const getUserPhotosOf = expressAsyncHandler(
 
 // @desc    Get user posted photos
 // @route   GET /users/:id/photos-by
-// @access  Public
+// @access  Private
 export const getUserPhotosBy = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const userId = String(req.params.id);
@@ -1469,7 +1475,7 @@ const getReqUserUserFriendsData = (userFriends: IUser[]) => {
 
 // @desc    Get user friends all
 // @route   GET /users/:id/friends
-// @access  Public
+// @access  Private
 export const getUserFriends = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -1498,7 +1504,7 @@ export const getUserFriends = [
 
 // @desc    Get user friends suggestions
 // @route   GET /users/friends/suggestions
-// @access  Public
+// @access  Private
 export const getUserFriendsSuggestions = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -1553,6 +1559,33 @@ export const getUserFriendsSuggestions = [
 	}),
 ];
 
+const findMutualFriends = async (userId1: string, userId2: string) => {
+	const mutualFriends = await User.aggregate([
+		{ $match: { _id: { $in: [userId1, userId2] } } },
+		{ $project: { friends: 1 } },
+		{ $unwind: "$friends" },
+		{ $group: { _id: "$friends", count: { $sum: 1 } } },
+		{ $match: { count: { $gt: 1 } } },
+		{
+			$lookup: {
+				from: "users",
+				localField: "_id",
+				foreignField: "_id",
+				as: "mutualFriend",
+			},
+		},
+		{ $unwind: "$mutualFriend" },
+		{
+			$project: {
+				_id: 1,
+				mutualFriend: { fullName: 1, avatarUrl: 1 },
+			},
+		},
+	]);
+
+	return mutualFriends.map((doc) => doc.mutualFriend);
+};
+
 // @desc    Get friend requests received
 // @route   GET /users/me/friend-requests
 // @access  Private
@@ -1579,26 +1612,10 @@ export const getFriendRequestsReceived = [
 			.limit(limit)
 			.skip(page * pageLength);
 
-		const reqUserFriendsPopulated = (await User.findById(reqUser._id)
-			.select("friends")
-			.populate("friends", "avatarUrl fullName")) as IUser;
-
-		const reqUserFriends = reqUserFriendsPopulated.friends as IUser[];
-
 		const friendRequestsReceivedWithMutualData = friendRequestsReceived.map(
-			(user) => {
-				const mutualFriendIds = getMutualFriendIds(
-					reqUserFriendsPopulated,
-					user,
-				);
-				const mutualFriends = reqUserFriends.filter((friend) =>
-					mutualFriendIds.includes(String(friend._id)),
-				);
-
-				return {
-					...user.toObject(),
-					mutualFriends,
-				};
+			async (user) => {
+				const mutualFriends = await findMutualFriends(user._id, reqUser._id);
+				return { ...user, mutualFriends };
 			},
 		);
 

@@ -2,7 +2,7 @@ import { body, validationResult } from "express-validator";
 import { Request, Response } from "express";
 import debug from "debug";
 import expressAsyncHandler from "express-async-handler";
-import { ObjectId, startSession } from "mongoose";
+import { startSession } from "mongoose";
 
 import Comment, { IComment } from "../../models/comment.model";
 import Reaction, { reactionTypes } from "../../models/reaction.model";
@@ -20,7 +20,7 @@ const log = debug("log:comment:controller");
 
 // @desc    Get all comments from post
 // @route   GET /posts/:post/comments
-// @access  Public
+// @access  Private
 export const getComments = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const postId = req.params.post;
@@ -40,7 +40,7 @@ export const getComments = expressAsyncHandler(
 
 // @desc    Get replies from comment
 // @route   GET /posts/:post/comments/:id/replies
-// @access  Public
+// @access  Private
 export const getReplies = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const [post, comment] = await Promise.all([
@@ -72,7 +72,7 @@ export const getReplies = expressAsyncHandler(
 
 // @desc    Get comment by id
 // @route   GET /posts/:post/comments/:id
-// @access  Public
+// @access  Private
 export const getCommentById = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const [post, comment] = await Promise.all([
@@ -364,6 +364,7 @@ export const createCommentReply = [
 export const reactToComment = [
 	authenticateJwt,
 	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
+	body("user").trim().isMongoId().withMessage("Invalid user id"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
@@ -372,45 +373,36 @@ export const reactToComment = [
 		}
 
 		const user = req.user as IUser;
+		const commentId = req.params.id;
+		const type = req.body.type;
 
-		const { type } = req.body;
-
-		const [postExists, comment] = await Promise.all([
-			Post.exists({ _id: req.params.post }),
-			Comment.findById(req.params.id).populate("reactions"),
-		]);
-
-		if (!postExists) {
-			res.status(404).json({ message: "Post not found" });
-			return;
-		}
-
-		if (!comment) {
-			res.status(404).json({ message: "Comment not found" });
-			return;
-		}
+		log(req.body);
 
 		const existingReaction = await Reaction.findOne({
-			parent: comment._id,
+			parent: commentId,
 			user: user._id,
 		});
 
 		if (!existingReaction) {
 			const reaction = new Reaction({
-				parent: comment._id,
+				parent: commentId,
 				user: user._id,
 				type,
 			});
 
 			const savedReaction = await reaction.save();
 
-			comment.reactions.push(savedReaction._id as unknown as ObjectId);
+			await Comment.findByIdAndUpdate(commentId, {
+				$push: { reactions: savedReaction._id },
+			});
 		} else {
 			existingReaction.type = type;
 			await existingReaction.save();
 		}
 
-		await comment.save();
+		const comment = (await Comment.findById(req.params.id).populate(
+			defaultCommentPopulation,
+		)) as IComment;
 
 		const notificationQuery = {
 			to: comment.author,
@@ -425,11 +417,7 @@ export const reactToComment = [
 			from: user._id,
 		});
 
-		const updatedComment = (await Comment.findById(req.params.id).populate(
-			defaultCommentPopulation,
-		)) as IComment;
-
-		const commentWithTopReactions = getDocumentWithTopReactions(updatedComment);
+		const commentWithTopReactions = getDocumentWithTopReactions(comment);
 
 		res.status(201).json(commentWithTopReactions);
 	}),
@@ -442,24 +430,11 @@ export const unreactToComment = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-
-		const [post, comment] = await Promise.all([
-			Post.findById(req.params.post).select("author"),
-			Comment.findById(req.params.id),
-		]);
-
-		if (!post) {
-			res.status(404).json({ message: "Post not found" });
-			return;
-		}
-
-		if (!comment) {
-			res.status(404).json({ message: "Comment not found" });
-			return;
-		}
+		const commentId = req.params.id;
+		const postId = req.params.post;
 
 		const existingReaction = await Reaction.findOne({
-			parent: comment._id,
+			parent: commentId,
 			user: user._id,
 		});
 
@@ -470,18 +445,23 @@ export const unreactToComment = [
 
 		await Reaction.findByIdAndDelete(existingReaction._id);
 
-		comment.reactions = comment.reactions.filter(
-			(reaction) => reaction.toString() !== existingReaction._id.toString(),
-		);
+		const comment = (await Comment.findByIdAndUpdate(
+			commentId,
+			{ $pull: { reactions: existingReaction._id } },
+			{ new: true },
+		).populate(defaultCommentPopulation)) as IComment;
 
-		await comment.save();
+		if (!comment) {
+			res.status(404).json({ message: "Comment not found" });
+			return;
+		}
 
 		const notificationQuery = {
 			to: comment.author,
 			type: "reaction",
 			contentId: comment._id,
 			contentType: "comment",
-			postId: post._id,
+			postId,
 		};
 
 		await removeUserFromNotificationMultipleFrom({
@@ -489,11 +469,7 @@ export const unreactToComment = [
 			remove: user._id,
 		});
 
-		const updatedComment = (await Comment.findById(req.params.id).populate(
-			defaultCommentPopulation,
-		)) as IComment;
-
-		const commentWithTopReactions = getDocumentWithTopReactions(updatedComment);
+		const commentWithTopReactions = getDocumentWithTopReactions(comment);
 
 		res.status(201).json(commentWithTopReactions);
 	}),

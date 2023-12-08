@@ -47,7 +47,7 @@ export const configSocket = async () => {
 		});
 
 		socket.onAny((event, ...args) => {
-			log(event, args);
+			log(event, socket.id, args);
 		});
 	});
 };

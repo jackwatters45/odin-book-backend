@@ -29,7 +29,7 @@ const log = debug("log:post:controller");
 
 // @desc    Get all posts
 // @route   GET /posts
-// @access  Public
+// @access  Private
 export const getPosts = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const pageLength = 5;
@@ -55,7 +55,7 @@ export const getPosts = expressAsyncHandler(
 
 // @desc    Get user posts
 // @route   GET /users/:id/posts
-// @access  Public
+// @access  Private
 export const getUserPosts = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
@@ -159,7 +159,7 @@ export const getPostsByUserFriends = [
 
 // @desc    Get post by id
 // @route   GET /posts/:id
-// @access  Public
+// @access  Private
 export const getPostById = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const post = await Post.findById(req.params.id).populate(
@@ -171,7 +171,7 @@ export const getPostById = expressAsyncHandler(
 			return;
 		}
 
-		const postsWithTopReactions = getPostAndCommentsTopReactions(post);
+		const postsWithTopReactions = await getPostAndCommentsTopReactions(post);
 
 		res.status(200).json(postsWithTopReactions);
 	},
@@ -187,14 +187,12 @@ export const createPost = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
-			log(errors.array());
 			res.status(400).json({ errors: errors.array() });
 			return;
 		}
 
 		const author = req.user as IUser;
 
-		log(req.body);
 		const post = new Post({
 			author: author._id,
 			...req.body,
@@ -310,14 +308,12 @@ export const updatePostAudience = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
-			log(errors.array());
 			res.status(400).json({ errors: errors.array() });
 			return;
 		}
 
 		const user = req.user as IUser;
 
-		log(req.body);
 		const { audience } = req.body;
 
 		const post = await Post.findById(req.params.id);
@@ -381,6 +377,8 @@ export const deletePost = [
 export const reactToPost = [
 	authenticateJwt,
 	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
+	body("user").trim().isMongoId().withMessage("Invalid user id"),
+	body("post").trim().isMongoId().withMessage("Invalid post id"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
@@ -389,42 +387,37 @@ export const reactToPost = [
 		}
 
 		const user = req.user as IUser;
-
-		const { type } = req.body;
-
-		const post = (await Post.findById(req.params.id).populate(
-			defaultPostPopulation,
-		)) as IPost;
-
-		if (!post) {
-			res.status(404).json({ message: "Post not found" });
-			return;
-		}
+		const postId = req.params.id;
+		const type = req.body.type;
 
 		const existingReaction = await Reaction.findOne({
-			parent: post._id,
+			parent: postId,
 			user: user._id,
 		});
 
 		if (!existingReaction) {
 			const reaction = new Reaction({
-				parent: post._id,
+				parent: postId,
 				user: user._id,
 				type,
 			});
 
 			const savedReaction = await reaction.save();
 
-			post.reactions.push(savedReaction._id);
+			await Post.findByIdAndUpdate(postId, {
+				$push: { reactions: savedReaction._id },
+			});
 		} else {
 			existingReaction.type = type;
 			await existingReaction.save();
 		}
 
-		await post.save();
+		const post = (await Post.findById(postId).populate(
+			defaultPostPopulation,
+		)) as IPost;
 
 		const notificationQuery = {
-			to: post.author,
+			to: (post.author as IUser)._id,
 			type: "reaction",
 			contentId: post._id,
 			contentType: "post",
@@ -448,18 +441,10 @@ export const unreactToPost = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-
-		const post = (await Post.findById(req.params.id).populate(
-			defaultPostPopulation,
-		)) as IPost;
-
-		if (!post) {
-			res.status(404).json({ message: "Post not found" });
-			return;
-		}
+		const postId = req.params.id;
 
 		const existingReaction = await Reaction.findOne({
-			parent: post._id,
+			parent: postId,
 			user: user._id,
 		});
 
@@ -470,11 +455,16 @@ export const unreactToPost = [
 
 		await Reaction.findByIdAndDelete(existingReaction._id);
 
-		post.reactions = post.reactions.filter(
-			(reaction) => reaction.toString() !== existingReaction._id.toString(),
-		) as ObjectId[];
+		const post = (await Post.findByIdAndUpdate(
+			postId,
+			{ $pull: { reactions: existingReaction._id } },
+			{ new: true },
+		).populate(defaultPostPopulation)) as IPost;
 
-		await post.save();
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
+		}
 
 		const notificationQuery = {
 			to: post.author,
@@ -496,7 +486,7 @@ export const unreactToPost = [
 
 // @desc    Get post reactions
 // @route   GET /posts/:id/reactions
-// @access  Public
+// @access  Private
 export const getPostReactions = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const post = await Post.findById(req.params.id);
@@ -515,7 +505,7 @@ export const getPostReactions = expressAsyncHandler(
 
 // @desc    Get post photos
 // @route   GET /posts/:id/photos
-// @access  Public
+// @access  Private
 export const getPostPhotos = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const post = await Post.findById(req.params.id).select("media").lean();
