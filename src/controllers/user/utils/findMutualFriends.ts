@@ -1,5 +1,9 @@
 import { PipelineStage } from "mongoose";
+import debug from "debug";
+
 import User from "../../../models/user.model";
+
+const log = debug("log:findMutualFriends");
 
 export const findMutualFriends = async (
 	userId1: string | undefined,
@@ -14,7 +18,6 @@ export const findMutualFriends = async (
 		{ $unwind: "$friends" },
 		{ $group: { _id: "$friends", count: { $sum: 1 } } },
 		{ $match: { count: { $gt: 1 } } },
-		{ $sort: { count: -1 } },
 	];
 
 	if (populate) {
@@ -31,15 +34,17 @@ export const findMutualFriends = async (
 			{
 				$project: {
 					_id: 1,
-					mutualFriend: { fullName: 1, avatarUrl: 1 },
+					fullName: "$mutualFriend.fullName",
+					avatarUrl: "$mutualFriend.avatarUrl",
 				},
 			},
+			{ $sort: { fullName: 1 } },
 		]);
 	}
 
-	const mutualFriends = await User.aggregate(pipeline);
+	const mutualFriends = (await User.aggregate(pipeline)).sort(
+		(a, b) => b.mutualFriends - a.mutualFriends,
+	);
 
-	return populate
-		? mutualFriends.map((doc) => doc.mutualFriend)
-		: mutualFriends.map((doc) => doc._id);
+	return populate ? mutualFriends : mutualFriends.map((doc) => doc._id);
 };
