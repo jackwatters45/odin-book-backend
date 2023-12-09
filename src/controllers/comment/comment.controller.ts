@@ -10,11 +10,9 @@ import Post from "../../models/post.model";
 import authenticateJwt from "../../middleware/authenticateJwt";
 import defaultCommentPopulation from "./utils/defaultCommentPopulation";
 import getDocumentWithTopReactions from "../../utils/getDocumentWithTopReactions";
-import {
-	createNotificationWithMultipleFrom,
-	removeUserFromNotificationMultipleFrom,
-} from "../notifications/notification.controller";
 import { IUser } from "../../models/user.model";
+import { createNotificationWithMultipleFrom } from "../notifications/utils/createNotificationWithMultipleFrom";
+import { removeUserFromNotificationMultipleFrom } from "../notifications/utils/removeUserFromNotificationMultipleFrom";
 
 const log = debug("log:comment:controller");
 
@@ -44,8 +42,8 @@ export const getComments = expressAsyncHandler(
 export const getReplies = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const [post, comment] = await Promise.all([
-			Post.findById(req.params.post),
-			Comment.findById(req.params.id),
+			Post.exists({ _id: req.params.post }),
+			Comment.exists({ _id: req.params.id }),
 		]);
 
 		if (!post) {
@@ -60,13 +58,14 @@ export const getReplies = expressAsyncHandler(
 
 		const replies = await Comment.find({ parentComment: req.params.id })
 			.sort({ updatedAt: -1 })
-			.populate(defaultCommentPopulation);
+			.populate(defaultCommentPopulation)
+			.lean();
 
 		const commentsWithTopReactions = replies.map((reply) => {
 			return getDocumentWithTopReactions(reply);
 		});
 
-		res.status(200).json(commentsWithTopReactions); // removed offset + limit
+		res.status(200).json(commentsWithTopReactions);
 	},
 );
 
@@ -76,11 +75,10 @@ export const getReplies = expressAsyncHandler(
 export const getCommentById = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const [post, comment] = await Promise.all([
-			Post.findById(req.params.post),
-			Comment.findById(req.params.id).populate(
-				"author",
-				"fullName avatarUrl isDeleted",
-			),
+			Post.exists({ _id: req.params.post }),
+			Comment.findById(req.params.id)
+				.populate("author", "fullName avatarUrl isDeleted")
+				.lean(),
 		]);
 
 		if (!post) {
@@ -120,7 +118,7 @@ export const createComment = [
 		session.startTransaction();
 
 		try {
-			const comment = new Comment({
+			const comment = await Comment.create({
 				content,
 				author: authorId,
 				post,
@@ -130,15 +128,15 @@ export const createComment = [
 				parentComment: null,
 			});
 
-			const newComment = await comment.save();
-
 			const postData = await Post.findByIdAndUpdate(
 				post,
 				{
-					$push: { comments: newComment._id },
+					$push: { comments: comment._id },
 				},
 				{ new: true, session },
-			).select("author");
+			)
+				.select("author")
+				.lean();
 
 			const notificationQuery = {
 				to: postData?.author,
@@ -161,7 +159,7 @@ export const createComment = [
 			const commentWithAuthor = {
 				content,
 				post,
-				_id: newComment._id,
+				_id: comment._id,
 				createdAt: new Date(),
 				updatedAt: new Date(),
 				reactions: [],
@@ -199,8 +197,10 @@ export const updateComment = [
 		const user = req.user as IUser;
 
 		const [post, comment] = await Promise.all([
-			Post.findById(req.params.post),
-			Comment.findById(req.params.id),
+			Post.exists({ _id: req.params.post }),
+			Comment.findById(req.params.id, {
+				content: req.body.content,
+			}).populate(defaultCommentPopulation),
 		]);
 
 		if (!post) {
@@ -223,12 +223,7 @@ export const updateComment = [
 		comment.content = req.body.content;
 		await comment.save();
 
-		const updatedComment = (await Comment.findById(req.params.id).populate(
-			defaultCommentPopulation,
-		)) as IComment;
-
-		const updatedCommentWithTopReactions =
-			getDocumentWithTopReactions(updatedComment);
+		const updatedCommentWithTopReactions = getDocumentWithTopReactions(comment);
 
 		res.status(201).json(updatedCommentWithTopReactions);
 	}),
@@ -243,8 +238,8 @@ export const deleteComment = [
 		const user = req.user as IUser;
 
 		const [post, comment] = await Promise.all([
-			Post.findById(req.params.post).select("author"),
-			Comment.findById(req.params.id),
+			Post.exists({ _id: req.params.post }),
+			Comment.findById(req.params.id).populate(defaultCommentPopulation),
 		]);
 
 		if (!post) {
@@ -264,13 +259,10 @@ export const deleteComment = [
 
 		comment.content = "[deleted]";
 		comment.isDeleted = true;
-		const updatedComment = (await Comment.findByIdAndUpdate(
-			req.params.id,
-			comment,
-			{ new: true },
-		).populate(defaultCommentPopulation)) as IComment;
 
-		const commentWithTopReactions = getDocumentWithTopReactions(updatedComment);
+		await comment.save();
+
+		const commentWithTopReactions = getDocumentWithTopReactions(comment);
 
 		res.status(200).json(commentWithTopReactions);
 	}),
@@ -298,15 +290,14 @@ export const createCommentReply = [
 		session.startTransaction();
 
 		try {
-			const comment = await Comment.findById(req.params.id);
-
-			if (!comment) {
+			const parentComment = await Comment.findById(req.params.id);
+			if (!parentComment) {
 				res.status(404).json({ message: "Comment not found" });
 				return;
 			}
 
-			const { post, _id } = comment;
-			const newComment = new Comment({
+			const { post, _id } = parentComment;
+			const newComment = await Comment.create({
 				content: req.body.content,
 				post: post,
 				author: user._id,
@@ -316,21 +307,17 @@ export const createCommentReply = [
 				parentComment: _id,
 			});
 
-			await newComment.save();
-
-			comment.replies.push(newComment._id);
-			await comment.save();
+			parentComment.replies.push(newComment._id);
+			await parentComment.save();
 
 			await Post.findByIdAndUpdate(
 				post,
-				{
-					$push: { comments: newComment._id },
-				},
+				{ $push: { comments: newComment._id } },
 				{ session },
 			);
 
 			const notificationQuery = {
-				to: comment.author,
+				to: parentComment.author,
 				type: "comment",
 				contentId: newComment._id,
 				contentType: "comment",
@@ -375,8 +362,6 @@ export const reactToComment = [
 		const user = req.user as IUser;
 		const commentId = req.params.id;
 		const type = req.body.type;
-
-		log(req.body);
 
 		const existingReaction = await Reaction.findOne({
 			parent: commentId,
@@ -436,7 +421,7 @@ export const unreactToComment = [
 		const existingReaction = await Reaction.findOne({
 			parent: commentId,
 			user: user._id,
-		});
+		}).lean();
 
 		if (!existingReaction) {
 			res.status(404).json({ message: "User has not reacted to this comment" });

@@ -1,12 +1,11 @@
-import { body, validationResult } from "express-validator";
+import { validationResult } from "express-validator";
 import { Request, Response } from "express";
-import { ObjectId } from "mongoose";
 import expressAsyncHandler from "express-async-handler";
 import debug from "debug";
 
 import Post, { IPost } from "../../models/post.model";
 import User, { IUser } from "../../models/user.model";
-import Reaction, { reactionTypes } from "../../models/reaction.model";
+import Reaction from "../../models/reaction.model";
 
 import { postValidation, postAudienceValidation } from "./validations";
 import resizeImages from "../../utils/resizeImages";
@@ -19,11 +18,10 @@ import {
 	getPostAndCommentsTopReactions,
 	getOtherPostData,
 } from "./utils";
-import {
-	createNotificationWithMultipleFrom,
-	removeNotificationsFromDeletedPost,
-	removeUserFromNotificationMultipleFrom,
-} from "../notifications/notification.controller";
+import { removeNotificationsFromDeletedPost } from "../notifications/utils/removeNotificationsFromDeletedPost";
+import { createNotificationWithMultipleFrom } from "../notifications/utils/createNotificationWithMultipleFrom";
+import { removeUserFromNotificationMultipleFrom } from "../notifications/utils/removeUserFromNotificationMultipleFrom";
+import postReactionValidation from "./validations/postReactionValidation";
 
 const log = debug("log:post:controller");
 
@@ -33,22 +31,21 @@ const log = debug("log:post:controller");
 export const getPosts = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const pageLength = 5;
+		const limit = req.query.limit
+			? parseInt(req.query.limit as string)
+			: pageLength;
+		const page = req.query.page ? parseInt(req.query.page as string) : 0;
 
-		const postsCount = await Post.countDocuments();
-		const postsQuery = Post.find()
-			.populate(defaultPostPopulation)
-			.sort({ createdAt: -1 });
+		const [posts, postsCount] = await Promise.all([
+			Post.find()
+				.sort({ createdAt: -1 })
+				.limit(limit)
+				.skip(page * pageLength)
+				.populate(defaultPostPopulation)
+				.lean(),
+			Post.countDocuments(),
+		]);
 
-		if (req.query.page) {
-			const offset = parseInt(req.query.page as string) * pageLength;
-			postsQuery.skip(offset);
-		}
-		if (req.query.limit) {
-			const limit = parseInt(req.query.limit as string);
-			postsQuery.limit(limit);
-		}
-
-		const posts = await postsQuery.exec();
 		res.status(200).json({ posts, meta: { total: postsCount } });
 	},
 );
@@ -67,22 +64,17 @@ export const getUserPosts = [
 			: pageLength;
 		const page = req.query.page ? parseInt(req.query.page as string) : 0;
 
-		const user = await User.findById(req.params.id);
+		const user = await User.findOne({
+			_id: req.params.id,
+			isDeleted: false,
+		}).lean();
 		if (!user) {
-			res.status(404).json({ message: "User not found" });
-			return;
-		}
-
-		if (user.isDeleted) {
-			res.status(404).json({ message: "User has been deleted" });
+			res.status(404).json({ message: "User not found or has been deleted" });
 			return;
 		}
 
 		const isSelf = String(reqUser._id) === String(user._id);
-
-		const isFriends = reqUser.friends.some(
-			(friend) => String(friend) === String(user._id),
-		);
+		const isFriends = reqUser.friends.includes(user._id);
 
 		const audienceQuery = isSelf
 			? {}
@@ -108,7 +100,8 @@ export const getUserPosts = [
 			.sort({ createdAt: -1 })
 			.limit(limit)
 			.skip(page * pageLength)
-			.populate(defaultPostPopulation);
+			.populate(defaultPostPopulation)
+			.lean();
 
 		const populatedPosts = await Promise.all(
 			posts?.map((post) => getOtherPostData(post)),
@@ -144,10 +137,11 @@ export const getPostsByUserFriends = [
 			...fromQuery,
 			audience: { $in: ["Friends", "Public"] },
 		})
-			.populate(defaultPostPopulation)
 			.sort({ createdAt: -1 })
 			.limit(limit)
-			.skip(page * pageLength);
+			.skip(page * pageLength)
+			.populate(defaultPostPopulation)
+			.lean();
 
 		const populatedPosts = await Promise.all(
 			posts?.map((post) => getOtherPostData(post)),
@@ -162,9 +156,9 @@ export const getPostsByUserFriends = [
 // @access  Private
 export const getPostById = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		const post = await Post.findById(req.params.id).populate(
-			defaultPostPopulation,
-		);
+		const post = await Post.findById(req.params.id)
+			.populate(defaultPostPopulation)
+			.lean();
 
 		if (!post) {
 			res.status(404).json({ message: "Post not found" });
@@ -193,7 +187,7 @@ export const createPost = [
 
 		const author = req.user as IUser;
 
-		const post = new Post({
+		const post = await Post.create({
 			author: author._id,
 			...req.body,
 		});
@@ -216,9 +210,9 @@ export const createPost = [
 
 		await post.save();
 
-		const populatePost = await Post.findById(post._id).populate(
-			defaultPostPopulation,
-		);
+		const populatePost = await Post.findById(post._id)
+			.populate(defaultPostPopulation)
+			.lean();
 
 		res.status(201).json(populatePost);
 	}),
@@ -239,11 +233,10 @@ export const updatePost = [
 		}
 
 		const user = req.user as IUser;
-
 		const { audience, taggedUsers, content, feeling, sharedFrom, media } =
 			req.body;
 
-		const post = await Post.findById(req.params.id);
+		const post = await Post.findById(req.params.id).select("author");
 		if (!post) {
 			res.status(404).json({ message: "Post not found" });
 			return;
@@ -292,9 +285,9 @@ export const updatePost = [
 
 		await post.save();
 
-		const populatePost = await Post.findByIdAndUpdate(post._id).populate(
-			defaultPostPopulation,
-		);
+		const populatePost = await Post.findById(post._id)
+			.populate(defaultPostPopulation)
+			.lean();
 
 		res.status(200).json(populatePost);
 	}),
@@ -316,7 +309,10 @@ export const updatePostAudience = [
 
 		const { audience } = req.body;
 
-		const post = await Post.findById(req.params.id);
+		const post = await Post.findById(req.params.id).populate(
+			defaultPostPopulation,
+		);
+
 		if (!post) {
 			res.status(404).json({ message: "Post not found" });
 			return;
@@ -336,11 +332,7 @@ export const updatePostAudience = [
 
 		await post.save();
 
-		const populatePost = await Post.findById(post._id).populate(
-			defaultPostPopulation,
-		);
-
-		res.status(200).json(populatePost);
+		res.status(200).json(post);
 	}),
 ];
 
@@ -352,7 +344,7 @@ export const deletePost = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
-		const post = await Post.findById(req.params.id).select("author");
+		const post = await Post.findById(req.params.id).select("author").lean();
 		if (!post) {
 			res.status(404).json({ message: "Post not found" });
 			return;
@@ -363,11 +355,12 @@ export const deletePost = [
 			return;
 		}
 
-		await Post.findByIdAndDelete(req.params.id);
+		await Promise.all([
+			Post.findByIdAndDelete(req.params.id),
+			removeNotificationsFromDeletedPost(post._id, String(post.author)),
+		]);
 
-		await removeNotificationsFromDeletedPost(post._id, String(post.author));
-
-		res.status(200).json({ message: "Post deleted", post });
+		res.status(200).json({ message: "Post deleted" });
 	}),
 ];
 
@@ -376,9 +369,7 @@ export const deletePost = [
 // @access  Private
 export const reactToPost = [
 	authenticateJwt,
-	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
-	body("user").trim().isMongoId().withMessage("Invalid user id"),
-	body("post").trim().isMongoId().withMessage("Invalid post id"),
+	...postReactionValidation,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
@@ -416,6 +407,11 @@ export const reactToPost = [
 			defaultPostPopulation,
 		)) as IPost;
 
+		if (!post) {
+			res.status(404).json({ message: "Post not found" });
+			return;
+		}
+
 		const notificationQuery = {
 			to: (post.author as IUser)._id,
 			type: "reaction",
@@ -423,12 +419,13 @@ export const reactToPost = [
 			contentType: "post",
 		};
 
-		await createNotificationWithMultipleFrom({
-			query: notificationQuery,
-			from: user._id,
-		});
-
-		const populatedPost = await getOtherPostData(post);
+		const [populatedPost] = await Promise.all([
+			getOtherPostData(post),
+			createNotificationWithMultipleFrom({
+				query: notificationQuery,
+				from: user._id,
+			}),
+		]);
 
 		res.status(201).json(populatedPost);
 	}),
@@ -473,12 +470,13 @@ export const unreactToPost = [
 			contentType: "post",
 		};
 
-		removeUserFromNotificationMultipleFrom({
-			query: notificationQuery,
-			remove: user._id,
-		});
-
-		const populatedPost = await getOtherPostData(post);
+		const [populatedPost] = await Promise.all([
+			getOtherPostData(post),
+			removeUserFromNotificationMultipleFrom({
+				query: notificationQuery,
+				remove: user._id,
+			}),
+		]);
 
 		res.status(200).json(populatedPost);
 	}),
@@ -489,7 +487,7 @@ export const unreactToPost = [
 // @access  Private
 export const getPostReactions = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		const post = await Post.findById(req.params.id);
+		const post = await Post.exists({ _id: req.params.id }).lean();
 		if (!post) {
 			res.status(404).json({ message: "Post not found" });
 			return;
@@ -497,7 +495,8 @@ export const getPostReactions = expressAsyncHandler(
 
 		const reactions = await Reaction.find({ parent: post._id })
 			.populate("user", "fullName isDeleted avatarUrl")
-			.sort({ createdAt: -1 });
+			.sort({ createdAt: -1 })
+			.lean();
 
 		res.status(200).json({ reactions });
 	},
@@ -535,21 +534,19 @@ export const toggleSavedPost = [
 			return;
 		}
 
-		const postId = post._id as ObjectId;
-
-		const isPostSaved = user.savedPosts.some(
-			(savedPost) => String(savedPost) === String(postId),
-		);
+		const isPostSaved = user.savedPosts.includes(post._id);
 
 		const updateOperation = isPostSaved
-			? { $pull: { savedPosts: postId } }
-			: { $addToSet: { savedPosts: postId } };
+			? { $pull: { savedPosts: post._id } }
+			: { $addToSet: { savedPosts: post._id } };
 
 		const userUpdated = await User.findByIdAndUpdate(
 			user._id,
 			updateOperation,
 			{ new: true },
-		).select("savedPosts");
+		)
+			.select("savedPosts")
+			.lean();
 
 		res.status(200).json(userUpdated?.savedPosts);
 	}),
@@ -564,36 +561,10 @@ export const getSavedPosts = [
 		const user = req.user as IUser;
 
 		const posts = await Post.find({ _id: { $in: user.savedPosts } })
-			.populate("author", "fullName isDeleted avatarUrl")
-			.sort({ createdAt: -1 });
+			.sort({ createdAt: -1 })
+			.populate(defaultPostPopulation)
+			.lean();
 
 		res.status(200).json({ posts });
-	}),
-];
-
-// @desc    Share post
-// @route   POST /posts/:id/share
-// @access  Private
-export const sharePost = [
-	authenticateJwt,
-	expressAsyncHandler(async (req: Request, res: Response) => {
-		const user = req.user as IUser;
-
-		const post = await Post.findById(req.params.id);
-
-		if (!post) {
-			res.status(404).json({ message: "Post not found" });
-			return;
-		}
-
-		const sharedPost = new Post({
-			author: user._id,
-			published: true,
-			sharedFrom: post._id,
-		});
-
-		await sharedPost.save();
-
-		res.status(201).json({ message: "Post shared successfully", sharedPost });
 	}),
 ];

@@ -9,7 +9,6 @@ import {
 	getPostsByUserFriends,
 	getSavedPosts,
 	reactToPost,
-	sharePost,
 	toggleSavedPost,
 	unreactToPost,
 	updatePost,
@@ -35,9 +34,6 @@ router.patch("/:id/save", toggleSavedPost);
 
 // /posts/saved-posts
 router.get("/saved-posts", getSavedPosts);
-
-// /posts/:id/share
-router.post("/:id/share", sharePost);
 
 // /posts/friends
 router.get("/friends", getPostsByUserFriends);

@@ -16,15 +16,32 @@
 	"parserOptions": {
 		"ecmaVersion": "latest"
 	},
-	"plugins": ["@typescript-eslint", "import", "jsx-a11y", "prettier"],
+	"plugins": [
+		"@typescript-eslint",
+		"import",
+		"jsx-a11y",
+		"prettier"
+	],
 	"rules": {
-		"quotes": ["error", "double"],
-		"semi": ["error", "always"]
+		"quotes": [
+			"error",
+			"double"
+		],
+		"semi": [
+			"error",
+			"always"
+		],
+		"@typescript-eslint/no-unused-vars": ["warn",{"varsIgnorePattern": "^log$"}]
 	},
 	"settings": {
 		"import/resolver": {
 			"node": {
-				"extensions": [".js", ".jsx", ".ts", ".tsx"]
+				"extensions": [
+					".js",
+					".jsx",
+					".ts",
+					".tsx"
+				]
 			}
 		}
 	}

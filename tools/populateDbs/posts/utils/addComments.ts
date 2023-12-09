@@ -1,5 +1,5 @@
 import { faker } from "@faker-js/faker";
-import { ObjectId } from "mongoose";
+import { ObjectId, Schema } from "mongoose";
 
 import addReactions from "./addReactions";
 import Comment, { IComment } from "../../../../src/models/comment.model";
@@ -8,9 +8,10 @@ import {
 	getRandomInt,
 } from "../../utils/helperFunctions";
 import { IPost } from "../../../../src/models/post.model";
-import { createNotificationWithMultipleFrom } from "../../../../src/controllers/notifications/notification.controller";
+
 import { getNotificationBetweenDates } from "../../utils/getNotificationBetweenDates";
 import { IUser } from "../../../../src/models/user.model";
+import { createNotificationWithMultipleFrom } from "../../../../src/controllers/notifications/utils/createNotificationWithMultipleFrom";
 
 interface GetCommentsParams {
 	users: IUser[];
@@ -85,7 +86,7 @@ const addComment = async ({
 			repliesPromise,
 		]);
 
-		comment.reactions = reactions;
+		comment.reactions = reactions as unknown as Schema.Types.ObjectId[];
 		comment.replies = replies;
 
 		await comment.save();

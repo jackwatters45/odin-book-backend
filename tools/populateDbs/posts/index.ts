@@ -6,6 +6,8 @@ import { getRandomInt } from "../utils/helperFunctions";
 import { getPostData, getSharedPostData } from "./utils/getPostData";
 import addReactions from "./utils/addReactions";
 import addComments from "./utils/addComments";
+import { IReaction } from "../../../src/models/reaction.model";
+import { Schema } from "mongoose";
 
 const log = debug("log:populatePosts");
 
@@ -28,7 +30,10 @@ export const createPost = async (
 		);
 	}
 
-	post.reactions = await addReactions(post, users, 20, "post");
+	post.reactions = (await addReactions(post, users, 20, "post")) as unknown as (
+		| Schema.Types.ObjectId
+		| IReaction
+	)[];
 
 	post.comments = await addComments({ users, post });
 

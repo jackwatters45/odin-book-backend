@@ -4,11 +4,11 @@ import {
 	getRandValuesFromArrayOfObjs,
 	getRandomInt,
 } from "../../utils/helperFunctions";
-import { createNotificationWithMultipleFrom } from "../../../../src/controllers/notifications/notification.controller";
 import { IComment } from "../../../../src/models/comment.model";
 import { IPost } from "../../../../src/models/post.model";
 import { getNotificationBetweenDates } from "../../utils/getNotificationBetweenDates";
 import { IUser } from "../../../../src/models/user.model";
+import { createNotificationWithMultipleFrom } from "../../../../src/controllers/notifications/utils/createNotificationWithMultipleFrom";
 
 const addReactions = async (
 	parent: IComment | IPost,

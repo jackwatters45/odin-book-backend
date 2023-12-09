@@ -1,73 +1,14 @@
 import cron from "node-cron";
-import { Request, Response } from "express";
 import expressAsyncHandler from "express-async-handler";
-import { faker } from "@faker-js/faker";
-import { FilterQuery } from "mongoose";
 import debug from "debug";
+import { Request, Response } from "express";
 
 import authenticateJwt from "../../middleware/authenticateJwt";
 import User, { IUser } from "../../models/user.model";
-import Post from "../../models/post.model";
-import Notification, {
-	INotification,
-	NotificationType,
-} from "../../models/notification.model";
-import {
-	getRandValueFromArray,
-	getRandValueFromArrayOfObjs,
-} from "../../../tools/populateDbs/utils/helperFunctions";
-import { getIO } from "../../config/socket";
-import { getRedis } from "../../config/redis";
-import { ObjectId } from "mongodb";
+import Notification from "../../models/notification.model";
+import { updateNotificationCount } from "./utils/updateNotificationCount";
 
 const log = debug("log:notificationsController");
-
-export const createRandomNotification = async (userId: string) => {
-	const users = await User.find({
-		_id: { $ne: userId },
-	})
-		.select("_id")
-		.lean();
-
-	const userPosts = await Post.find({ author: userId }).select("_id").lean();
-
-	const userNotifications = await Notification.find({ to: userId }).lean();
-
-	const today = new Date();
-	const threeDaysAgo = new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000);
-
-	const notificationDate = faker.date.between({
-		from: threeDaysAgo,
-		to: today,
-	});
-
-	let notification: INotification;
-	do {
-		const type = getRandValueFromArray(NotificationType);
-
-		notification = new Notification({
-			to: userId,
-			from: [getRandValueFromArrayOfObjs(users)],
-			type: getRandValueFromArray(NotificationType),
-			contentId:
-				type === "reaction" || type === "comment"
-					? getRandValueFromArrayOfObjs(userPosts)
-					: undefined,
-			contentType:
-				type === "reaction" || type === "comment" ? "post" : undefined,
-			updatedAt: notificationDate,
-			createdAt: notificationDate,
-		});
-	} while (
-		userNotifications.some(
-			(n) => n.contentId === notification.contentId && n.type === "reaction",
-		)
-	);
-
-	await notification.save();
-
-	await updateNotificationCount(userId);
-};
 
 // 	@desc    Get notification count
 // 	@route   GET /notifications/count
@@ -76,13 +17,6 @@ export const getNotificationCount = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-
-		if (!user) {
-			res
-				.status(401)
-				.json({ message: "Must be logged in to perform this action." });
-			return;
-		}
 
 		const userNotificationCount = await Notification.countDocuments({
 			to: user._id,
@@ -101,13 +35,6 @@ export const getNotifications = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
-		if (!user) {
-			res
-				.status(401)
-				.json({ message: "Must be logged in to perform this action." });
-			return;
-		}
-
 		const pageLength = 20;
 		const limit = req.query.limit
 			? parseInt(req.query.limit as string)
@@ -115,10 +42,11 @@ export const getNotifications = [
 		const page = req.query.page ? parseInt(req.query.page as string) : 0;
 
 		const notifications = await Notification.find({ to: user._id })
-			.sort({ updatedAt: -1 })
+			.sort({ createdAt: -1 })
 			.skip(page * limit)
 			.limit(limit)
-			.populate("from", "fullName avatarUrl");
+			.populate("from", "fullName avatarUrl")
+			.lean();
 
 		res.status(200).json(notifications);
 	}),
@@ -132,17 +60,21 @@ export const getUnreadNotifications = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
-		if (!user) {
-			res
-				.status(401)
-				.json({ message: "Must be logged in to perform this action." });
-			return;
-		}
+		const pageLength = 20;
+		const limit = req.query.limit
+			? parseInt(req.query.limit as string)
+			: pageLength;
+		const page = req.query.page ? parseInt(req.query.page as string) : 0;
 
 		const notifications = await Notification.find({
 			to: user._id,
 			isRead: false,
-		}).populate("from", "fullName avatarUrl");
+		})
+			.sort({ createdAt: -1 })
+			.skip(page * limit)
+			.limit(limit)
+			.populate("from", "fullName avatarUrl")
+			.lean();
 
 		res.status(200).json(notifications);
 	}),
@@ -155,13 +87,6 @@ export const readNotification = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-
-		if (!user) {
-			res
-				.status(401)
-				.json({ message: "Must be logged in to perform this action." });
-			return;
-		}
 
 		const notificationId = req.params.id;
 		if (!notificationId) {
@@ -195,13 +120,6 @@ export const readAllNotifications = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
 
-		if (!user) {
-			res
-				.status(401)
-				.json({ message: "Must be logged in to perform this action." });
-			return;
-		}
-
 		await Notification.updateMany({ to: user._id }, { isRead: true });
 
 		res.status(200).json({
@@ -209,21 +127,6 @@ export const readAllNotifications = [
 		});
 	}),
 ];
-
-export const updateNotificationCount = async (userId: string | ObjectId) => {
-	const io = getIO();
-	const redisClient = getRedis();
-
-	const userNotificationCount = await Notification.countDocuments({
-		to: userId,
-		isRead: false,
-	});
-
-	const userSocketId = await redisClient.get(String(userId));
-	if (userSocketId) {
-		io.to(userSocketId).emit("notificationCount", userNotificationCount);
-	}
-};
 
 // @desc    Create birthday notifications
 const createBirthdayNotifications = async () => {
@@ -266,109 +169,3 @@ cron.schedule("0 0 * * *", async () => {
 		console.error("Error sending birthday notifications:", err);
 	}
 });
-
-interface ICreateNotification {
-	query: FilterQuery<INotification>;
-	from: string | string[];
-	date?: Date;
-	includeSocket?: boolean;
-}
-
-export const createNotificationWithMultipleFrom = async ({
-	query,
-	from,
-	date = new Date(),
-	includeSocket = true,
-}: ICreateNotification) => {
-	const fromArray = Array.isArray(from) ? from : [from];
-
-	const existingNotification = await Notification.exists(query);
-
-	if (existingNotification) {
-		await Notification.findOneAndUpdate(query, {
-			$addToSet: { from: { $each: fromArray } },
-			updatedAt: date,
-		});
-	} else {
-		await Notification.create({
-			...query,
-			from: fromArray,
-			updatedAt: date,
-			createdAt: date || undefined,
-		});
-	}
-
-	if (includeSocket) await updateNotificationCount(query.to);
-};
-
-interface IRemoveNotification {
-	query: FilterQuery<INotification>;
-	remove: string;
-}
-
-export const removeUserFromNotificationMultipleFrom = async ({
-	query,
-	remove,
-}: IRemoveNotification) => {
-	await Notification.updateOne(query, {
-		$pull: { from: remove },
-	});
-
-	await updateNotificationCount(query.to as string);
-};
-
-export const removeNotificationsFromDeletedPost = async (
-	postId: string,
-	postAuthor: string,
-) => {
-	await Notification.deleteMany({ contentId: postId, contentType: "post" });
-
-	await updateNotificationCount(postAuthor);
-};
-
-interface IFriendRequestNotification {
-	to: string;
-	from: string;
-}
-
-export const createNotificationForFriendRequest = async ({
-	to,
-	from,
-}: IFriendRequestNotification) => {
-	await Notification.create({ to, from, type: "request received" });
-
-	await updateNotificationCount(to);
-};
-
-export const removeNotificationForFriendRequest = async ({
-	to,
-	from,
-}: IFriendRequestNotification) => {
-	await Notification.findOneAndDelete({ to, from, type: "request received" });
-
-	await updateNotificationCount(to);
-};
-
-interface IAcceptFriendRequestNotification {
-	userAccepting: string;
-	userRequesting: string;
-}
-
-export const createNotificationForAcceptedFriendRequest = async ({
-	userAccepting,
-	userRequesting,
-}: IAcceptFriendRequestNotification) => {
-	await Notification.findOneAndUpdate(
-		{ to: userAccepting, from: userRequesting, type: "request received" },
-		{ $set: { type: "request accepted", isRead: false } },
-	);
-
-	await Notification.create({
-		to: userRequesting,
-		from: userAccepting,
-		type: "request accepted",
-	});
-
-	await updateNotificationCount(userAccepting);
-	await updateNotificationCount(userRequesting);
-};

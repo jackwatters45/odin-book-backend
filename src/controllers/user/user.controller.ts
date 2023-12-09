@@ -1,6 +1,6 @@
 import expressAsyncHandler from "express-async-handler";
 import { Request, Response } from "express";
-import { ValidationChain, body, validationResult } from "express-validator";
+import { ValidationChain, validationResult } from "express-validator";
 import { ObjectId, Schema, isValidObjectId } from "mongoose";
 import debug from "debug";
 
@@ -47,13 +47,17 @@ import {
 } from "./validations";
 
 import validateBirthdayDate from "../../utils/validateBirthdayDate";
+import { IWork } from "../../../types/work";
+import { IPlaceLived } from "../../../types/placesLived";
+import { findMutualFriends } from "./utils/findMutualFriends";
+import { userDefaultPopulation } from "./utils/userDefaultPopulation";
 import {
 	createNotificationForAcceptedFriendRequest,
 	createNotificationForFriendRequest,
 	removeNotificationForFriendRequest,
-} from "../notifications/notification.controller";
-import { IWork } from "../../../types/work";
-import { IPlaceLived } from "../../../types/placesLived";
+} from "../notifications/utils/notificationForFriendRequests";
+import createUserValidation from "./validations/createUserValidation";
+import updateUserPasswordValidation from "./validations/updateUserPasswordValidation";
 
 const log = debug("log:user:controller");
 
@@ -64,37 +68,15 @@ export const getUsers = expressAsyncHandler(
 	async (req: Request, res: Response) => {
 		const usersTotal = await User.countDocuments({ isDeleted: false });
 		const users = await User.find({ isDeleted: false })
+			.sort({ createdAt: -1 })
 			.limit(req.query.limit ? parseInt(req.query.limit as string) : 0)
 			.skip(req.query.offset ? parseInt(req.query.offset as string) : 0)
-			.sort({ createdAt: -1 });
+			.populate(userDefaultPopulation)
+			.lean();
 
 		res.status(200).json({ users, meta: { total: usersTotal } });
 	},
 );
-
-// all user about routes use this projection
-const userDefaultPopulation = [
-	{
-		path: "familyMembers.user",
-		select: "avatarUrl fullName",
-	},
-	{
-		path: "relationshipStatus.user",
-		select: "avatarUrl fullName",
-	},
-];
-
-const getMutualFriendIds = (userA: IUser, userB: IUser) => {
-	const extractId = (item: ObjectId | Partial<IUser>): string =>
-		item instanceof Schema.Types.ObjectId
-			? item.toString()
-			: item?._id.toString();
-
-	const userAFriendsIds = userA.friends.map(extractId);
-	const userBFriendsSet = new Set(userB.friends.map(extractId));
-
-	return userAFriendsIds.filter((friendId) => userBFriendsSet.has(friendId));
-};
 
 // @desc    Get user by id
 // @route   GET /users/:id
@@ -110,9 +92,9 @@ export const getUserById = [
 		}
 
 		const [user, posts, comments] = await Promise.all([
-			User.findById(req.params.id).populate(userDefaultPopulation),
-			Post.find({ published: true, author: req.params.id }),
-			Comment.find({ author: req.params.id }),
+			User.findById(req.params.id).populate(userDefaultPopulation).lean(),
+			Post.find({ published: true, author: req.params.id }).lean(),
+			Comment.find({ author: req.params.id }).lean(),
 		]);
 
 		if (user?.isDeleted) {
@@ -127,15 +109,13 @@ export const getUserById = [
 			return;
 		}
 
-		const mutualFriends = reqUser ? getMutualFriendIds(reqUser, user) : [];
+		const mutualFriends = await findMutualFriends(
+			reqUser?._id,
+			user._id,
+			false,
+		);
 
-		const userWithCommentsPosts = {
-			...user?.toJSON(),
-			posts,
-			comments,
-			mutualFriends,
-		};
-		res.status(200).json(userWithCommentsPosts);
+		res.status(200).json({ ...user, posts, comments, mutualFriends });
 	}),
 ];
 
@@ -146,10 +126,6 @@ export const searchUsers = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "Unauthorized" });
-			return;
-		}
 
 		const query = req.query.q
 			? { fullName: { $regex: req.query.q as string, $options: "i" } }
@@ -198,11 +174,7 @@ export const searchUserFriendsByName = [
 			: pageLength;
 		const page = req.query.page ? parseInt(req.query.page as string) : 0;
 
-		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "Unauthorized" });
-			return;
-		}
+		const reqUser = req.user as IUser;
 
 		const { q, exclude } = req.query;
 		const excludeIds = exclude ? (exclude as string).split(",") : [];
@@ -210,29 +182,34 @@ export const searchUserFriendsByName = [
 		const query = q
 			? {
 					fullName: { $regex: q as string, $options: "i" },
-					_id: { $in: user.friends, $nin: excludeIds },
+					_id: { $in: reqUser.friends, $nin: excludeIds },
 			  }
 			: {
-					_id: { $in: user.friends, $nin: excludeIds },
+					_id: { $in: reqUser.friends, $nin: excludeIds },
 			  };
 
 		const users = await User.find(query)
+			.limit(limit)
+			.skip(page * limit)
 			.select("fullName avatarUrl friends")
-			.limit(limit + excludeIds.length)
-			.skip(page);
+			.populate("friends", "fullName avatarUrl")
+			.lean();
 
 		if (!users) {
 			res.status(200).json([]);
 			return;
 		}
 
-		const usersWithMutualFriends = users?.map((userResult) => {
-			const mutualFriends = userResult
-				? getMutualFriendIds(userResult, user)
-				: [];
+		const usersWithMutualFriends = await Promise.all(
+			users?.map(async (userResult) => {
+				const mutualFriends = await findMutualFriends(
+					reqUser?._id,
+					userResult._id,
+				);
 
-			return { ...userResult.toJSON(), mutualFriends };
-		});
+				return { ...userResult, mutualFriends };
+			}),
+		);
 
 		res.status(200).json(usersWithMutualFriends);
 	}),
@@ -245,10 +222,6 @@ export const searchUserFriendsExcludingFamily = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const user = req.user as IUser;
-		if (!user) {
-			res.status(401).json({ message: "Unauthorized" });
-			return;
-		}
 
 		const { q } = req.query;
 		if (!q) {
@@ -264,15 +237,9 @@ export const searchUserFriendsExcludingFamily = [
 			{
 				$match: {
 					$and: [
-						{
-							fullName: { $regex: q as string, $options: "i" },
-						},
-						{
-							_id: { $in: user.friends },
-						},
-						{
-							_id: { $nin: familyMemberIds },
-						},
+						{ fullName: { $regex: q as string, $options: "i" } },
+						{ _id: { $in: user.friends } },
+						{ _id: { $nin: familyMemberIds } },
 					],
 				},
 			},
@@ -302,12 +269,14 @@ export const getDeletedUserById = [
 		}
 
 		const [user, posts, comments] = await Promise.all([
-			User.findById(req.params.id).populate({
-				path: "deletedData.deletedBy",
-				select: "fullName",
-			}),
-			Post.find({ published: true, author: req.params.id }),
-			Comment.find({ author: req.params.id }),
+			User.findById(req.params.id)
+				.populate({
+					path: "deletedData.deletedBy",
+					select: "fullName",
+				})
+				.lean(),
+			Post.find({ published: true, author: req.params.id }).lean(),
+			Comment.find({ author: req.params.id }).lean(),
 		]);
 
 		res.status(200).json({ user, posts, comments });
@@ -319,48 +288,7 @@ export const getDeletedUserById = [
 // @access  Admin
 export const createUser = [
 	authenticateJwt,
-	body("firstName")
-		.trim()
-		.notEmpty()
-		.withMessage("First name is required and should not be empty"),
-	body("lastName")
-		.trim()
-		.notEmpty()
-		.withMessage("Last name is required and should not be empty"),
-	body("username")
-		.trim()
-		.notEmpty()
-		.withMessage(
-			"Username id is required and should be a valid email or phone number",
-		),
-	body("password")
-		.trim()
-		.notEmpty()
-		.isLength({ min: 8 })
-		.withMessage("Password should be at least 8 characters long")
-		.matches(
-			/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*?()])[A-Za-z\d!@#$%^&*?()]{8,}$/,
-			"i",
-		)
-		.withMessage(
-			"Password must contain at least one uppercase letter, one lowercase letter, one special character, one number, and be at least 8 characters long",
-		),
-	body("birthday")
-		.trim()
-		.notEmpty()
-		.isISO8601()
-		.withMessage(
-			"Birthday is required and should be a valid date in ISO 8601 format",
-		),
-	body("pronouns")
-		.optional()
-		.trim()
-		.notEmpty()
-		.withMessage("Pronouns should not be empty if provided"),
-	body("userType")
-		.trim()
-		.isIn(["admin", "user"])
-		.withMessage("User type must be either admin or user"),
+	...createUserValidation,
 	expressAsyncHandler(async (req, res) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
@@ -416,18 +344,7 @@ export const createUser = [
 // @access  Admin
 export const updateUserPassword = [
 	authenticateJwt,
-	body("newPassword")
-		.notEmpty()
-		.trim()
-		.isLength({ min: 8 })
-		.withMessage("Password should be at least 8 characters long")
-		.matches(
-			/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*?()])[A-Za-z\d!@#$%^&*?()]{8,}$/,
-			"i",
-		)
-		.withMessage(
-			"Password must contain at least one uppercase letter, one lowercase letter, one special character, one number, and be at least 8 characters long",
-		),
+	...updateUserPasswordValidation,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
@@ -436,20 +353,14 @@ export const updateUserPassword = [
 		}
 
 		const reqUser = req.user as IUser;
-
 		if (reqUser.userType !== "admin") {
 			res.status(403).json({ message: "Unauthorized" });
 			return;
 		}
 
-		const user = await User.findById(req.params.id);
-		if (!user) {
-			res.status(404).json({ message: "User not found" });
-			return;
-		}
-
-		user.password = req.body.newPassword;
-		await user.save();
+		await User.findByIdAndUpdate(req.params.id, {
+			password: req.body.newPassword,
+		});
 
 		res.status(201).json({ message: "Password updated successfully" });
 	}),
@@ -478,23 +389,15 @@ const updateUserImage = (
 			return;
 		}
 
-		const user = (await User.findById(userId)) as IUser;
-		if (!user) {
-			res.status(404).json({ message: "User not found" });
-			return;
-		}
-
-		const prevImageUrl = user[fieldToUpdate];
-
 		const resizedImage = await resizeImage(file, imageDimensions);
 		const imageLink = await uploadFileToCloudinary(resizedImage);
-		user[fieldToUpdate] = imageLink;
 
-		await user.save();
+		const user = await User.findByIdAndUpdate(userId, {
+			[fieldToUpdate]: imageLink,
+		});
 
-		if (prevImageUrl) {
-			await removeFromCloudinary(prevImageUrl);
-		}
+		const prevImageUrl = user?.[fieldToUpdate];
+		if (prevImageUrl) await removeFromCloudinary(prevImageUrl);
 
 		res.status(201).json({
 			message: `${fieldToUpdate.replace("Url", " ")}updated successfully`,
@@ -1426,53 +1329,6 @@ export const getUserPhotosBy = expressAsyncHandler(
 	},
 );
 
-const getUserFriendsData = (user: IUser, reqUser: IUser) => {
-	const userFriends = user?.friends as IUser[];
-	const reqUserFriends = reqUser.friends as IUser[];
-
-	const reqUserFriendIdsSet = new Set(
-		reqUserFriends.map((friend) => friend._id.toString()),
-	);
-
-	const mutualAndReqUserFriends = userFriends?.map((friend) => {
-		const friendsFriends = friend.friends as IUser[];
-		const friendFriendIdsSet = new Set(
-			friendsFriends.map((f) => f._id.toString()),
-		);
-
-		const mutualFriends = [...reqUserFriendIdsSet].filter((id) =>
-			friendFriendIdsSet.has(id),
-		);
-
-		const isFriend = reqUserFriendIdsSet.has(friend._id.toString());
-
-		const requestSent = reqUser.friendRequestsSent.some(
-			(id) => String(id) === String(friend.id),
-		);
-		const requestReceived = reqUser.friendRequestsReceived.some(
-			(id) => String(id) === String(friend.id),
-		);
-
-		return {
-			...friend.toObject(),
-			mutualFriends,
-			isFriend,
-			requestSent,
-			requestReceived,
-		};
-	});
-
-	return mutualAndReqUserFriends;
-};
-
-const getReqUserUserFriendsData = (userFriends: IUser[]) => {
-	return userFriends?.map((friend) => ({
-		...friend.toObject(),
-		mutualFriends: userFriends.map((f) => f._id.toString()),
-		isFriend: true,
-	}));
-};
-
 // @desc    Get user friends all
 // @route   GET /users/:id/friends
 // @access  Private
@@ -1480,23 +1336,43 @@ export const getUserFriends = [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
+		const limit = req.query.limit ? parseInt(req.query.limit as string) : 0;
 
-		const user = await User.findById(req.params.id)
+		const user = await User.findOne({ _id: req.params.id, isDeleted: false })
 			.populate("friends", "avatarUrl fullName friends education placesLived")
-			.select("friends isDeleted")
-			.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
+			.select("friends")
+			.lean();
 
 		if (!user) {
-			res.status(404).json({ message: "User not found" });
+			res.status(404).json({ message: "User not found or has been deleted" });
 			return;
 		}
 
-		if (user.isDeleted) {
-			res.status(404).json({ message: "User has been deleted" });
-			return;
-		}
+		const userFriends = (
+			limit ? user?.friends.slice(0, limit) : user?.friends
+		) as IUser[];
 
-		const mutualAndReqUserFriends = getUserFriendsData(user, reqUser);
+		const allReqUserFriends = reqUser.friends as Schema.Types.ObjectId[];
+
+		const mutualAndReqUserFriends = await Promise.all(
+			userFriends?.map(async (friend) => {
+				const mutualFriends = await findMutualFriends(friend._id, reqUser._id);
+
+				const isFriend = allReqUserFriends.includes(friend._id);
+				const requestSent = reqUser.friendRequestsSent.includes(friend._id);
+				const requestReceived = reqUser.friendRequestsReceived.includes(
+					friend._id,
+				);
+
+				return {
+					...friend,
+					mutualFriends,
+					isFriend,
+					requestSent,
+					requestReceived,
+				};
+			}),
+		);
 
 		res.status(200).json(mutualAndReqUserFriends);
 	}),
@@ -1514,77 +1390,26 @@ export const getUserFriendsSuggestions = [
 		const reqUser = req.user as IUser;
 		const userFriendsIds = reqUser.friends as ObjectId[];
 
-		const userFriendAndSentRequestsIds = [
-			...userFriendsIds,
-			...reqUser.friendRequestsSent,
-		];
-
 		const usersWithMutualFriends = await User.find({
-			_id: { $nin: userFriendAndSentRequestsIds, $ne: reqUser._id },
+			_id: { $nin: userFriendsIds, $ne: reqUser._id },
 			friends: { $in: userFriendsIds },
 		})
 			.populate("friends", "avatarUrl fullName ")
 			.select("friends avatarUrl fullName")
 			.limit(limit)
-			.skip(page * limit);
+			.skip(page * limit)
+			.lean();
 
-		const mutualFriendIds = new Set<string>();
-		usersWithMutualFriends.forEach((user) => {
-			const userFriends = user.friends as IUser[];
-			userFriends.forEach((friend) => {
-				if (
-					reqUser.friends.some(
-						(reqFriend) => String(reqFriend) === String(friend._id),
-					)
-				) {
-					mutualFriendIds.add(String(friend._id));
-				}
-			});
-		});
-
-		const allMutualFriends = await User.find({
-			_id: { $in: Array.from(mutualFriendIds) },
-		}).select("avatarUrl fullName");
-
-		const usersWithMutualFriendsData = usersWithMutualFriends.map((user) => {
-			const userFriends = user.friends as IUser[];
-			const mutualFriends = allMutualFriends.filter((mf) =>
-				userFriends.some((friend) => String(friend._id) === String(mf._id)),
-			);
-
-			return { ...user.toObject(), mutualFriends };
-		});
+		const usersWithMutualFriendsData = await Promise.all(
+			usersWithMutualFriends.map(async (user) => {
+				const mutualFriends = await findMutualFriends(user._id, reqUser._id);
+				return { ...user, mutualFriends };
+			}),
+		);
 
 		res.status(200).json(usersWithMutualFriendsData);
 	}),
 ];
-
-const findMutualFriends = async (userId1: string, userId2: string) => {
-	const mutualFriends = await User.aggregate([
-		{ $match: { _id: { $in: [userId1, userId2] } } },
-		{ $project: { friends: 1 } },
-		{ $unwind: "$friends" },
-		{ $group: { _id: "$friends", count: { $sum: 1 } } },
-		{ $match: { count: { $gt: 1 } } },
-		{
-			$lookup: {
-				from: "users",
-				localField: "_id",
-				foreignField: "_id",
-				as: "mutualFriend",
-			},
-		},
-		{ $unwind: "$mutualFriend" },
-		{
-			$project: {
-				_id: 1,
-				mutualFriend: { fullName: 1, avatarUrl: 1 },
-			},
-		},
-	]);
-
-	return mutualFriends.map((doc) => doc.mutualFriend);
-};
 
 // @desc    Get friend requests received
 // @route   GET /users/me/friend-requests
@@ -1610,13 +1435,16 @@ export const getFriendRequestsReceived = [
 		})
 			.select("avatarUrl fullName friends")
 			.limit(limit)
-			.skip(page * pageLength);
+			.skip(page * pageLength)
+			.lean();
 
-		const friendRequestsReceivedWithMutualData = friendRequestsReceived.map(
-			async (user) => {
+		log(friendRequestsReceived);
+
+		const friendRequestsReceivedWithMutualData = await Promise.all(
+			friendRequestsReceived.map(async (user) => {
 				const mutualFriends = await findMutualFriends(user._id, reqUser._id);
 				return { ...user, mutualFriends };
-			},
+			}),
 		);
 
 		res.status(200).json(friendRequestsReceivedWithMutualData);
@@ -1652,7 +1480,7 @@ export const getUserSavedPosts = [
 			})
 			.select("savedPosts isDeleted")
 			.sort({ createdAt: -1 })
-			.exec();
+			.lean();
 
 		if (!userSavedPosts) {
 			res.status(404).json({ message: "User not found" });
@@ -1695,37 +1523,32 @@ export const sendFriendRequest = [
 			return;
 		}
 
-		const userToFollow = await User.findById(userId);
-		if (!userToFollow || userToFollow.isDeleted) {
-			res.status(404).json({ message: "User not found" });
-			return;
-		}
-
-		const userAlreadyFriended = userToFollow.friends.includes(reqUser._id);
-		if (userAlreadyFriended) {
-			res.status(400).json({ message: "Already friends with user" });
-			return;
-		}
-
-		const userAlreadySentRequest =
-			userToFollow.friendRequestsReceived.includes(reqUser._id) ||
-			reqUser.friendRequestsSent.includes(userToFollow._id);
-		if (userAlreadySentRequest) {
-			res.status(400).json({ message: "Friend request already sent" });
-			return;
-		}
-
-		userToFollow.friendRequestsReceived.push(reqUser._id);
-		await userToFollow.save();
-
-		await User.findByIdAndUpdate(reqUser._id, {
-			$addToSet: { friendRequestsSent: userToFollow._id },
+		const userToFollow = await User.findOne({
+			_id: userId,
+			isDeleted: { $ne: true },
+			friends: { $ne: reqUserId },
+			friendRequestsReceived: { $ne: reqUserId },
 		});
 
-		await createNotificationForFriendRequest({
-			to: userToFollow._id,
-			from: reqUser._id,
-		});
+		if (!userToFollow) {
+			res
+				.status(404)
+				.json({ message: "User not found or already friends/requested" });
+			return;
+		}
+
+		await Promise.all([
+			User.findByIdAndUpdate(userToFollow._id, {
+				$addToSet: { friendRequestsReceived: reqUserId },
+			}),
+			User.findByIdAndUpdate(reqUserId, {
+				$addToSet: { friendRequestsSent: userToFollow._id },
+			}),
+			createNotificationForFriendRequest({
+				to: userToFollow._id,
+				from: reqUserId,
+			}),
+		]);
 
 		res.status(200).json({ message: "Friend request sent successfully" });
 	}),
@@ -1739,45 +1562,38 @@ export const cancelFriendRequest = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
 		const reqUserId = String(reqUser._id);
-
 		const userId = String(req.params.id);
+
 		if (reqUserId === userId) {
 			res.status(400).json({ message: "Invalid request" });
 			return;
 		}
 
-		const userToUnrequest = (await User.findById(userId)) as IUser;
-		if (!userToUnrequest || userToUnrequest.isDeleted) {
-			res.status(404).json({ message: "User not found" });
+		const userToUnrequest = await User.findOne({
+			_id: userId,
+			friendRequestsReceived: reqUser._id,
+			isDeleted: { $ne: true },
+		});
+
+		if (!userToUnrequest) {
+			res
+				.status(404)
+				.json({ message: "User not found or no friend request to cancel" });
 			return;
 		}
 
-		// Check if a friend request was sent
-		const userHasSentRequest =
-			userToUnrequest.friendRequestsReceived.includes(reqUser._id) &&
-			reqUser.friendRequestsSent.some(
-				(id) => String(id) === String(userToUnrequest.id),
-			);
-		if (!userHasSentRequest) {
-			res.status(400).json({ message: "No friend request to cancel" });
-			return;
-		}
-
-		// Remove the friend request
-		userToUnrequest.friendRequestsReceived =
-			userToUnrequest.friendRequestsReceived.filter(
-				(id) => String(id) !== String(reqUser._id),
-			);
-		await userToUnrequest.save();
-
-		await User.findByIdAndUpdate(reqUser._id, {
-			$pull: { friendRequestsSent: userToUnrequest._id },
-		});
-
-		await removeNotificationForFriendRequest({
-			to: userToUnrequest._id,
-			from: reqUser._id,
-		});
+		await Promise.all([
+			User.findByIdAndUpdate(userToUnrequest._id, {
+				$pull: { friendRequestsReceived: reqUserId },
+			}),
+			User.findByIdAndUpdate(reqUserId, {
+				$pull: { friendRequestsSent: userToUnrequest._id },
+			}),
+			removeNotificationForFriendRequest({
+				to: userToUnrequest._id,
+				from: reqUserId,
+			}),
+		]);
 
 		res.status(200).json({ message: "Friend request cancelled successfully" });
 	}),
@@ -1791,7 +1607,6 @@ export const unfriendUser = [
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const reqUser = req.user as IUser;
 		const reqUserId = String(reqUser._id);
-
 		const userToUnfriendId = String(req.params.friendId);
 
 		if (reqUserId === userToUnfriendId) {
@@ -1799,39 +1614,28 @@ export const unfriendUser = [
 			return;
 		}
 
-		// get user to unfriend
-		const userToRemove = (await User.findById(userToUnfriendId).populate(
-			"friends",
-			"avatarUrl fullName friends",
-		)) as IUser;
+		const userToRemove = await User.findOne({
+			_id: userToUnfriendId,
+			isDeleted: { $ne: true },
+			friends: reqUserId,
+		});
 
-		if (!userToRemove || userToRemove.isDeleted) {
-			res.status(404).json({ message: "User not found" });
+		if (!userToRemove) {
+			res.status(404).json({ message: "User not found or not a friend" });
 			return;
 		}
 
-		// get user to unfriend's friends and remove reqUser
-		const userToRemoveFriends = userToRemove.friends as IUser[];
-
-		userToRemove.friends = userToRemoveFriends.filter(
-			(friend) => String(friend._id) !== reqUserId,
-		);
-		await userToRemove.save();
-
-		// remove user to unfriend from reqUser's friends
-		const updatedUser = (await User.findByIdAndUpdate(
-			reqUserId,
-			{
-				$pull: { friends: userToRemove._id },
-			},
-			{ new: true },
-		).populate("friends", "avatarUrl fullName friends")) as IUser;
-
-		const user = getReqUserUserFriendsData(updatedUser.friends as IUser[]);
+		await Promise.all([
+			User.findByIdAndUpdate(reqUserId, {
+				$pull: { friends: userToUnfriendId },
+			}),
+			User.findByIdAndUpdate(userToUnfriendId, {
+				$pull: { friends: reqUserId },
+			}),
+		]);
 
 		res.status(200).json({
 			message: "Friend removed successfully",
-			user,
 		});
 	}),
 ];
@@ -1846,51 +1650,43 @@ export const acceptFriendRequest = [
 
 		const requestId = String(req.params.requestId);
 
-		const userToAccept = await User.findById(requestId);
-		if (!userToAccept || userToAccept.isDeleted) {
-			res.status(404).json({ message: "User not found" });
+		const userToAccept = await User.findOne({
+			_id: requestId,
+			friendRequestsSent: reqUser._id,
+			isDeleted: { $ne: true },
+		});
+
+		if (!userToAccept) {
+			res
+				.status(404)
+				.json({ message: "Friend request not found or user not found" });
 			return;
 		}
 
-		const userAlreadyFriended =
-			userToAccept.friends.some(
-				(friend) => String(friend) === String(reqUser._id),
-			) ||
-			reqUser.friends.some(
-				(friend) => String(friend) === String(userToAccept._id),
-			);
+		const userAlreadyFriended = await User.findOne({
+			_id: { $in: [reqUser._id, requestId] },
+			friends: { $in: [reqUser._id, requestId] },
+		});
+
 		if (userAlreadyFriended) {
 			res.status(400).json({ message: "Already friends with user" });
 			return;
 		}
 
-		const userToAcceptRequest = userToAccept.friendRequestsSent.some(
-			(request) => String(request) === reqUser.id,
-		);
-
-		const reqUserRequest = reqUser.friendRequestsReceived.some(
-			(request) => String(request) === requestId,
-		);
-
-		if (!userToAcceptRequest || !reqUserRequest) {
-			res.status(404).json({ message: "Friend request not found" });
-			return;
-		}
-
-		await User.findByIdAndUpdate(reqUser._id, {
-			$pull: { friendRequestsReceived: requestId },
-			$addToSet: { friends: userToAccept._id },
-		});
-
-		await User.findByIdAndUpdate(userToAccept._id, {
-			$pull: { friendRequestsSent: reqUser._id },
-			$addToSet: { friends: reqUser._id },
-		});
-
-		await createNotificationForAcceptedFriendRequest({
-			userAccepting: reqUser._id,
-			userRequesting: userToAccept._id,
-		});
+		await Promise.all([
+			User.findByIdAndUpdate(reqUser._id, {
+				$pull: { friendRequestsReceived: requestId },
+				$addToSet: { friends: userToAccept._id },
+			}),
+			User.findByIdAndUpdate(userToAccept._id, {
+				$pull: { friendRequestsSent: reqUser._id },
+				$addToSet: { friends: reqUser._id },
+			}),
+			createNotificationForAcceptedFriendRequest({
+				userAccepting: reqUser._id,
+				userRequesting: userToAccept._id,
+			}),
+		]);
 
 		res.status(200).json({
 			message: "Friend request accepted successfully",
@@ -1907,49 +1703,31 @@ export const rejectFriendRequest = [
 		const reqUser = req.user as IUser;
 		const requestId = String(req.params.requestId);
 
-		const userToReject = await User.findById(requestId);
-		if (!userToReject || userToReject.isDeleted) {
-			res.status(404).json({ message: "User not found" });
+		const userToReject = await User.findOne({
+			_id: requestId,
+			friendRequestsSent: reqUser._id,
+			isDeleted: { $ne: true },
+		});
+
+		if (!userToReject) {
+			res
+				.status(404)
+				.json({ message: "Friend request not found or user not found" });
 			return;
 		}
 
-		const userAlreadyFriended =
-			userToReject.friends.some(
-				(friend) => String(friend) === String(reqUser._id),
-			) ||
-			reqUser.friends.some(
-				(friend) => String(friend) === String(userToReject._id),
-			);
-		if (userAlreadyFriended) {
-			res.status(400).json({ message: "Already friends with user" });
-			return;
-		}
-
-		const userToRejectRequest = userToReject.friendRequestsSent.some(
-			(request) => String(request) === String(reqUser.id),
-		);
-
-		const reqUserRequest = reqUser.friendRequestsReceived.some(
-			(request) => String(request) === requestId,
-		);
-
-		if (!userToRejectRequest || !reqUserRequest) {
-			res.status(404).json({ message: "Friend request not found" });
-			return;
-		}
-
-		await User.findByIdAndUpdate(reqUser._id, {
-			$pull: { friendRequestsReceived: requestId },
-		});
-
-		await User.findByIdAndUpdate(userToReject._id, {
-			$pull: { friendRequestsSent: reqUser._id },
-		});
-
-		await removeNotificationForFriendRequest({
-			to: requestId,
-			from: reqUser._id,
-		});
+		await Promise.all([
+			User.findByIdAndUpdate(reqUser._id, {
+				$pull: { friendRequestsReceived: requestId },
+			}),
+			User.findByIdAndUpdate(userToReject._id, {
+				$pull: { friendRequestsSent: reqUser._id },
+			}),
+			removeNotificationForFriendRequest({
+				to: requestId,
+				from: reqUser._id,
+			}),
+		]);
 
 		res.status(200).json({
 			message: "Friend request rejected successfully",

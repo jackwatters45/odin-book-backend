@@ -5,6 +5,7 @@ import {
 } from "../../types/audience";
 import { IUser } from "./user.model";
 import { IComment } from "./comment.model";
+import { IReaction } from "./reaction.model";
 
 export interface CheckInValues {
 	location: string;
@@ -12,43 +13,6 @@ export interface CheckInValues {
 	state: string;
 	country: string;
 }
-
-export const reactionTypes = [
-	"like",
-	"dislike",
-	"love",
-	"haha",
-	"wow",
-	"sad",
-	"angry",
-	"hooray",
-	"confused",
-] as const;
-
-export type ReactionType = (typeof reactionTypes)[number];
-
-export interface IReaction extends Document {
-	parent: string;
-	user: ObjectId;
-	type: ReactionType;
-	updatedAt: Date;
-	createdAt: Date;
-}
-
-export const reactionTypeEmojis: Record<ReactionType, string> = {
-	like: "👍",
-	dislike: "👎",
-	love: "❤️",
-	haha: "😂",
-	wow: "😮",
-	sad: "😢",
-	angry: "😡",
-	hooray: "🎉",
-	confused: "😕",
-} as const;
-
-export const getReactionTypeEmoji = (type: ReactionType) =>
-	reactionTypeEmojis[type];
 
 export interface IPostObject {
 	content?: string;
