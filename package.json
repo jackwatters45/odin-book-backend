@@ -31,7 +31,7 @@
 		"prepare": "husky install",
 		"populate": "DEBUG=log* ts-node tools/populateDbs/index.ts",
 		"parseData": "node rawData/parseFile.mjs",
-		"file": "DEBUG=log*  ts-node tools/editUser.ts"
+		"file": "DEBUG=log*  ts-node tools/addDataToUser.ts"
 	},
 	"lint-staged": {
 		"*.ts": [

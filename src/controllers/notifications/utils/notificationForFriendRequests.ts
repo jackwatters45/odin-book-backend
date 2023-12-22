@@ -19,7 +19,11 @@ export const removeNotificationForFriendRequest = async ({
 	to,
 	from,
 }: IFriendRequestNotification) => {
-	await Notification.findOneAndDelete({ to, from, type: "request received" });
+	await Notification.findOneAndDelete({
+		to,
+		from: { $in: [from] },
+		type: "request received",
+	});
 
 	await updateNotificationCount(to);
 };
@@ -33,10 +37,17 @@ export const createNotificationForAcceptedFriendRequest = async ({
 	userAccepting,
 	userRequesting,
 }: IAcceptFriendRequestNotification) => {
-	await Notification.findOneAndUpdate(
-		{ to: userAccepting, from: userRequesting, type: "request received" },
-		{ $set: { type: "request accepted", isRead: false } },
-	);
+	await Notification.findOneAndDelete({
+		to: userAccepting,
+		from: userRequesting,
+		type: "request received",
+	});
+
+	await Notification.create({
+		to: userAccepting,
+		from: userRequesting,
+		type: "request accepted",
+	});
 
 	await Notification.create({
 		to: userRequesting,

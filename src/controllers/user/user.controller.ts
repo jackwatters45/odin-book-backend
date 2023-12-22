@@ -1843,8 +1843,8 @@ export const rejectFriendRequest = [
 				$pull: { friendRequestsSent: reqUser._id },
 			}),
 			removeNotificationForFriendRequest({
-				to: requestId,
-				from: reqUser._id,
+				from: requestId,
+				to: reqUser._id,
 			}),
 		]);
 

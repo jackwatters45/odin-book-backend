@@ -41,7 +41,10 @@ export const getNotifications = [
 			: pageLength;
 		const page = req.query.page ? parseInt(req.query.page as string) : 0;
 
-		const notifications = await Notification.find({ to: user._id })
+		const notifications = await Notification.find({
+			to: user._id,
+			from: { $exists: true },
+		})
 			.sort({ createdAt: -1 })
 			.skip(page * limit)
 			.limit(limit)

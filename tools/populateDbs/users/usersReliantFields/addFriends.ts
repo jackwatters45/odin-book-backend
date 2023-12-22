@@ -182,8 +182,13 @@ export const processInBatches = async (
 	}
 };
 
-export const addFriendsAndRequests = async (users: IUser[]) => {
-	await processInBatches(users, addFriendsDataToUser);
+export const addFriendsAndRequests = async (
+	users: IUser[],
+	omitFriends = false,
+) => {
 	await processInBatches(users, addFriendRequestsReceivedDataToUser);
 	await processInBatches(users, addFriendRequestsSentDataToUser);
+
+	if (omitFriends) return;
+	await processInBatches(users, addFriendsDataToUser);
 };

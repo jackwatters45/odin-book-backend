@@ -7,7 +7,7 @@ const createFakeUser = async (id: string) => {
 
 	const user = (await User.findById(id)) as IUser;
 
-	await addFriendsAndRequests([user]);
+	await addFriendsAndRequests([user], true);
 
 	await disconnectFromDatabase();
 };

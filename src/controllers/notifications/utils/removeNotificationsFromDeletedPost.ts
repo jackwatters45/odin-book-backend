@@ -5,7 +5,7 @@ export const removeNotificationsFromDeletedPost = async (
 	postId: string,
 	postAuthor: string,
 ) => {
-	await Notification.deleteMany({ contentId: postId, contentType: "post" });
+	await Notification.deleteMany({ $or: [{ postId }, { contentId: postId }] });
 
 	await updateNotificationCount(postAuthor);
 };
