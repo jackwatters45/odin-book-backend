@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId } from "mongoose";
 import { IncludesStartDates } from "./includesStartEndDates";
 
 export const PLACES_LIVED_TYPE = ["current", "hometown", "default"] as const;

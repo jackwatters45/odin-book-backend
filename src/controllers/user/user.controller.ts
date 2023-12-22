@@ -1,7 +1,7 @@
 import expressAsyncHandler from "express-async-handler";
 import { Request, Response } from "express";
 import { ValidationChain, validationResult } from "express-validator";
-import { ObjectId, Schema, isValidObjectId } from "mongoose";
+import { ObjectId, isValidObjectId } from "mongoose";
 import debug from "debug";
 
 import User, { IUser } from "../../models/user.model";
@@ -20,6 +20,9 @@ import {
 	removeFromCloudinary,
 	processEducationValues,
 	encodeWebsiteId,
+	findMutualFriends,
+	userDefaultPopulation,
+	getUserStatus,
 } from "./utils";
 
 import {
@@ -49,8 +52,6 @@ import {
 import validateBirthdayDate from "../../utils/validateBirthdayDate";
 import { IWork } from "../../../types/work";
 import { IPlaceLived } from "../../../types/placesLived";
-import { findMutualFriends } from "./utils/findMutualFriends";
-import { userDefaultPopulation } from "./utils/userDefaultPopulation";
 import {
 	createNotificationForAcceptedFriendRequest,
 	createNotificationForFriendRequest,
@@ -58,6 +59,11 @@ import {
 } from "../notifications/utils/notificationForFriendRequests";
 import createUserValidation from "./validations/createUserValidation";
 import updateUserPasswordValidation from "./validations/updateUserPasswordValidation";
+import {
+	IUserWithMutualFriends,
+	UserPreview,
+	UserPreviewWithFriendLists,
+} from "../../../types/user";
 
 const log = debug("log:user:controller");
 
@@ -91,11 +97,9 @@ export const getUserById = [
 			return;
 		}
 
-		const [user, posts, comments] = await Promise.all([
-			User.findById(req.params.id).populate(userDefaultPopulation).lean(),
-			Post.find({ published: true, author: req.params.id }).lean(),
-			Comment.find({ author: req.params.id }).lean(),
-		]);
+		const user = await User.findById(req.params.id)
+			.populate(userDefaultPopulation)
+			.lean();
 
 		if (user?.isDeleted) {
 			res
@@ -115,7 +119,9 @@ export const getUserById = [
 			false,
 		);
 
-		res.status(200).json({ ...user, posts, comments, mutualFriends });
+		const status = getUserStatus(user, reqUser, reqUser.friends as ObjectId[]);
+
+		res.status(200).json({ ...user, mutualFriends, status });
 	}),
 ];
 
@@ -207,7 +213,7 @@ export const searchUserFriendsByName = [
 					userResult._id,
 				);
 
-				return { ...userResult, mutualFriends };
+				return { ...userResult, mutualFriends, status: "friend" };
 			}),
 		);
 
@@ -397,12 +403,10 @@ const updateUserImage = (
 		});
 
 		const prevImageUrl = user?.[fieldToUpdate];
+
 		if (prevImageUrl) await removeFromCloudinary(prevImageUrl);
 
-		res.status(201).json({
-			message: `${fieldToUpdate.replace("Url", " ")}updated successfully`,
-			user,
-		});
+		res.status(201).json(imageLink);
 	}),
 ];
 
@@ -464,7 +468,7 @@ const updateUserStandardField = ({
 			return;
 		}
 
-		const user = await User.findById(userId).populate(populateOptions);
+		const user = await User.findById(userId);
 		if (!user) {
 			res.status(404).json({ message: "User not found" });
 			return;
@@ -481,9 +485,13 @@ const updateUserStandardField = ({
 
 		await user.save();
 
+		const userPopulated = await User.findById(userId)
+			.populate(populateOptions)
+			.lean();
+
 		res.status(200).json({
 			message: `${fieldToUpdate.replace("Url", " ")} updated successfully`,
-			user,
+			user: userPopulated,
 		});
 	}),
 ];
@@ -686,7 +694,7 @@ export const deleteUserLanguages = updateUserStandardField({
 export const createUserFamilyMembers = updateUserStandardField({
 	fieldToUpdate: "familyMembers",
 	validationRules: familyMemberValidations,
-	updateFunc: async ({ user, body: { audience, values: newFamilyMember } }) => {
+	updateFunc: async ({ user, body: { audience, ...newFamilyMember } }) => {
 		user.familyMembers.push(newFamilyMember);
 
 		await user.save();
@@ -711,7 +719,7 @@ export const updateUserFamilyMembers = updateUserStandardField({
 	validationRules: familyMemberValidations,
 	updateFunc: ({
 		user,
-		body: { audience, values: newFamilyMemberData },
+		body: { audience, ...newFamilyMemberData },
 		params: { familyMemberId },
 	}) => {
 		if (audience) {
@@ -751,7 +759,7 @@ export const deleteUserFamilyMembers = updateUserStandardField({
 export const updateUserRelationshipStatus = updateUserStandardField({
 	fieldToUpdate: "relationshipStatus",
 	validationRules: relationshipValidations,
-	updateFunc: ({ user, body: { audience, values: relationshipStatus } }) => {
+	updateFunc: ({ user, body: { audience, ...relationshipStatus } }) => {
 		if (audience) user.audienceSettings.relationshipStatus = audience;
 
 		const processedRelationshipStatus =
@@ -1284,26 +1292,35 @@ const getUserPhotos = async (
 	res: Response,
 	conditions: PhotoConditions,
 ) => {
+	const limit = req.query.limit ? parseInt(req.query.limit as string) : 12;
+	const page = req.query.page ? parseInt(req.query.page as string) : 0;
+
 	const posts = await Post.find({
 		$or: conditions,
-		media: {
-			$exists: true,
-			$ne: [] || null,
-		},
+		$and: [
+			{ media: { $exists: true } },
+			{ media: { $ne: null } },
+			{ media: { $ne: [] } },
+		],
 	})
 		.select("media")
-		.limit(req.query.limit ? parseInt(req.query.limit as string) : 0);
+		.lean();
 
-	const photos = posts.reduce((acc, post) => {
-		if (post.media && post.media.length > 0) {
-			post.media.forEach((mediaItem) => {
-				acc.push({ media: mediaItem, postId: post._id });
-			});
-		}
-		return acc;
+	const allMediaItems = posts.reduce((acc, post) => {
+		return post.media
+			? acc.concat(
+					post.media.map((mediaItem) => ({
+						media: mediaItem,
+						postId: post._id,
+					})),
+			  )
+			: acc;
 	}, [] as { media: string; postId: string }[]);
 
-	res.status(200).json(photos);
+	const startIndex = page * limit;
+	const paginatedMedia = allMediaItems.slice(startIndex, startIndex + limit);
+
+	res.status(200).json(paginatedMedia);
 };
 
 // @desc    Get user tagged + posted photos
@@ -1324,22 +1341,25 @@ export const getUserPhotosOf = expressAsyncHandler(
 // @access  Private
 export const getUserPhotosBy = expressAsyncHandler(
 	async (req: Request, res: Response) => {
-		const userId = String(req.params.id);
-		await getUserPhotos(req, res, [{ author: userId }]);
+		await getUserPhotos(req, res, [{ author: String(req.params.id) }]);
 	},
 );
 
-// @desc    Get user friends all
-// @route   GET /users/:id/friends
-// @access  Private
-export const getUserFriends = [
+type fetchFriendsFunc = (
+	user: IUser,
+	limit: number,
+	page: number,
+	reqUser: UserPreviewWithFriendLists,
+) => Promise<IUser[]>;
+
+const userFriendsHandler = (fetchFriendsFunc: fetchFriendsFunc) => [
 	authenticateJwt,
 	expressAsyncHandler(async (req: Request, res: Response) => {
-		const reqUser = req.user as IUser;
+		const reqUser = req.user as UserPreviewWithFriendLists;
 		const limit = req.query.limit ? parseInt(req.query.limit as string) : 0;
+		const page = req.query.page ? parseInt(req.query.page as string) : 0;
 
 		const user = await User.findOne({ _id: req.params.id, isDeleted: false })
-			.populate("friends", "avatarUrl fullName friends education placesLived")
 			.select("friends")
 			.lean();
 
@@ -1348,28 +1368,22 @@ export const getUserFriends = [
 			return;
 		}
 
-		const userFriends = (
-			limit ? user?.friends.slice(0, limit) : user?.friends
-		) as IUser[];
+		const friends = await fetchFriendsFunc(user, limit, page, reqUser);
 
-		const allReqUserFriends = reqUser.friends as Schema.Types.ObjectId[];
-
-		const mutualAndReqUserFriends = await Promise.all(
-			userFriends?.map(async (friend) => {
-				const mutualFriends = await findMutualFriends(friend._id, reqUser._id);
-
-				const isFriend = allReqUserFriends.includes(friend._id);
-				const requestSent = reqUser.friendRequestsSent.includes(friend._id);
-				const requestReceived = reqUser.friendRequestsReceived.includes(
+		const reqUserFriends = reqUser.friends as ObjectId[];
+		const mutualAndReqUserFriends: IUserWithMutualFriends[] = await Promise.all(
+			friends?.map(async (friend) => {
+				const mutualFriends = (await findMutualFriends(
 					friend._id,
-				);
+					reqUser._id,
+				)) as UserPreview[];
+
+				const status = getUserStatus(friend, reqUser, reqUserFriends);
 
 				return {
 					...friend,
 					mutualFriends,
-					isFriend,
-					requestSent,
-					requestReceived,
+					status,
 				};
 			}),
 		);
@@ -1377,6 +1391,96 @@ export const getUserFriends = [
 		res.status(200).json(mutualAndReqUserFriends);
 	}),
 ];
+
+// @desc    Get user friends all
+// @route   GET /users/:id/friends
+// @access  Private
+export const getUserFriends = userFriendsHandler(
+	async (user, limit, page) =>
+		await User.find({ _id: { $in: user.friends } })
+			.skip(page * limit)
+			.limit(limit)
+			.select("avatarUrl fullName friends")
+			.lean(),
+);
+
+// @desc    Get user friends mutual
+// @route   GET /users/:id/friends/mutual
+// @access  Private
+export const getUserFriendsMutual = userFriendsHandler(
+	async (user, limit, page, reqUser) =>
+		await User.find({
+			$and: [{ _id: { $in: user.friends } }, { _id: { $in: reqUser.friends } }],
+		})
+			.skip(page * limit)
+			.limit(limit)
+			.select("avatarUrl fullName friends")
+			.lean(),
+);
+
+// @desc    Get user friends college
+// @route   GET /users/:id/friends/college
+// @access  Private
+export const getUserFriendsCollege = userFriendsHandler(
+	async (user, limit, page) => {
+		const userColleges = user.education
+			?.filter((education) => education.type === "college")
+			.map((education) => education.school);
+
+		log("userColleges", userColleges);
+
+		return await User.find({
+			_id: { $in: user.friends },
+			education: {
+				$elemMatch: { type: "college", school: { $in: userColleges } },
+			},
+		})
+			.skip(page * limit)
+			.limit(limit)
+			.select("avatarUrl fullName friends education")
+			.lean();
+	},
+);
+
+// @desc    Get user friends current city
+// @route   GET /users/:id/friends/current-city
+// @access  Private
+export const getUserFriendsCurrentCity = userFriendsHandler(
+	async (user, limit, page) => {
+		const userCurrentCity = user.placesLived?.find(
+			(placeLived) => placeLived.type === "current",
+		)?.city;
+
+		return await User.find({
+			_id: { $in: user.friends },
+			placesLived: { $elemMatch: { type: "current", city: userCurrentCity } },
+		})
+			.skip(page * limit)
+			.limit(limit)
+			.select("avatarUrl fullName friends placesLived")
+			.lean();
+	},
+);
+
+// @desc    Get user friends hometown
+// @route   GET /users/:id/friends/hometown
+// @access  Private
+export const getUserFriendsHometown = userFriendsHandler(
+	async (user, limit, page) => {
+		const userHometown = user.placesLived?.find(
+			(placeLived) => placeLived.type === "hometown",
+		)?.city;
+
+		return await User.find({
+			_id: { $in: user.friends },
+			placesLived: { $elemMatch: { type: "hometown", city: userHometown } },
+		})
+			.skip(page * limit)
+			.limit(limit)
+			.select("avatarUrl fullName friends placesLived")
+			.lean();
+	},
+);
 
 // @desc    Get user friends suggestions
 // @route   GET /users/friends/suggestions
@@ -1387,25 +1491,38 @@ export const getUserFriendsSuggestions = [
 		const limit = req.query.limit ? parseInt(req.query.limit as string) : 16;
 		const page = req.query.page ? parseInt(req.query.page as string) : 0;
 
-		const reqUser = req.user as IUser;
-		const userFriendsIds = reqUser.friends as ObjectId[];
+		const reqUser = req.user as UserPreviewWithFriendLists;
+		const reqUserFriends = reqUser.friends as ObjectId[];
 
-		const usersWithMutualFriends = await User.find({
-			_id: { $nin: userFriendsIds, $ne: reqUser._id },
-			friends: { $in: userFriendsIds },
+		const usersWithMutualFriends = (await User.find({
+			_id: { $nin: reqUserFriends, $ne: reqUser._id },
+			friends: { $in: reqUserFriends },
 		})
 			.populate("friends", "avatarUrl fullName ")
-			.select("friends avatarUrl fullName")
+			.select(
+				"avatarUrl fullName friends friendRequestsSent friendRequestsReceived",
+			)
 			.limit(limit)
 			.skip(page * limit)
-			.lean();
+			.lean()) as UserPreviewWithFriendLists[];
 
-		const usersWithMutualFriendsData = await Promise.all(
-			usersWithMutualFriends.map(async (user) => {
-				const mutualFriends = await findMutualFriends(user._id, reqUser._id);
-				return { ...user, mutualFriends };
-			}),
-		);
+		const usersWithMutualFriendsData: IUserWithMutualFriends[] =
+			await Promise.all(
+				usersWithMutualFriends.map(async (user) => {
+					const mutualFriends = (await findMutualFriends(
+						user._id,
+						reqUser._id,
+					)) as UserPreviewWithFriendLists[];
+
+					const status = getUserStatus(user, reqUser, reqUserFriends);
+
+					return {
+						...user,
+						mutualFriends,
+						status,
+					};
+				}),
+			);
 
 		res.status(200).json(usersWithMutualFriendsData);
 	}),
@@ -1430,22 +1547,24 @@ export const getFriendRequestsReceived = [
 			return;
 		}
 
-		const friendRequestsReceived = await User.find({
+		const friendRequestsReceived = (await User.find({
 			_id: { $in: reqUser.friendRequestsReceived },
 		})
 			.select("avatarUrl fullName friends")
 			.limit(limit)
 			.skip(page * pageLength)
-			.lean();
+			.lean()) as UserPreview[];
 
-		log(friendRequestsReceived);
-
-		const friendRequestsReceivedWithMutualData = await Promise.all(
-			friendRequestsReceived.map(async (user) => {
-				const mutualFriends = await findMutualFriends(user._id, reqUser._id);
-				return { ...user, mutualFriends };
-			}),
-		);
+		const friendRequestsReceivedWithMutualData: IUserWithMutualFriends[] =
+			await Promise.all(
+				friendRequestsReceived.map(async (user) => {
+					const mutualFriends = (await findMutualFriends(
+						user._id,
+						reqUser._id,
+					)) as UserPreview[];
+					return { ...user, mutualFriends, status: "request received" };
+				}),
+			);
 
 		res.status(200).json(friendRequestsReceivedWithMutualData);
 	}),

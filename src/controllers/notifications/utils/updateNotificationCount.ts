@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId } from "mongoose";
 
 import { getRedis } from "../../../config/redis";
 import { getIO } from "../../../config/socket";

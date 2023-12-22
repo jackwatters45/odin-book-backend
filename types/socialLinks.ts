@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId } from "mongoose";
 
 export const VALID_SOCIAL_PLATFORMS_ARRAY = [
 	"twitter",

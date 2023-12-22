@@ -1,15 +1,16 @@
-import { PipelineStage } from "mongoose";
+import { ObjectId, PipelineStage } from "mongoose";
 import debug from "debug";
 
 import User from "../../../models/user.model";
+import { UserPreview } from "../../../../types/user";
 
 const log = debug("log:findMutualFriends");
 
-export const findMutualFriends = async (
-	userId1: string | undefined,
-	userId2: string,
+const findMutualFriends = async (
+	userId1: ObjectId | undefined,
+	userId2: ObjectId | undefined,
 	populate = true,
-) => {
+): Promise<(ObjectId | undefined)[] | UserPreview[]> => {
 	if (!userId1) return [];
 
 	let pipeline: PipelineStage[] = [
@@ -44,7 +45,9 @@ export const findMutualFriends = async (
 
 	const mutualFriends = (await User.aggregate(pipeline)).sort(
 		(a, b) => b.mutualFriends - a.mutualFriends,
-	);
+	) as UserPreview[];
 
 	return populate ? mutualFriends : mutualFriends.map((doc) => doc._id);
 };
+
+export default findMutualFriends;

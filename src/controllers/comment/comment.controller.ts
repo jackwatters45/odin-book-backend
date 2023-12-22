@@ -26,7 +26,9 @@ export const getComments = expressAsyncHandler(
 		const comments = (await Comment.find({
 			post: postId,
 			parentComment: null,
-		}).populate(defaultCommentPopulation)) as IComment[];
+		})
+			.populate(defaultCommentPopulation)
+			.lean()) as IComment[];
 
 		const commentsWithTopReactions = comments.map((comment) => {
 			return getDocumentWithTopReactions(comment);
@@ -198,9 +200,7 @@ export const updateComment = [
 
 		const [post, comment] = await Promise.all([
 			Post.exists({ _id: req.params.post }),
-			Comment.findById(req.params.id, {
-				content: req.body.content,
-			}).populate(defaultCommentPopulation),
+			Comment.findById(req.params.id).populate(defaultCommentPopulation),
 		]);
 
 		if (!post) {
@@ -213,7 +213,8 @@ export const updateComment = [
 			return;
 		}
 
-		if (comment.author.toString() !== user._id.toString()) {
+		const author = comment.author as IUser;
+		if (author._id.toString() !== user._id.toString()) {
 			res.status(403).json({
 				message: "You must be the original commenter to edit a comment",
 			});
@@ -223,7 +224,9 @@ export const updateComment = [
 		comment.content = req.body.content;
 		await comment.save();
 
-		const updatedCommentWithTopReactions = getDocumentWithTopReactions(comment);
+		const updatedCommentWithTopReactions = getDocumentWithTopReactions(
+			comment.toObject(),
+		);
 
 		res.status(201).json(updatedCommentWithTopReactions);
 	}),
@@ -252,7 +255,8 @@ export const deleteComment = [
 			return;
 		}
 
-		if (comment.author.toString() !== user._id.toString()) {
+		const author = comment.author as IUser;
+		if (author._id.toString() !== user._id.toString()) {
 			res.status(403).json({ message: "Not authorized" });
 			return;
 		}
@@ -262,7 +266,9 @@ export const deleteComment = [
 
 		await comment.save();
 
-		const commentWithTopReactions = getDocumentWithTopReactions(comment);
+		const commentWithTopReactions = getDocumentWithTopReactions(
+			comment.toObject(),
+		);
 
 		res.status(200).json(commentWithTopReactions);
 	}),
@@ -331,9 +337,9 @@ export const createCommentReply = [
 
 			await session.commitTransaction();
 
-			const populatedNewComment = await Comment.findById(
-				newComment._id,
-			).populate(defaultCommentPopulation);
+			const populatedNewComment = await Comment.findById(newComment._id)
+				.populate(defaultCommentPopulation)
+				.lean();
 
 			res.status(201).json(populatedNewComment);
 		} catch (err) {
@@ -351,7 +357,6 @@ export const createCommentReply = [
 export const reactToComment = [
 	authenticateJwt,
 	body("type").trim().isIn(reactionTypes).withMessage("Invalid reaction type"),
-	body("user").trim().isMongoId().withMessage("Invalid user id"),
 	expressAsyncHandler(async (req: Request, res: Response) => {
 		const errors = validationResult(req);
 		if (!errors.isEmpty()) {
@@ -385,9 +390,9 @@ export const reactToComment = [
 			await existingReaction.save();
 		}
 
-		const comment = (await Comment.findById(req.params.id).populate(
-			defaultCommentPopulation,
-		)) as IComment;
+		const comment = (await Comment.findById(req.params.id)
+			.populate(defaultCommentPopulation)
+			.lean()) as IComment;
 
 		const notificationQuery = {
 			to: comment.author,
@@ -434,7 +439,9 @@ export const unreactToComment = [
 			commentId,
 			{ $pull: { reactions: existingReaction._id } },
 			{ new: true },
-		).populate(defaultCommentPopulation)) as IComment;
+		)
+			.populate(defaultCommentPopulation)
+			.lean()) as IComment;
 
 		if (!comment) {
 			res.status(404).json({ message: "Comment not found" });

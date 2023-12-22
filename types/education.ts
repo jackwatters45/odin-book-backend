@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId } from "mongoose";
 import { IncludesStartEndDates } from "./includesStartEndDates";
 
 export const VALID_EDUCATION_TYPES = ["college", "high school"] as const;

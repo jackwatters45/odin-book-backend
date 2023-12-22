@@ -98,7 +98,7 @@ export const readNotification = [
 			{ _id: notificationId, to: user._id },
 			{ isRead: true },
 			{ new: true },
-		);
+		).lean();
 
 		if (!notification) {
 			res.status(404).json({ message: "Notification not found." });

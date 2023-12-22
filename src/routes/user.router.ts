@@ -63,6 +63,10 @@ import {
 	searchUsers,
 	getUserFriendsSuggestions,
 	getFriendRequestsReceived,
+	getUserFriendsCurrentCity,
+	getUserFriendsCollege,
+	getUserFriendsMutual,
+	getUserFriendsHometown,
 } from "../controllers/user/user.controller";
 import { getUserPosts } from "../controllers/post/post.controller";
 
@@ -120,7 +124,7 @@ router.post("/", createUser);
 router.patch("/:id/password", updateUserPassword);
 
 // /:id/profile-photo
-router.patch("/:id/profile-photo", updateUserAvatarUrl);
+router.patch("/:id/avatar-photo", updateUserAvatarUrl);
 
 // /:id/cover-photo
 router.patch("/:id/cover-photo", updateUserCoverPhoto);
@@ -255,7 +259,19 @@ router.delete("/:id/places-lived/:placeLivedId", deleteUserPlacesLived);
 router.get("/:id/posts", getUserPosts);
 
 // /users/:id/friends
-router.get("/:id/friends", getUserFriends);
+router.get("/:id/friends/all", getUserFriends);
+
+// /users/:id/friends/mutual
+router.get("/:id/friends/mutual", getUserFriendsMutual);
+
+// /users/:id/friends/college
+router.get("/:id/friends/college", getUserFriendsCollege);
+
+// /users/:id/friends/current-city
+router.get("/:id/friends/current-city", getUserFriendsCurrentCity);
+
+// /users/:id/friends/hometown
+router.get("/:id/friends/hometown", getUserFriendsHometown);
 
 // /users/:id/saved-posts
 router.get("/:id/saved-posts", getUserSavedPosts);

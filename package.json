@@ -31,7 +31,7 @@
 		"prepare": "husky install",
 		"populate": "DEBUG=log* ts-node tools/populateDbs/index.ts",
 		"parseData": "node rawData/parseFile.mjs",
-		"file": "DEBUG=log*  ts-node tools/populateDbs/utils/removeFriendsThatNoLongerExist.ts"
+		"file": "DEBUG=log*  ts-node tools/editUser.ts"
 	},
 	"lint-staged": {
 		"*.ts": [
@@ -72,7 +72,6 @@
 		"passport-jwt": "^4.0.1",
 		"passport-local": "^1.0.0",
 		"passport-oauth2": "^1.7.0",
-		"path-to-regexp": "^6.2.1",
 		"redis": "^4.6.11",
 		"sharp": "^0.32.1",
 		"socket.io": "^4.7.2",

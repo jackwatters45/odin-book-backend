@@ -12,7 +12,7 @@ import { getNotificationBetweenDates } from "../../utils/getNotificationBetweenD
 
 const log = debug("log:addFriends");
 
-const addFriendsDataToUser = async (user: IUser) => {
+export const addFriendsDataToUser = async (user: IUser) => {
 	const users = await User.find({
 		_id: { $ne: user._id },
 		$and: [
@@ -66,7 +66,7 @@ const addFriendsDataToUser = async (user: IUser) => {
 	await Promise.all(friendsNotifications);
 };
 
-const addFriendRequestsReceivedDataToUser = async (user: IUser) => {
+export const addFriendRequestsReceivedDataToUser = async (user: IUser) => {
 	const users = await User.find({
 		_id: { $ne: user._id },
 		$and: [
@@ -118,7 +118,7 @@ const addFriendRequestsReceivedDataToUser = async (user: IUser) => {
 	await Promise.all(friendRequestsReceivedNotifications);
 };
 
-const addFriendRequestsSentDataToUser = async (user: IUser) => {
+export const addFriendRequestsSentDataToUser = async (user: IUser) => {
 	const users = await User.find({
 		_id: { $ne: user._id },
 		$and: [
@@ -170,7 +170,7 @@ const addFriendRequestsSentDataToUser = async (user: IUser) => {
 
 const BATCH_SIZE = 200;
 
-const processInBatches = async (
+export const processInBatches = async (
 	totalUsers: IUser[],
 	processFunction: (user: IUser) => Promise<void>,
 ) => {

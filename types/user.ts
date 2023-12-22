@@ -12,6 +12,7 @@ import { IIntro } from "./intro";
 import { IWork } from "./work";
 import { INamePronunciationData } from "./namePronunciation";
 import { IUser } from "../src/models/user.model";
+import { UserStatusType } from "./userStatus";
 
 // Basic User Info
 export interface BasicUserInfo {
@@ -94,4 +95,21 @@ export interface UserAboutData {
 	favoriteQuotes?: string;
 	audienceSettings: AudienceSettings;
 	otherNames: OtherNames;
+}
+
+export interface UserPreview {
+	_id?: ObjectId;
+	fullName: string;
+	avatarUrl?: string;
+}
+
+export interface UserPreviewWithFriendLists extends UserPreview {
+	friendRequestsSent: ObjectId[];
+	friendRequestsReceived: ObjectId[];
+	friends: (ObjectId | Partial<IUser>)[];
+}
+
+export interface IUserWithMutualFriends extends UserPreview {
+	mutualFriends: UserPreview[];
+	status: UserStatusType;
 }

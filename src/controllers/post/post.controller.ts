@@ -318,8 +318,9 @@ export const updatePostAudience = [
 			return;
 		}
 
+		const author = post.author as IUser;
 		if (
-			post.author.toString() !== user._id.toString() &&
+			author._id.toString() !== user._id.toString() &&
 			user.userType !== "admin"
 		) {
 			res.status(403).json({
@@ -332,7 +333,7 @@ export const updatePostAudience = [
 
 		await post.save();
 
-		res.status(200).json(post);
+		res.status(200).json(post.toJSON());
 	}),
 ];
 
@@ -403,9 +404,9 @@ export const reactToPost = [
 			await existingReaction.save();
 		}
 
-		const post = (await Post.findById(postId).populate(
-			defaultPostPopulation,
-		)) as IPost;
+		const post = (await Post.findById(postId)
+			.populate(defaultPostPopulation)
+			.lean()) as IPost;
 
 		if (!post) {
 			res.status(404).json({ message: "Post not found" });
@@ -456,7 +457,9 @@ export const unreactToPost = [
 			postId,
 			{ $pull: { reactions: existingReaction._id } },
 			{ new: true },
-		).populate(defaultPostPopulation)) as IPost;
+		)
+			.populate(defaultPostPopulation)
+			.lean()) as IPost;
 
 		if (!post) {
 			res.status(404).json({ message: "Post not found" });

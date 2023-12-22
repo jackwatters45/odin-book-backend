@@ -1,5 +1,5 @@
 // all user about routes use this projection
-export const userDefaultPopulation = [
+const userDefaultPopulation = [
 	{
 		path: "familyMembers.user",
 		select: "avatarUrl fullName",
@@ -9,3 +9,5 @@ export const userDefaultPopulation = [
 		select: "avatarUrl fullName",
 	},
 ];
+
+export default userDefaultPopulation;

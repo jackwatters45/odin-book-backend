@@ -1,34 +1,27 @@
 import { v2 as cloudinary } from "cloudinary";
-import { match } from "path-to-regexp";
-import debug = require("debug");
+import debug from "debug";
 
 const log = debug("log:removeFromCloudinaryService");
 
-interface CloudinaryParams {
-	cloudName: string;
-	version: string;
-	publicId: string;
-}
-
 function extractPublicId(url: string): string | null {
-	const matcher = match<CloudinaryParams>(
-		"https://res.cloudinary.com/:cloudName/image/upload/:version/:publicId.:format",
-	);
-	const result = matcher(url);
-	if (!result) return null;
+	const urlObj = new URL(url);
 
-	return result.params?.publicId ?? null;
+	if (urlObj.hostname !== "res.cloudinary.com") return null;
+
+	const parts = urlObj.pathname.split("/");
+
+	return parts[parts.length - 1].split(".")[0] ?? null;
 }
 
 const removeFromCloudinary = async (shareLink: string) => {
 	const publicId = extractPublicId(shareLink);
-	if (!publicId) {
-		throw new Error("Invalid share link");
-	}
+	if (!publicId) return;
+
+	log("Removing file from Cloudinary:", publicId);
 
 	try {
 		const result = await cloudinary.uploader.destroy(publicId);
-		log(result);
+		log("removeFromCloudinary", result);
 	} catch (error) {
 		console.error("Failed to delete file from Cloudinary:", error);
 	}

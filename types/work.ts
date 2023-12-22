@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId } from "mongoose";
 import { IncludesStartEndDates } from "./includesStartEndDates";
 
 export interface IWork extends IncludesStartEndDates {
