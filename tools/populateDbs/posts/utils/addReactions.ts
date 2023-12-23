@@ -1,3 +1,5 @@
+import debug from "debug";
+
 import Reaction, { reactionTypes } from "../../../../src/models/reaction.model";
 import {
 	getRandValueFromArray,
@@ -6,9 +8,11 @@ import {
 } from "../../utils/helperFunctions";
 import { IComment } from "../../../../src/models/comment.model";
 import { IPost } from "../../../../src/models/post.model";
-import { getNotificationBetweenDates } from "../../utils/getNotificationBetweenDates";
 import { IUser } from "../../../../src/models/user.model";
 import { createNotificationWithMultipleFrom } from "../../../../src/controllers/notifications/utils/createNotificationWithMultipleFrom";
+import getDateForInteraction from "./getDateForInteraction";
+
+const log = debug("log:addReactions");
 
 const addReactions = async (
 	parent: IComment | IPost,
@@ -18,10 +22,8 @@ const addReactions = async (
 ) => {
 	const numReactions = getRandomInt(maxReactions);
 
-	const usersReacting = getRandValuesFromArrayOfObjs(
-		users,
-		numReactions,
-	) as string[];
+	let usersReacting: string[] = [];
+	usersReacting = getRandValuesFromArrayOfObjs(users, numReactions) as string[];
 
 	const reactions = usersReacting.map(
 		(user) =>
@@ -32,23 +34,27 @@ const addReactions = async (
 			}),
 	);
 
+	if (reactions) await Reaction.insertMany(reactions);
+
+	const date = getDateForInteraction(parent.createdAt);
+
 	try {
-		await Reaction.insertMany(reactions);
+		if (reactions.length > 0) {
+			await createNotificationWithMultipleFrom({
+				query: {
+					to: parent.author,
+					type: "reaction",
+					contentType,
+					contentId: parent._id,
+					postId: contentType === "post" ? parent._id : undefined,
+				},
+				from: usersReacting,
+				date,
+				includeSocket: false,
+			});
 
-		await createNotificationWithMultipleFrom({
-			query: {
-				to: parent.author,
-				type: "reaction",
-				contentType,
-				contentId: parent._id,
-				postId: contentType === "post" ? parent._id : undefined,
-			},
-			from: usersReacting,
-			date: getNotificationBetweenDates(),
-			includeSocket: false,
-		});
-
-		return reactions.map((r) => r._id);
+			return reactions.map((r) => r._id);
+		}
 	} catch (err) {
 		throw new Error(err);
 	}

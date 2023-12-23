@@ -7,6 +7,7 @@ import { addSavedPosts } from "./posts/utils/addSavedPosts";
 import { removePostsWithRemovedAuthors } from "./utils/removePostsWithRemovedAuthors";
 import { removeUserDataThatNoLongerExists } from "./utils/removeFriendsThatNoLongerExist";
 import clearDatabase from "./utils/clearDatabase";
+import readNotificationsOlderThanTwoWeeks from "./utils/readNotificationsOlderThanTwoWeeks";
 
 const run = async () => {
 	await configDb();
@@ -15,10 +16,10 @@ const run = async () => {
 	await removeUserDataThatNoLongerExists();
 	await removePostsWithRemovedAuthors();
 
-	await populateUsers(1000);
+	await populateUsers(250);
 
 	const users = await User.find({}).select(
-		"friends birthday relationshipStatus familyMembers",
+		"friends friendRequestsReceived friendRequestsSent birthday relationshipStatus familyMembers createdAt",
 	);
 
 	await addFieldsThatRequireOtherUsers(users);
@@ -28,6 +29,8 @@ const run = async () => {
 	await createUsersPostsSharedFrom(users);
 
 	await addSavedPosts(users);
+
+	await readNotificationsOlderThanTwoWeeks();
 
 	await disconnectFromDatabase();
 };

@@ -8,7 +8,7 @@ const createRandomSystemData = ({
 	deletedData = undefined,
 	refreshTokens = [],
 }: Partial<UserSystemData>) => {
-	const pastDate = faker.date.past();
+	const pastDate = faker.date.past({ years: 3 });
 	return {
 		userType,
 		isDeleted,

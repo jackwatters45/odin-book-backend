@@ -1,11 +1,19 @@
 import { faker } from "@faker-js/faker";
 import { ObjectId } from "mongoose";
 
-export const getRandomInt = (max = 5, min = 1) =>
-	Math.floor(Math.random() * (max - min + 1)) + min;
+export const getRandomInt = (max = 5, min = 1) => {
+	if (max < min || max <= 0 || min < 0) return 0;
+	return Math.floor(Math.random() * (max - min + 1)) + min;
+};
 
-export const getRandValueFromArray = <T>(arr: readonly T[]) =>
-	arr[getRandomInt(arr.length - 1) - 1];
+export const getRandValueFromArray = <T>(arr: readonly T[]) => {
+	const index = getRandomInt(arr.length - 1);
+	const result = arr[index];
+
+	if (!result) throw new Error(`No value found ${index} arr:${arr}`);
+
+	return result;
+};
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export interface ObjectWithId extends Object {
@@ -42,6 +50,7 @@ export const getRandValuesFromArrayOfObjs = <T extends ObjectWithId>(
 	max = 3,
 	field?: keyof T,
 ) => {
+	if (max < 1) return [];
 	const copyArr = [...arr];
 	for (let i = copyArr.length - 1; i > 0; i--) {
 		const j = Math.floor(Math.random() * (i + 1));
@@ -90,19 +99,6 @@ export const getRandomDateFromYear = (year: number): Date => {
 	const endDate = new Date(year, 11, 31).getTime();
 	return faker.date.between({ from: startDate, to: endDate });
 };
-
-// export const getRandomBirthYear = (
-// 	minAge = 13,
-// 	maxAge = 80,
-// ): [Date, number] => {
-// 	const currentYear = new Date().getFullYear();
-// 	const year = faker.number.int({
-// 		min: currentYear - maxAge,
-// 		max: currentYear - minAge,
-// 	});
-// 	const birthDate = getRandomDateFromYear(year);
-// 	return [birthDate, currentYear - year];
-// };
 
 export const getAgeFromBirthday = (birthday: Date) => {
 	const ageDifMs = Date.now() - birthday.getTime();

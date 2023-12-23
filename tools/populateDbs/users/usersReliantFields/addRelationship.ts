@@ -45,7 +45,6 @@ export const addRelationshipStatus = async (user: IUser) => {
 			to: new Date(),
 		});
 
-		log("partner", partner);
 		user.relationshipStatus = {
 			status,
 			user: partner,
@@ -78,6 +77,7 @@ const handleRelationshipForUser = async (
 	relationshipStatuses: typeof VALID_RELATIONSHIP_STATUSES_ARRAY,
 ): Promise<void> => {
 	if (alreadyPairedUsers.has(user._id.toString())) return;
+	if (!user._id) throw new Error(`User id is undefined ${user}`);
 
 	const status = getRandValueFromArray(relationshipStatuses);
 
@@ -101,13 +101,16 @@ const handleRelationshipForUser = async (
 		);
 		if (userEighteenthBirthday > new Date()) return;
 
-		const potentialPartners = users.filter(
-			(u) =>
+		const potentialPartners = users.filter((u) => {
+			if (!u._id) throw new Error(`Users id is undefined ${u}`);
+			return (
 				!alreadyPairedUsers.has(u._id.toString()) &&
-				!user.familyMembers.map((fm) => fm.user).includes(u._id),
-		);
+				!user.familyMembers.map((fm) => fm.user).includes(u._id)
+			);
+		});
 		if (potentialPartners.length === 0) return;
 		const partner = getRandValueFromArray(potentialPartners);
+		if (!partner?._id) throw new Error(`Partner id is undefined ${partner}`);
 
 		alreadyPairedUsers.add(user._id.toString());
 		alreadyPairedUsers.add(partner._id.toString());
@@ -162,6 +165,6 @@ export const addRelationshipStatuses = async (users: IUser[]) => {
 	try {
 		await Promise.all(userUpdates);
 	} catch (error) {
-		throw new Error(error.message);
+		throw new Error(error);
 	}
 };

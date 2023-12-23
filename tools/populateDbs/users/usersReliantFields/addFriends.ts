@@ -42,10 +42,10 @@ export const addFriendsDataToUser = async (user: IUser) => {
 		),
 	);
 
-	const date = getNotificationBetweenDates();
-
 	const friendsNotifications: Promise<INotification>[] = [];
 	for (const friend of friendsToAdd) {
+		const date = getNotificationBetweenDates(3);
+
 		const notification = Notification.create({
 			to: user._id,
 			from: [friend],
@@ -101,10 +101,10 @@ export const addFriendRequestsReceivedDataToUser = async (user: IUser) => {
 		),
 	);
 
-	const date = getNotificationBetweenDates();
-
 	const friendRequestsReceivedNotifications: Promise<INotification>[] = [];
 	for (const friend of friendRequestsReceivedToAdd) {
+		const date = getNotificationBetweenDates();
+
 		const receivedNotification = Notification.create({
 			to: user._id,
 			from: [friend],
@@ -151,10 +151,10 @@ export const addFriendRequestsSentDataToUser = async (user: IUser) => {
 		),
 	);
 
-	const date = getNotificationBetweenDates();
-
 	const friendRequestsSentNotifications: Promise<INotification>[] = [];
 	for (const friend of friendRequestsSentToAdd) {
+		const date = getNotificationBetweenDates();
+
 		const receivedNotification = Notification.create({
 			to: friend,
 			from: [user._id],
@@ -186,9 +186,8 @@ export const addFriendsAndRequests = async (
 	users: IUser[],
 	omitFriends = false,
 ) => {
+	if (!omitFriends) await processInBatches(users, addFriendsDataToUser);
+
 	await processInBatches(users, addFriendRequestsReceivedDataToUser);
 	await processInBatches(users, addFriendRequestsSentDataToUser);
-
-	if (omitFriends) return;
-	await processInBatches(users, addFriendsDataToUser);
 };

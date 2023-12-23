@@ -68,8 +68,8 @@ interface DeletedData {
 }
 
 export interface UserSystemData {
-	createdAt?: Date;
-	updatedAt?: Date;
+	createdAt: Date;
+	updatedAt: Date;
 	userType: "user" | "admin" | "guest";
 	isDeleted: boolean;
 	deletedData?: DeletedData;

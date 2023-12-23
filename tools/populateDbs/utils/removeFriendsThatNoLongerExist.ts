@@ -60,9 +60,18 @@ export const removeUserDataThatNoLongerExists = async (
 		}
 	}
 
+	// remove saved posts, tagged posts, family members
+	await User.updateMany(
+		{},
+		{
+			$pull: { familyMembers: { user: { $nin: [...userIdsSet] } } },
+			$set: { savedPosts: [], taggedPosts: [] },
+		},
+	);
+
 	log("Finished removing friends that no longer exist");
 
 	if (includeConfig) await disconnectFromDatabase();
 };
 
-removeUserDataThatNoLongerExists(true).catch(console.error);
+// removeUserDataThatNoLongerExists(true).catch(console.error);

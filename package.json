@@ -31,7 +31,7 @@
 		"prepare": "husky install",
 		"populate": "DEBUG=log* ts-node tools/populateDbs/index.ts",
 		"parseData": "node rawData/parseFile.mjs",
-		"file": "DEBUG=log*  ts-node tools/addDataToUser.ts"
+		"file": "DEBUG=log* ts-node tools/addDataToUser.ts"
 	},
 	"lint-staged": {
 		"*.ts": [
@@ -64,7 +64,6 @@
 		"node-fetch": "^3.3.2",
 		"nodemailer": "^6.9.3",
 		"p-limit": "^5.0.0",
-		"papaparse": "^5.4.1",
 		"passport": "^0.6.0",
 		"passport-facebook": "^3.0.0",
 		"passport-github2": "^0.1.12",
@@ -95,7 +94,6 @@
 		"@types/node": "^20.3.2",
 		"@types/node-cron": "^3.0.11",
 		"@types/nodemailer": "^6.4.8",
-		"@types/papaparse": "^5.3.8",
 		"@types/passport": "^1.0.12",
 		"@types/passport-facebook": "^2.1.11",
 		"@types/passport-github2": "^1.2.5",

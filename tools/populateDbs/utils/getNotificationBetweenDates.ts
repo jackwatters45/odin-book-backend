@@ -1,9 +1,10 @@
 import { faker } from "@faker-js/faker";
 
-const getLastYear = () => {
+const getLastYear = (yearsFromToday: number): Date => {
 	const today = new Date();
+
 	const lastYear = new Date(
-		today.getFullYear() - 1,
+		today.getFullYear() - yearsFromToday,
 		today.getMonth(),
 		today.getDate(),
 	);
@@ -11,8 +12,8 @@ const getLastYear = () => {
 	return lastYear;
 };
 
-export const getNotificationBetweenDates = (): Date => {
-	const lastYear = getLastYear();
+export const getNotificationBetweenDates = (yearsFromToday = 1): Date => {
+	const lastYear = getLastYear(yearsFromToday);
 	const today = new Date();
 
 	return faker.date.between({ from: lastYear, to: today });

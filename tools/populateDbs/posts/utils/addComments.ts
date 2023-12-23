@@ -9,9 +9,9 @@ import {
 } from "../../utils/helperFunctions";
 import { IPost } from "../../../../src/models/post.model";
 
-import { getNotificationBetweenDates } from "../../utils/getNotificationBetweenDates";
 import { IUser } from "../../../../src/models/user.model";
 import { createNotificationWithMultipleFrom } from "../../../../src/controllers/notifications/utils/createNotificationWithMultipleFrom";
+import getDateForInteraction from "./getDateForInteraction";
 
 interface GetCommentsParams {
 	users: IUser[];
@@ -27,6 +27,9 @@ export const getComments = ({
 	max = 3,
 }: GetCommentsParams): IComment[] => {
 	const commenters = getRandValuesFromArrayOfObjs(users, max);
+
+	const date = getDateForInteraction(post.createdAt);
+
 	return commenters.map(
 		(commenter) =>
 			new Comment({
@@ -35,6 +38,7 @@ export const getComments = ({
 				post,
 				reactions: [],
 				parentComment: parentCommentId ?? undefined,
+				createdAt: date,
 			}),
 	);
 };
@@ -60,27 +64,27 @@ const addComment = async ({
 	maxReplyDepth = 1,
 	currentDepth = 0,
 }: addCommentParams): Promise<ObjectId> => {
-	try {
-		const numReactions = getRandomInt(8 - currentDepth * 3, 0);
+	const numReactions = getRandomInt(8 - currentDepth * 3, 0);
 
-		const reactionsPromise = addReactions(
-			comment,
+	const reactionsPromise = addReactions(
+		comment,
+		users,
+		numReactions,
+		"comment",
+	);
+
+	let repliesPromise: Promise<ObjectId[]> = Promise.resolve([]);
+	if (currentDepth < maxReplyDepth) {
+		repliesPromise = addComments({
 			users,
-			numReactions,
-			"comment",
-		);
+			post,
+			maxReplyDepth,
+			currentDepth: currentDepth + 1,
+			parentCommentId: comment._id,
+		});
+	}
 
-		let repliesPromise: Promise<ObjectId[]> = Promise.resolve([]);
-		if (currentDepth < maxReplyDepth) {
-			repliesPromise = addComments({
-				users,
-				post,
-				maxReplyDepth,
-				currentDepth: currentDepth + 1,
-				parentCommentId: comment._id,
-			});
-		}
-
+	try {
 		const [reactions, replies] = await Promise.all([
 			reactionsPromise,
 			repliesPromise,
@@ -100,12 +104,16 @@ const addComment = async ({
 				postId: post._id,
 			},
 			from: String(comment.author),
-			date: getNotificationBetweenDates(),
+			date: faker.date.between({
+				from: new Date(post.createdAt),
+				to: new Date(),
+			}),
 			includeSocket: false,
 		});
 
 		return comment._id;
 	} catch (err) {
+		console.error(err);
 		throw new Error(err);
 	}
 };
@@ -123,8 +131,10 @@ const addComments = async ({
 }: AddCommentsParams): Promise<ObjectId[]> => {
 	const commentNum =
 		currentDepth === 0 || faker.datatype.boolean()
-			? getRandomInt(5 - currentDepth * 2, 0)
+			? getRandomInt(Math.max(5 - currentDepth * 2, 0), 0)
 			: 0;
+
+	if (commentNum === -1) throw new Error("max cannot be -1");
 	const comments = getComments({
 		users,
 		max: commentNum,
