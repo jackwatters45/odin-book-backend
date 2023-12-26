@@ -29,7 +29,7 @@
 		"format": "prettier --write .",
 		"fix": "npm run format & npm run lint:fix",
 		"prepare": "husky install",
-		"populate": "DEBUG=log* ts-node tools/populateDbs/index.ts",
+		"populate": "DEBUG=log* NODE_ENV=production ts-node tools/populateDbs/index.ts",
 		"parseData": "node rawData/parseFile.mjs",
 		"file": "DEBUG=log* ts-node tools/addDataToUser.ts"
 	},

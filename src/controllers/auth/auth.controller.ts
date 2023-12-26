@@ -45,22 +45,21 @@ const loginUser = async (userId: string) => {
 	};
 };
 
-// TODO cookie options
 export const handleUserLogin = async (res: Response, userId: string) => {
 	const { jwtToken, refreshToken, message, user } = await loginUser(userId);
 
 	res.cookie("jwt", jwtToken, {
 		maxAge: 3600000,
 		httpOnly: true,
-		// secure: true,
-		// sameSite: "none",
+		secure: true,
+		sameSite: "none",
 	});
 
 	res.cookie("refreshToken", refreshToken, {
 		maxAge: 604800000, // 7 days
 		httpOnly: true,
-		// secure: true,
-		// sameSite: "none",
+		secure: true,
+		sameSite: "none",
 	});
 
 	const { isVerified, type } = user.verification;

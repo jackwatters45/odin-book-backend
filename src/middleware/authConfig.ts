@@ -229,8 +229,8 @@ const configAuth = (app: Application) => {
 
 					res.clearCookie("jwt", {
 						httpOnly: true,
-						// secure: true,
-						// sameSite: "none",
+						secure: true,
+						sameSite: "none",
 					});
 
 					res.status(403).json({ message: "Guest session has expired." });

@@ -16,7 +16,7 @@ const run = async () => {
 	await removeUserDataThatNoLongerExists();
 	await removePostsWithRemovedAuthors();
 
-	await populateUsers(250);
+	await populateUsers(50);
 
 	const users = await User.find({}).select(
 		"friends friendRequestsReceived friendRequestsSent birthday relationshipStatus familyMembers createdAt",

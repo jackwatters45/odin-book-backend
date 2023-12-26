@@ -10,7 +10,7 @@ import configOtherMiddleware from "./middleware/otherConfig";
 import { configDb } from "./config/database";
 import { configSocket, initSocket } from "./config/socket";
 import configRoutes from "./routes";
-// import configProdMiddleware from "./middleware/prodConfig";
+import configProdMiddleware from "./middleware/prodConfig";
 import configErrorMiddleware from "./middleware/errorConfig";
 import configCloudinary from "./config/cloudinary";
 import { port, appPort } from "./config/envVariables";
@@ -34,7 +34,7 @@ const configApp = async () => {
 	// config middleware
 	configAuthMiddleware(app);
 	configOtherMiddleware(app);
-	// configProdMiddleware(app);
+	configProdMiddleware(app);
 	configCloudinary();
 
 	// Config Routes
