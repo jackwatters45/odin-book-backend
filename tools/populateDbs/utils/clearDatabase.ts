@@ -9,9 +9,8 @@ import User from "../../../src/models/user.model";
 const log = debug("log:clearDatabase");
 
 export const myUserIds = [
-	"65261430a93bbe7662c9056f",
-	"6529cae2fca18c43f66a3679",
-	"6529cb0efca18c43f66a3682",
+	"6591f32f2e76436d6db87261",
+	"6591f3a62e76436d6db8732c",
 ] as const;
 
 const clearDatabase = async () => {

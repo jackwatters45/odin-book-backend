@@ -291,14 +291,14 @@ export const postLogout = expressAsyncHandler(
 
 		res.clearCookie("jwt", {
 			httpOnly: true,
-			// secure: true,
-			// sameSite: "none",
+			secure: true,
+			sameSite: "none",
 		});
 
 		res.clearCookie("refreshToken", {
 			httpOnly: true,
-			// secure: true,
-			// sameSite: "none",
+			secure: true,
+			sameSite: "none",
 		});
 
 		res.status(200).json({ message: "User logged out successfully" });
@@ -756,15 +756,15 @@ export const getLoginFacebookCallback = (req: Request, res: Response) => {
 			res.cookie("jwt", jwtToken, {
 				maxAge: 3600000,
 				httpOnly: true,
-				// secure: true,
-				// sameSite: "none",
+				secure: true,
+				sameSite: "none",
 			});
 
 			res.cookie("refreshToken", refreshToken, {
 				maxAge: 604800000, // 7 days
 				httpOnly: true,
-				// secure: true,
-				// sameSite: "none",
+				secure: true,
+				sameSite: "none",
 			});
 
 			const { isVerified, type } = userObj.verification;
@@ -810,15 +810,15 @@ export const getLoginGoogleCallback = (req: Request, res: Response) => {
 			res.cookie("jwt", jwtToken, {
 				maxAge: 3600000,
 				httpOnly: true,
-				// secure: true,
-				// sameSite: "none",
+				secure: true,
+				sameSite: "none",
 			});
 
 			res.cookie("refreshToken", refreshToken, {
 				maxAge: 604800000, // 7 days
 				httpOnly: true,
-				// secure: true,
-				// sameSite: "none",
+				secure: true,
+				sameSite: "none",
 			});
 
 			const { isVerified, type } = userObj.verification;
@@ -864,15 +864,15 @@ export const getLoginGithubCallback = (req: Request, res: Response) => {
 			res.cookie("jwt", jwtToken, {
 				maxAge: 3600000,
 				httpOnly: true,
-				// secure: true,
-				// sameSite: "none",
+				secure: true,
+				sameSite: "none",
 			});
 
 			res.cookie("refreshToken", refreshToken, {
 				maxAge: 604800000, // 7 days
 				httpOnly: true,
-				// secure: true,
-				// sameSite: "none",
+				secure: true,
+				sameSite: "none",
 			});
 
 			const { isVerified, type } = userObj.verification;
