@@ -34,6 +34,8 @@ This project turned out to be quite a challenge, mainly the scope was quite larg
 ```zsh
 git clone https://github.com/jackwatters45/odin-book.git
 
+npm install
+
 npm run dev
 ```
 
